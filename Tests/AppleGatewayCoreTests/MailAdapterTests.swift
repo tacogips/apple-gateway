@@ -102,6 +102,9 @@ import Testing
   _ = try store.open(config: .defaultValue)
 
   #expect(snapshotter.sourcePath == liveIndex.path)
+  #expect(snapshotter.sourceId?.hasPrefix("mail-root-") == true)
+  #expect(snapshotter.sourceId?.contains("/") == false)
+  #expect(snapshotter.sourceId != root.path)
   #expect(opener.request?.snapshotPath == snapshotPath)
   #expect(opener.request?.uri.hasPrefix(URL(fileURLWithPath: snapshotPath).absoluteString) == true)
   #expect(opener.request?.uri.hasSuffix("?mode=ro&immutable=1") == true)

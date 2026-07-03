@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 protocol MailEnvelopeIndexSnapshotting: Sendable {
@@ -37,7 +38,7 @@ struct MailEnvelopeIndexStore: Sendable {
     let paths = try rootResolver.resolve(config: config)
     let snapshot = try snapshotter.snapshotEnvelopeIndex(
       sourcePath: paths.envelopeIndex.path,
-      sourceId: paths.root.path
+      sourceId: Self.sourceId(for: paths.root.path)
     )
     let request = MailSQLiteOpenRequest(
       snapshotPath: snapshot.databasePath,
@@ -45,6 +46,12 @@ struct MailEnvelopeIndexStore: Sendable {
       flags: MailSQLiteOpenFlags.mailReadOnlySnapshot
     )
     return try sqliteOpener.open(request)
+  }
+
+  private static func sourceId(for mailRoot: String) -> String {
+    let digest = SHA256.hash(data: Data(mailRoot.utf8))
+    let hash = digest.map { String(format: "%02x", $0) }.joined()
+    return "mail-root-\(hash)"
   }
 }
 
