@@ -19,6 +19,31 @@ that owns store creation, access requests (`requestFullAccessToEvents` /
 `requestFullAccessToReminders` on macOS 14+, semaphore-bridged), and
 DateComponents/DateTime conversion.
 
+## Production Adapter Boundary
+
+Production GraphQL execution must use live `EKEventStore`-backed adapters by
+default for both calendar and reminders reads and writes. The CLI wiring owns
+this default; tests, smoke flows, and any non-live harnesses keep passing
+explicit fake or unavailable services through the existing injection seams.
+
+The live adapter boundary is:
+
+- `CalendarProviding` and `CalendarWriting` are implemented by a calendar
+  EventKit adapter backed by the process-local `EventKitSession`.
+- `RemindersProviding` and `RemindersWriting` are implemented by a reminders
+  EventKit adapter backed by the same process-local `EventKitSession`.
+- The GraphQL runtime and domain services depend only on those protocols and
+  must not construct `EKEventStore` directly.
+- `UnavailableCalendarReminderProvider` remains valid only for explicit
+  injected paths where EventKit should not be touched, such as negative tests or
+  platform-unavailable builds; it is not the production CLI default on macOS
+  when EventKit is importable.
+
+Live adapters perform authorization checks at the EventKit boundary before each
+operation that needs calendar or reminder access. Reader-role write rejection
+remains enforced in the GraphQL schema/runtime before write services are called,
+so wiring live writers must not weaken role isolation.
+
 ## GraphQL Types
 
 ```graphql
@@ -259,6 +284,9 @@ Semantics:
 - Access requests use the macOS 14 full-access APIs; a `.writeOnly` status
   (from a legacy grant) is surfaced as `WRITE_ONLY_ACCESS`, not treated as
   usable.
+- Production adapters use one `EKEventStore` per process through
+  `EventKitSession`; store objects are mapped to domain values immediately and
+  are never cached or returned across the protocol boundary.
 - `EKEventStore` predicates limit event enumeration to 4-year windows; the
   adapter chunks longer requested ranges transparently.
 - All-day events: `isAllDay` drives date-only serialization (the DateTime
@@ -274,6 +302,12 @@ Semantics:
 
 - `CalendarProviding`/`RemindersProviding` fakes drive resolver and
   connection tests.
+- Adapter mapping tests must be deterministic and must not touch real user
+  calendar or reminder data. They use fakes or mapper seams to cover calendar,
+  event, reminder, alarm, recurrence, identifier, timezone, all-day, and
+  date-only due-date semantics.
+- Smoke tests use injectable fake providers/writers by default. Manual live
+  smoke is opt-in and must target scratch "apple-gateway-test" calendars/lists.
 - Date conversion, recurrence mapping (`EKRecurrenceRule` to/from domain
   model), and alarm mapping get direct unit tests.
 - A manual live checklist (create/update/delete event and reminder on a

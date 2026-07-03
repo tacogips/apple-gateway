@@ -34,8 +34,9 @@ Platform mechanism choices are grounded in
   materialization.
 - Deterministic, script-friendly behavior for AI-agent and automation
   callers: bounded output, file-based large payloads, stable error codes.
-- Zero external SwiftPM dependencies. Foundation, EventKit, and
-  UserNotifications (helper app only) are the only frameworks used.
+- Zero external SwiftPM dependencies. Foundation, CryptoKit for file-store
+  key authentication, EventKit, `libsqlite3`, and UserNotifications
+  (helper app only) are the only platform frameworks used.
 - Honest platform behavior: capabilities that macOS does not support are
   reported with explicit error codes, never silently degraded.
 
@@ -304,6 +305,68 @@ tokens, large content is exposed through the file materialization pattern:
   always normalized under the configured cache root or explicit output
   directory.
 
+### TASK-006 File Store Contract
+
+Phase 0 TASK-006 owns the cross-domain file-store foundation only. It adds
+the key codec, cache layout, path-safety rules, SQLite snapshot helper, and
+`file download` / `cache prune` command behavior, but it does not implement
+Mail, Notes, Notifications, or other domain adapters.
+
+Download keys are opaque to callers but versioned for the implementation:
+
+```text
+agdk1.<base64url-canonical-payload>.<base64url-mac>
+```
+
+The payload includes `domain`, `sourceId`, optional additional source
+identifiers, `kind`, and an optional suggested filename. The payload never
+contains trusted filesystem paths. A key is valid only when its version,
+base64url encoding, canonical payload schema, allowed domain/kind values,
+path-component fields, and keyed MAC all validate. The MAC uses HMAC-SHA256
+with CryptoKit and a local per-cache-root secret, without adding an external
+SwiftPM package. Malformed, truncated, unknown-version, unknown-kind, or
+tampered keys fail with `INVALID_DOWNLOAD_KEY` before any source file,
+output path, cache directory, or SQLite sidecar is touched.
+
+Every path component derived from a key or provider-suggested filename must
+be a single relative segment. Empty values, absolute paths, `.` / `..`, path
+separators, NUL bytes, tilde expansion, and symlink-mediated escapes are
+rejected. Source identifiers are identifiers, not path fragments.
+
+The file store owns these managed cache subdirectories under
+`storage.cache_dir`:
+
+- `downloads/` for materialized files when `--output-dir` is absent
+- `snapshots/` for SQLite database copies and their `-wal` / `-shm` sidecars
+- `keys/` for local key material or key metadata needed to validate issued
+  keys
+
+`file download` resolves the configured cache root before decoding keys.
+If `--output-dir` is omitted, each written file lands under
+`<cache_dir>/downloads/<domain>/<source-hash>/<kind>/<filename>`. If
+`--output-dir` is present, it becomes the output root after normalizing it
+against the current working directory. In both cases the final destination
+must remain inside that root after lexical normalization and filesystem
+resolution; otherwise the command fails before opening the source or
+destination. Repeated `--key` values are processed independently and the
+JSON manifest reports every successfully written path.
+
+`cache prune` deletes only managed content under `storage.cache_dir`.
+It refuses empty roots, filesystem roots, missing normalization anchors, and
+any candidate whose resolved path is outside the cache root. Symlinks under
+managed cache directories are not followed during traversal. `cache prune`
+preserves key validation material by default; `cache prune --all` may remove
+all managed cache contents and invalidate previously issued download keys,
+but it still leaves the cache root itself in place.
+
+SQLite snapshot copying is a shared helper for later Mail and Notifications
+adapters. Given a live source database path, it copies the database file and
+the exact sibling sidecars `<source>-wal` and `<source>-shm` when present
+into `snapshots/<domain>/<source-hash>/`. It refreshes the copy when source
+metadata changes, opens no write handle to the live database, and never
+creates, truncates, renames, chmods, or deletes live source files. Snapshot
+paths are validated with the same cache-root containment rules as downloads.
+
 ## Configuration
 
 TOML subset (same hand-rolled parser policy as mail-gateway), default path
@@ -311,6 +374,9 @@ TOML subset (same hand-rolled parser policy as mail-gateway), default path
 (fallback `~/.config/apple-gateway/config.toml`), overridable via
 `APPLE_GATEWAY_CONFIG` env var or `--config`. A missing config file is
 valid: every key has a default so the tool works with zero configuration.
+When both a config-path env var and `--config` are present, the explicit
+CLI flag selects the file. Config value precedence is always defaults,
+then file values, then environment value overrides.
 
 ```toml
 [storage]
@@ -351,9 +417,90 @@ Env overrides use the `APPLE_GATEWAY_<SECTION>_<KEY>` pattern
 (for example `APPLE_GATEWAY_STORAGE_CACHE_DIR`); env wins over TOML,
 matching the base project rule.
 
+### TASK-002 Config Scope
+
+The Phase 0 TASK-002 parser intentionally implements only the TOML subset
+needed by the configuration above:
+
+- section headers (`[storage]`) and `key = value` assignments
+- blank lines and `#` comments
+- string, integer, and boolean scalar values
+- no arrays, inline tables, dotted keys, repeated sections, or repeated keys
+
+Unknown sections, unknown keys, duplicate keys, malformed syntax, and type
+conversion failures are `CONFIG_INVALID` errors with line/column details
+when the source is a file value. Environment override errors identify the
+env var name instead of a line number. Unknown `APPLE_GATEWAY_*` variables
+are ignored unless they match the override prefix shape
+`APPLE_GATEWAY_<SECTION>_<KEY>`; shaped variables with no known config key
+are rejected so misspelled overrides cannot silently change behavior.
+
+The supported env override names are derived directly from the TOML schema:
+`APPLE_GATEWAY_STORAGE_CACHE_DIR`,
+`APPLE_GATEWAY_LIMITS_DEFAULT_PAGE_SIZE`,
+`APPLE_GATEWAY_LIMITS_MAX_PAGE_SIZE`,
+`APPLE_GATEWAY_LIMITS_MAX_INLINE_BODY_BYTES`,
+`APPLE_GATEWAY_LIMITS_APPLE_EVENT_TIMEOUT_SECONDS`,
+`APPLE_GATEWAY_LIMITS_APPLE_EVENT_BATCH_SIZE`,
+`APPLE_GATEWAY_DOMAINS_CALENDAR`,
+`APPLE_GATEWAY_DOMAINS_REMINDERS`,
+`APPLE_GATEWAY_DOMAINS_CLOCK_ALARMS`,
+`APPLE_GATEWAY_DOMAINS_NOTES`,
+`APPLE_GATEWAY_DOMAINS_MAIL`,
+`APPLE_GATEWAY_DOMAINS_NOTIFICATIONS`,
+`APPLE_GATEWAY_MAIL_MAIL_ROOT`,
+`APPLE_GATEWAY_CLOCK_ALARMS_SHORTCUT_PREFIX`, and
+`APPLE_GATEWAY_NOTIFICATIONS_HELPER_APP_PATH`.
+
+Path-valued fields are expanded after file/env precedence is resolved:
+`storage.cache_dir`, non-empty `mail.mail_root`, and non-empty
+`notifications.helper_app_path` expand a leading `~` to the current user's
+home directory. The selected config file path from `--config` or
+`APPLE_GATEWAY_CONFIG` follows the same leading-tilde expansion rule.
+
+Validation rules are deliberately local to configuration loading in
+TASK-002. They do not probe TCC permissions, check whether apps are
+installed, create cache directories, run shortcuts, or validate GraphQL
+runtime behavior. Required numeric limits must be positive and
+`limits.default_page_size` must not exceed `limits.max_page_size`.
+`storage.cache_dir` must resolve to a non-empty path. Optional override
+paths may remain empty to request auto-probing in their later domain
+implementations.
+
 ## Error Model
 
-GraphQL envelope identical in shape to mail-gateway:
+TASK-004 standardizes all business failures behind `AppleGatewayError`.
+The error value carries four stable fields:
+
+- `code`: one of the codes in the table below
+- `message`: a human-readable failure summary safe to print to stderr or
+  embed in JSON
+- `exitCode`: the mapped process exit code for this failure
+- `details`: optional structured diagnostics such as config source
+  location, GraphQL location/path, domain name, file key, provider status,
+  or responsible process hint
+
+The shared JSON response envelope is GraphQL-shaped and is used by
+`graphql`, `config validate`, and later JSON-producing commands. Canonical
+request correlation lives at `extensions.requestId`; individual errors keep
+machine fields in their own `extensions`.
+
+Successful command output:
+
+```json
+{
+  "data": {
+    "permissions": {
+      "status": "unknown"
+    }
+  },
+  "extensions": {
+    "requestId": "uuid"
+  }
+}
+```
+
+Single-error output:
 
 ```json
 {
@@ -362,13 +509,60 @@ GraphQL envelope identical in shape to mail-gateway:
     "message": "Calendar access denied for this process",
     "extensions": {
       "code": "PERMISSION_DENIED",
-      "exitCode": "4",
-      "requestId": "uuid",
+      "exitCode": 4,
       "details": { "domain": "calendar", "responsibleProcessHint": "iTerm2" }
     }
-  }]
+  }],
+  "extensions": {
+    "requestId": "uuid"
+  }
 }
 ```
+
+Multi-root partial failure output keeps successful root fields, sets only
+the failed root to `null`, and records a path-scoped error. Resolvers run
+sequentially in document order; a root-field failure does not cancel later
+roots unless the runtime cannot safely continue.
+
+```json
+{
+  "data": {
+    "calendars": null,
+    "reminders": [{ "id": "reminder-list-1", "title": "Inbox" }]
+  },
+  "errors": [{
+    "message": "Calendar access denied for this process",
+    "path": ["calendars"],
+    "extensions": {
+      "code": "PERMISSION_DENIED",
+      "exitCode": 4,
+      "details": { "domain": "calendar", "responsibleProcessHint": "iTerm2" }
+    }
+  }],
+  "extensions": {
+    "requestId": "uuid"
+  }
+}
+```
+
+When an envelope contains one or more errors, the command process exit code
+is the mapped `exitCode` of the first `AppleGatewayError` in `errors[]`.
+Errors are appended in encounter order, which for GraphQL root fields follows
+document order. Later errors may carry different per-error
+`extensions.exitCode` values, but they do not change the aggregate process
+exit selected for the command. Envelopes without `errors` exit 0.
+
+`CONFIG_INVALID` is no longer formatted by a config-only envelope; the config
+validator adapts its existing file/env diagnostics into `AppleGatewayError`
+details and emits the same shared envelope. GraphQL parse, validation, role,
+and resolver failures also adapt into `AppleGatewayError` while preserving
+GraphQL `locations` and root-field `path` data where available.
+
+TASK-004 does not add permission probes, file-store materialization, smoke
+tests, or the broader TASK-007 command frame. Unknown commands and malformed
+CLI flags remain usage errors with exit code 2; JSON business commands that
+already emit envelopes should use `INVALID_ARGUMENT` only for invalid API
+input after command routing has selected a JSON-producing command.
 
 ### Error Codes
 
@@ -409,6 +603,43 @@ GraphQL envelope identical in shape to mail-gateway:
 | 4 | Permission error (TCC / FDA / Automation) |
 | 5 | GraphQL execution error |
 | 6 | Platform/provider error (Apple Events, SQLite, shortcuts, helper) |
+
+### Error-Code Exit Mapping
+
+Every primary error code maps to one process exit code:
+
+| Error code | Exit code |
+| --- | --- |
+| `INVALID_ARGUMENT` | 5 |
+| `GRAPHQL_PARSE_ERROR` | 5 |
+| `GRAPHQL_VALIDATION_ERROR` | 5 |
+| `WRITE_DISABLED_IN_READER` | 5 |
+| `PERMISSION_DENIED` | 4 |
+| `PERMISSION_NOT_DETERMINED` | 4 |
+| `WRITE_ONLY_ACCESS` | 4 |
+| `FULL_DISK_ACCESS_REQUIRED` | 4 |
+| `AUTOMATION_DENIED` | 4 |
+| `DOMAIN_DISABLED` | 5 |
+| `CALENDAR_NOT_FOUND` | 5 |
+| `EVENT_NOT_FOUND` | 5 |
+| `REMINDER_NOT_FOUND` | 5 |
+| `CALENDAR_READ_ONLY` | 5 |
+| `NOTE_NOT_FOUND` | 5 |
+| `NOTE_LOCKED` | 5 |
+| `NOTE_FOLDER_NOT_FOUND` | 5 |
+| `MAILBOX_NOT_FOUND` | 5 |
+| `MESSAGE_NOT_FOUND` | 5 |
+| `MAIL_STORE_NOT_FOUND` | 5 |
+| `SHORTCUT_NOT_INSTALLED` | 6 |
+| `SHORTCUT_ACTION_UNSUPPORTED` | 6 |
+| `NOTIFIER_HELPER_MISSING` | 6 |
+| `NOTIFICATION_DB_UNAVAILABLE` | 6 |
+| `APPLE_EVENT_TIMEOUT` | 6 |
+| `INVALID_DOWNLOAD_KEY` | 5 |
+| `FILE_OPERATION_FAILED` | 6 |
+| `CONFIG_INVALID` | 3 |
+| `UNSUPPORTED_OS_VERSION` | 6 |
+| `UNEXPECTED_ERROR` | 1 |
 
 ## Permissions and Security
 

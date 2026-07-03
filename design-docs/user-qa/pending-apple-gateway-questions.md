@@ -51,3 +51,16 @@ for v2?
 
 Proposed default: defer; revisit when a concrete consumer (e.g. an MCP
 wrapper) exists.
+
+## Question 6: Reader-specific embedded bundle identifier
+
+Phase 0 TASK-001 intentionally uses one checked-in
+`Resources/AppleGatewayInfo.plist` for both command line executables. Should
+the reader binary later embed a distinct `CFBundleIdentifier`
+(`me.tacogips.apple-gateway.reader`) through target-specific plist
+materialization?
+
+Proposed default: defer until signing/cask packaging work needs separate
+reader TCC identity. For TASK-001, both binaries embed the shared
+`me.tacogips.apple-gateway` plist to satisfy EventKit and Apple Events usage
+string requirements.

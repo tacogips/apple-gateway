@@ -45,7 +45,8 @@ Settings pane to open, and the relevant `tccutil reset` command.
 
 ## Embedded Info.plist
 
-Both executables embed an Info.plist section via SwiftPM:
+Both executables embed `Resources/AppleGatewayInfo.plist` as an
+`__TEXT,__info_plist` section via SwiftPM:
 
 ```swift
 linkerSettings: [
@@ -58,10 +59,25 @@ linkerSettings: [
 ]
 ```
 
-Plist contents: `CFBundleIdentifier` (`me.tacogips.apple-gateway` /
-`.reader`), `CFBundleName`, `CFBundleShortVersionString`, the four
-EventKit usage keys (macOS 14 full-access plus legacy fallbacks), and
+Plist contents: `CFBundleIdentifier`, `CFBundleName`,
+`CFBundleShortVersionString`, the four EventKit usage keys (macOS 14
+full-access plus legacy fallbacks), and
 `NSAppleEventsUsageDescription`.
+
+Phase 0 TASK-001 uses the requested singular source file,
+`Resources/AppleGatewayInfo.plist`, for both executable targets. Its
+`CFBundleIdentifier` is `me.tacogips.apple-gateway`; the embedded usage
+strings are the blocking requirement for EventKit and Apple Events prompt
+eligibility. A reader-specific bundle id
+`me.tacogips.apple-gateway.reader` requires target-specific plist
+materialization and is tracked as a non-blocking follow-up question in
+`design-docs/user-qa/pending-apple-gateway-questions.md`.
+
+Verification for this design is build-artifact based: `swift build` must
+produce `.build/debug/apple-gateway` and `.build/debug/apple-gateway-reader`,
+and `otool -s __TEXT __info_plist .build/debug/apple-gateway` must show the
+embedded plist section. The same check should be applied to
+`.build/debug/apple-gateway-reader` when changing linker settings.
 
 ## Detection and the Doctor Surface
 
@@ -89,13 +105,66 @@ apple-gateway graphql --query '{ permissions { calendars mailFullDiskAccess } }'
 ```
 
 `permissions request` is the only code path that intentionally triggers
-prompts. GraphQL resolvers never trigger prompts implicitly when status is
-`.notDetermined`; they fail with `PERMISSION_NOT_DETERMINED` and
-instructions, so agent-driven queries cannot spam the user with dialogs.
-(Rationale recorded in `design-docs/user-qa/resolved-apple-gateway-defaults.md`.)
+prompts. The `permissions` GraphQL field is a doctor/status surface and
+returns `PermissionState` values, including `NOT_DETERMINED`, without
+prompting. Later domain data resolvers never trigger prompts implicitly
+when a required status is `NOT_DETERMINED`; they fail with
+`PERMISSION_NOT_DETERMINED` and instructions, so agent-driven queries
+cannot spam the user with dialogs. (Rationale recorded in
+`design-docs/user-qa/resolved-apple-gateway-defaults.md`.)
 
 Full Disk Access guidance prints the manual path and the deep link
 `x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles`.
+
+## TASK-005 Behavioral Boundary
+
+TASK-005 replaces the bootstrap placeholder permissions field with the real
+permissions status service only. It does not implement the file store, smoke
+frame, or later domain adapters.
+
+The permissions service has two explicit entrypoints:
+
+- `status`: non-prompting, read-only probes for every field in
+  `PermissionsStatus`.
+- `request(domain:)`: the only prompt-capable path, limited to
+  `calendar`, `reminders`, `notes`, and `notifications`.
+
+The status entrypoint must be injectable for tests, so unit tests can prove
+that CLI and GraphQL status paths do not call prompt APIs. Calendar and
+reminders status use EventKit authorization-status APIs only. Notes
+automation status calls `AEDeterminePermissionToAutomateTarget` with
+`askUserIfNeeded=false`. Full Disk Access checks open known protected probe
+paths read-only and never create, modify, chmod, delete, or copy the probe
+locations. Shortcuts status may list shortcuts but must not run shortcuts.
+
+`permissions request --domain calendar` calls only the EventKit calendar
+request path. `--domain reminders` calls only the EventKit reminders request
+path. `--domain notes` may trigger the first Notes automation prompt through
+the minimal Notes Apple Event path. `--domain notifications` delegates only
+to an already installed and configured notifier helper notification
+authorization path. If no helper is configured or the configured helper
+cannot be resolved, TASK-005 must return `UNKNOWN` with an unavailable
+diagnostic for notification request/status instead of scaffolding,
+installing, signing, packaging, or launching a new helper app. Helper app
+creation and distribution remain Phase 4 notification-domain work. Full Disk
+Access and Shortcuts bridge setup are not requestable and remain manual
+instructions in status output.
+
+`permissions status --json` and GraphQL `permissions` use the same field
+names and state vocabulary as `PermissionsStatus`:
+
+- `calendars`
+- `reminders`
+- `notesAutomation`
+- `mailFullDiskAccess`
+- `notificationsHelper`
+- `notificationDbFullDiskAccess`
+- `shortcutsClockBridge`
+
+Configuration-disabled domains report `NOT_REQUIRED`; unavailable or
+undetectable probes report `UNKNOWN` with details in the human doctor output
+or JSON details object. Responsible-process detection is a best-effort hint
+only and must never be presented as definitive.
 
 ## Signing and Distribution
 
@@ -123,3 +192,10 @@ Reset: tccutil reset Calendar
 
 The same content ships in the GraphQL error `extensions.details` so
 programmatic callers can relay it.
+
+The shared formatter owns the exact line ordering and labels for both CLI
+and GraphQL errors. Its inputs are the permission domain, denied or missing
+state, responsible-process hint, System Settings pane, optional
+`permissions request` command, and optional `tccutil reset` command. If the
+responsible app is unknown, the formatter prints `unknown` rather than
+omitting the line.

@@ -20,6 +20,23 @@ Hand-rolled lexer + recursive-descent parser + code-defined schema registry
 swift-nio and violate the zero-dependency policy inherited from the base
 project).
 
+## Phase 0 TASK-003 Scope
+
+TASK-003 implements the runtime and only the minimum CLI wiring needed to
+exercise it:
+
+- `apple-gateway graphql` and `apple-gateway-reader graphql` accept
+  `--query` or `--query-file`, optional variables, and optional pretty JSON.
+- `apple-gateway schema print [--role full|reader]` renders SDL from the
+  same registry used by execution.
+- The first real query field is `permissions`, returning safe,
+  non-prompting placeholder status data if the permissions layer has not
+  been implemented yet.
+
+The following Phase 0 work remains explicitly out of scope for TASK-003:
+the final TASK-004 error model, TASK-005 permission probes and prompting,
+TASK-006 file store behavior, and TASK-007 smoke-test command frame.
+
 ## Supported Language Subset
 
 Executable documents only, deliberately narrowed:
@@ -79,6 +96,22 @@ store. Because the registry is data, the SDL printer and the validator
 share one source of truth: `schema print` output can never drift from
 execution behavior.
 
+### Permissions Field
+
+`permissions` is the Phase 0 bootstrap field. It is registered in the query
+root before later domain modules so the runtime has a real field for parser,
+validator, executor, projection, and SDL tests. The resolver must be
+non-prompting: it may return static or config-derived placeholder values
+until TASK-005 adds real TCC/FDA/Shortcuts probes, but it must not trigger
+System Settings prompts, Apple Events, shortcut execution, or filesystem
+cache writes.
+
+When TASK-005 lands, this field remains non-prompting and is backed by the
+shared permissions status service. Its object fields use the
+`PermissionsStatus` names from `design-apple-gateway.md`; prompt-capable
+work stays behind `apple-gateway permissions request --domain ...` and is
+not reachable from GraphQL execution.
+
 ### Execution Flow
 
 ```
@@ -103,6 +136,10 @@ the process exit code is the highest-severity mapped exit code.
 Mutation type does not exist in that registry, so `mutation { ... }`
 documents fail validation with `WRITE_DISABLED_IN_READER` before any
 resolver runs. There is no string matching anywhere in enforcement.
+
+The same role-specific registry also drives `schema print --role reader`;
+reader SDL omits `type Mutation` and all mutation fields. `schema print`
+without an explicit role uses the invoking binary's role.
 
 ## CLI Contract
 

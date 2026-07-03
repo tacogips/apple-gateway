@@ -33,6 +33,25 @@ Config `mail.mail_root` overrides probing. No hit yields
 `FULL_DISK_ACCESS_REQUIRED` with the manual-grant guidance from
 `design-permissions.md`.
 
+For Phase 3 TASK-001, root resolution is a standalone adapter boundary and
+does not query messages. The resolver accepts the configured
+`mail.mail_root` only when it is non-empty; an override is treated as the
+Mail version root that contains `MailData/Envelope Index`. Without an
+override, the resolver probes only the supported version roots in descending
+order: `~/Library/Mail/V11`, `~/Library/Mail/V10`, then
+`~/Library/Mail/V9`. It must not fall back to unrelated Mail directories or
+create missing paths.
+
+Resolution validates the existence and readability of
+`MailData/Envelope Index` using read-only file-system operations. Missing
+version roots or missing `Envelope Index` files classify as
+`MAIL_STORE_NOT_FOUND`. Permission failures while inspecting the root,
+`MailData`, or `Envelope Index` classify as `FULL_DISK_ACCESS_REQUIRED` and
+must include the System Settings deep link
+`x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles`
+plus the same manual Full Disk Access guidance used by the permissions
+doctor.
+
 ### Envelope Index Access
 
 - Open with SQLite URI `file:...?mode=ro&immutable=1` on a snapshot copy:
@@ -49,6 +68,25 @@ Config `mail.mail_root` overrides probing. No hit yields
   (`imap://...`, `ews://...`, `local://...`); account display names come
   from `~/Library/Mail/V10/MailData/Accounts.plist` when readable, falling
   back to URL-derived identifiers.
+
+Phase 3 TASK-001 implements only the access substrate:
+
+- A minimal SQLite boundary inside `Domains/MailAdapter/` that can open a
+  database URI read-only and immutable, prepare statements, step rows, read
+  typed columns, and close/finalize handles deterministically.
+- The live `Envelope Index` path is never passed to SQLite. The adapter first
+  asks the Phase 0 file-store snapshot helper to copy `Envelope Index` and
+  any exact `-wal` / `-shm` sidecars into
+  `snapshots/mail/<source-hash>/`, refreshing when source mtime metadata
+  changes. SQLite opens only the returned snapshot path.
+- The SQLite URI uses `mode=ro&immutable=1`; no code path may request
+  `SQLITE_OPEN_READWRITE`, `SQLITE_OPEN_CREATE`, or a mutable URI for Mail.
+- The wrapper remains schema-agnostic in TASK-001. It may support smoke
+  statements such as `SELECT 1`, but account, mailbox, message, filter,
+  pagination, and summary queries remain TASK-002.
+- The wrapper is an implementation detail of the Mail adapter. It does not
+  register GraphQL fields, alter CLI commands, or expose public query
+  behavior in TASK-001.
 
 ### Message Body Materialization
 
@@ -163,9 +201,26 @@ same FDA gate.
 - Fixture Envelope Index databases (built by a test helper from SQL
   scripts, committed under `Tests/Fixtures/mail/`) drive query tests
   without real mail.
+- TASK-001 tests use fake Mail roots and an injectable snapshot/SQLite-open
+  boundary. They prove configured `mail.mail_root` wins over probing,
+  probing checks V11 before V10 before V9, missing roots produce
+  `MAIL_STORE_NOT_FOUND`, and unreadable roots or unreadable
+  `MailData/Envelope Index` paths produce `FULL_DISK_ACCESS_REQUIRED` with
+  the Full Disk Access settings deep link.
+- TASK-001 tests assert that the SQLite layer opens the snapshot URI with
+  read-only immutable semantics and never opens the live `Envelope Index`
+  path writable. The test surface should record open flags or URIs rather
+  than rely on a real user Mail database.
+- TASK-001 snapshot tests assert mtime-based refresh behavior through the
+  Phase 0 file-store snapshot helper contract, including sidecar copying
+  where `Envelope Index-wal` or `Envelope Index-shm` exists.
 - emlx/partial-emlx parsers tested against synthetic fixtures including
   multibyte subjects, nested multipart, and missing trailers.
-- FDA-denial path tested by pointing `mail.mail_root` at an unreadable
-  directory fixture.
 - Manual live checklist against the developer's own Mail store in the
   phase plan.
+
+TASK-001 verification commands are the narrow relevant Swift tests for the
+Mail adapter and file-store snapshot integration first, then `task build`,
+`task test`, `task lint`, and `swift run apple-gateway --help` when the
+implementation touches shared behavior or command wiring. TASK-001 does not
+require SDL snapshot updates because GraphQL schema registration is TASK-004.

@@ -2,8 +2,8 @@
 
 ## Status
 
-Draft (target architecture; current tree is the template scaffold with
-`AppCore`/`AppCLI`)
+Draft (target architecture; Phase 0 TASK-001 migrates the template
+scaffold from `AppCore`/`AppCLI` to the target names below)
 
 ## Overview
 
@@ -27,6 +27,30 @@ and a one-shot `graphql` command as the only business API surface.
 
 The current scaffold targets `AppCore`/`AppCLI` are renamed/replaced in
 Phase 0 (`impl-plans/active/phase-0-foundation-and-graphql-runtime.md`).
+
+## Phase 0 Package Boundary
+
+TASK-001 is limited to package shape and executable identity. It renames
+`Sources/AppCore` to `Sources/AppleGatewayCore` and `Sources/AppCLI` to
+`Sources/AppleGatewayCLI`, adds `Sources/AppleGatewayReaderCLI`, and updates
+tests/imports from `AppCoreTests`/`AppCore` to
+`AppleGatewayCoreTests`/`AppleGatewayCore`.
+
+The SwiftPM products are:
+
+- library product `AppleGatewayCore` targeting `AppleGatewayCore`
+- executable product `apple-gateway` targeting `AppleGatewayCLI`
+- executable product `apple-gateway-reader` targeting
+  `AppleGatewayReaderCLI`
+
+Both executable targets depend only on `AppleGatewayCore` and keep
+`main.swift` as a thin adapter: process arguments and environment enter,
+an integer exit code returns. Command parsing, version handling, JSON
+formatting, and role selection remain in the core library so the full and
+reader binaries cannot drift.
+
+No domain adapters, GraphQL runtime behavior, config parser, or permission
+probe behavior is introduced by TASK-001. Those are later Phase 0 tasks.
 
 ## Core Library Layout
 
@@ -64,8 +88,8 @@ under Swift 6 strict concurrency.
 ## Dependencies
 
 None (SwiftPM dependency list stays empty). System frameworks only:
-Foundation, EventKit, `libsqlite3` (C shim), UserNotifications (helper app
-target only).
+Foundation, CryptoKit for FileStore download-key MACs, EventKit,
+`libsqlite3` (C shim), and UserNotifications (helper app target only).
 
 ## Design Documents
 

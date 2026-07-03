@@ -22,9 +22,10 @@ tasks:
       - swift run {{.EXECUTABLE_NAME}} {{.CLI_ARGS}}
 
   test:
-    desc: Run Swift tests
+    desc: Run Swift tests and smoke tests
     cmds:
       - swift test
+      - swift run AppleGatewaySmokeTests
 
   clean:
     desc: Clean SwiftPM and release artifacts
