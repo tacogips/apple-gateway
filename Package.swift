@@ -20,6 +20,7 @@ let package = Package(
     .library(name: "AppleGatewayCore", targets: ["AppleGatewayCore"]),
     .executable(name: "apple-gateway", targets: ["AppleGatewayCLI"]),
     .executable(name: "apple-gateway-reader", targets: ["AppleGatewayReaderCLI"]),
+    .executable(name: "AppleGatewayNotifier", targets: ["AppleGatewayNotifier"]),
     .executable(name: "AppleGatewaySmokeTests", targets: ["AppleGatewaySmokeTests"])
   ],
   targets: [
@@ -33,6 +34,10 @@ let package = Package(
       name: "AppleGatewayReaderCLI",
       dependencies: ["AppleGatewayCore"],
       linkerSettings: appleGatewayInfoPlistLinkerSettings
+    ),
+    .executableTarget(
+      name: "AppleGatewayNotifier",
+      dependencies: ["AppleGatewayCore"]
     ),
     .testTarget(
       name: "AppleGatewayCoreTests",

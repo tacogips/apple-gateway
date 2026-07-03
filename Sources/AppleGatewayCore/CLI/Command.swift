@@ -21,6 +21,9 @@ public struct AppleGatewayCommand: Sendable {
   private let calendarWriteService: CalendarWriteService
   private let notesReadService: NotesReadService
   private let notesWriteService: NotesWriteService
+  private let mailReadService: MailReadService?
+  private let notificationsService: (any NotificationsProviding)?
+  private let clockAlarmsService: (any ClockAlarmsProviding)?
 
   public init(
     arguments: [String],
@@ -28,11 +31,14 @@ public struct AppleGatewayCommand: Sendable {
     role: AppleGatewayRole = .full,
     permissionsProvider: any PermissionsProviding = LivePermissionsProvider(),
     responsibleProcessDetector: any ResponsibleProcessDetecting = DefaultResponsibleProcessDetector(),
-    fileMaterializer: any FileStoreMaterializing = UnavailableFileStoreMaterializer(),
+    fileMaterializer: any FileStoreMaterializing = MailFileMaterializer(),
     calendarReadService: CalendarReadService? = nil,
     calendarWriteService: CalendarWriteService? = nil,
     notesReadService: NotesReadService? = nil,
-    notesWriteService: NotesWriteService? = nil
+    notesWriteService: NotesWriteService? = nil,
+    mailReadService: MailReadService? = nil,
+    notificationsService: (any NotificationsProviding)? = nil,
+    clockAlarmsService: (any ClockAlarmsProviding)? = nil
   ) {
     let liveServices = calendarReadService == nil || calendarWriteService == nil
       ? CalendarReminderServiceFactory.liveServices()
@@ -50,6 +56,9 @@ public struct AppleGatewayCommand: Sendable {
     self.calendarWriteService = calendarWriteService ?? liveServices?.writeService ?? CalendarReminderServiceFactory.liveWriteService()
     self.notesReadService = notesReadService ?? liveNotesServices?.readService ?? NotesServiceFactory.liveReadService()
     self.notesWriteService = notesWriteService ?? liveNotesServices?.writeService ?? NotesServiceFactory.liveWriteService()
+    self.mailReadService = mailReadService
+    self.notificationsService = notificationsService
+    self.clockAlarmsService = clockAlarmsService
   }
 
   public func run() throws -> String {
@@ -271,6 +280,9 @@ public struct AppleGatewayCommand: Sendable {
       calendarWriteService: calendarWriteService,
       notesReadService: notesReadService,
       notesWriteService: notesWriteService,
+      mailReadService: mailReadService ?? MailServiceFactory.liveReadService(config: config),
+      notificationsService: notificationsService ?? NotificationsServiceFactory.liveService(config: config),
+      clockAlarmsService: clockAlarmsService ?? ClockAlarmsServiceFactory.liveService(config: config),
       pretty: options.pretty
     )
     return AppleGatewayCommandResult(
@@ -681,11 +693,14 @@ public enum AppleGatewayCommandLine {
     environment: [String: String],
     permissionsProvider: any PermissionsProviding = LivePermissionsProvider(),
     responsibleProcessDetector: any ResponsibleProcessDetecting = DefaultResponsibleProcessDetector(),
-    fileMaterializer: any FileStoreMaterializing = UnavailableFileStoreMaterializer(),
+    fileMaterializer: any FileStoreMaterializing = MailFileMaterializer(),
     calendarReadService: CalendarReadService? = nil,
     calendarWriteService: CalendarWriteService? = nil,
     notesReadService: NotesReadService? = nil,
     notesWriteService: NotesWriteService? = nil,
+    mailReadService: MailReadService? = nil,
+    notificationsService: (any NotificationsProviding)? = nil,
+    clockAlarmsService: (any ClockAlarmsProviding)? = nil,
     standardOutput: FileHandle = .standardOutput,
     standardError: FileHandle = .standardError
   ) -> Int32 {
@@ -699,7 +714,10 @@ public enum AppleGatewayCommandLine {
       calendarReadService: calendarReadService,
       calendarWriteService: calendarWriteService,
       notesReadService: notesReadService,
-      notesWriteService: notesWriteService
+      notesWriteService: notesWriteService,
+      mailReadService: mailReadService,
+      notificationsService: notificationsService,
+      clockAlarmsService: clockAlarmsService
     )
 
     do {

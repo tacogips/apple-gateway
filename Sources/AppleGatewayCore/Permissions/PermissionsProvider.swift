@@ -138,22 +138,56 @@ public struct LivePermissionProbe: PermissionStatusProbe {
   }
 
   public func shortcutsClockBridgeStatus(config: AppleGatewayConfig) -> PermissionFieldStatus {
-    let prefix = config.clockAlarms.shortcutPrefix
     guard let output = try? runProcess(executable: "/usr/bin/shortcuts", arguments: ["list"]) else {
       return PermissionFieldStatus(
         state: .unknown,
         details: ["reason": "Could not list shortcuts without running them"]
       )
     }
-    let found = output
+    return Self.shortcutsClockBridgeStatus(
+      config: config,
+      shortcutsListOutput: output,
+      osVersion: ProcessInfo.processInfo.operatingSystemVersion
+    )
+  }
+
+  static func shortcutsClockBridgeStatus(
+    config: AppleGatewayConfig,
+    shortcutsListOutput output: String,
+    osVersion: OperatingSystemVersion
+  ) -> PermissionFieldStatus {
+    let expected = expectedClockAlarmShortcutNames(config: config, osVersion: osVersion)
+    let installed = Set(output
       .split(whereSeparator: \.isNewline)
-      .contains { $0.hasPrefix(prefix) }
-    return found
-      ? PermissionFieldStatus(state: .granted)
-      : PermissionFieldStatus(
+      .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty })
+    let missing = expected.filter { !installed.contains($0) }
+    guard missing.isEmpty else {
+      return PermissionFieldStatus(
         state: .unknown,
-        details: ["reason": "No shortcut with prefix \(prefix) was found"]
+        details: [
+          "reason": "Missing Clock alarm bridge shortcuts",
+          "missingShortcuts": missing.joined(separator: ","),
+          "expectedShortcuts": expected.joined(separator: ",")
+        ]
       )
+    }
+    return PermissionFieldStatus(
+      state: .granted,
+      details: ["expectedShortcuts": expected.joined(separator: ",")]
+    )
+  }
+
+  static func expectedClockAlarmShortcutNames(
+    config: AppleGatewayConfig,
+    osVersion: OperatingSystemVersion
+  ) -> [String] {
+    let names = ClockAlarmShortcutNames(prefix: config.clockAlarms.shortcutPrefix)
+    var expected = [names.getAlarms, names.createAlarm, names.toggleAlarm]
+    if osVersion.majorVersion >= 26 {
+      expected.append(contentsOf: [names.updateAlarm, names.deleteAlarm])
+    }
+    return expected
   }
 
   fileprivate func helperStatus(config: AppleGatewayConfig) -> PermissionFieldStatus {

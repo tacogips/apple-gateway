@@ -1,6 +1,7 @@
 # Phase 1: Calendar, Reminders, and EventKit Alarms
 
-**Status**: In Progress
+**Status**: Implementation complete; live manual verification remains
+permission-gated
 **Design Reference**: `design-docs/specs/design-calendar-reminders.md`
 
 ## Purpose
@@ -11,14 +12,20 @@ control and recurrence rules.
 
 ## Deliverables
 
-- [ ] `Domains/CalendarKitAdapter/` and `Domains/RemindersAdapter/` with a
+- [x] `Domains/CalendarKitAdapter/` and `Domains/RemindersAdapter/` with a
       shared `EventKitSession`
-- [ ] Schema modules registering all Query/Mutation fields from the domain
+- [x] Schema modules registering all Query/Mutation fields from the domain
       spec (calendars, events, event, reminderLists, reminders, reminder;
       create/update/delete for calendars, events, reminder lists,
       reminders; setEventAlarms, setReminderAlarms, setReminderCompleted)
-- [ ] Domain value models (`Codable`, `Sendable`) and EventKit mapping
-- [ ] Fake providers + resolver tests; manual live checklist
+- [x] Domain value models (`Codable`, `Sendable`) and EventKit mapping
+- [x] Fake providers + resolver tests; manual live checklist artifact and safe
+      dry-run helper
+- [x] Permission-gated live scratch helper that refuses `--execute` before
+      mutation unless Calendar and Reminders permissions are both `GRANTED`
+
+Live checklist execution remains open under TASK-005 until Calendar and
+Reminders permissions are granted on the target host.
 
 ## Tasks
 
@@ -210,14 +217,43 @@ iTerm2. Record results in this plan's Progress Log. Use
   on macOS 26.5.1 (Build 25F80) reported Calendar `NOT_DETERMINED` and
   Reminders `NOT_DETERMINED`, so live mutation was not executed because it
   would require TCC prompting first. Added
-  `impl-plans/live-checklists/phase-1-calendar-reminders-live.md` and
-  `scripts/live-calendar-reminders-check.sh`; the script dry-run refuses
-  execution unless both permissions are already `GRANTED` and exits 4 with
-  manual grant instructions in the current environment. Verification:
-  `bash -n scripts/live-calendar-reminders-check.sh` and
-  `scripts/live-calendar-reminders-check.sh` dry-run refusal.
+  `impl-plans/live-checklists/phase-1-calendar-reminders-live.md` and the
+  original `scripts/live-calendar-reminders-check.sh` helper. That initial
+  helper behavior treated its default readiness path as a permission guard when
+  Calendar and Reminders were both `NOT_DETERMINED`; this was later superseded
+  by `codex-simple-work-package-session-421`, where default dry-run succeeds
+  without prompting and only `--execute` refuses with exit 4 before mutation
+  unless both permissions are already `GRANTED`. Verification at the time:
+  `bash -n scripts/live-calendar-reminders-check.sh` and observing the
+  permission-gated readiness refusal in the original helper.
 - 2026-07-03: The local Riela process for session
   `codex-design-and-implement-review-loop-session-361` was intentionally
   cancelled after intake and local TASK-005 readiness documentation completed.
   The persisted Riela session is terminal failed due to cancellation, not due
   to a checklist or verification failure.
+- 2026-07-03: Documentation/status cleanup routed through Riela session
+  `codex-simple-work-package-session-395`; the workflow identified stale
+  Phase 1 deliverable checkboxes, then the local process was stopped before
+  file edits. Updated the top-level status and deliverables to reflect the
+  completed EventKit implementation, schema, models, fake tests, and live
+  checklist artifact while leaving TASK-005 live execution open because
+  Calendar/Reminders permissions are not granted. Verification:
+  `git diff --check`, `task build`, and `swift run apple-gateway --help`.
+- 2026-07-03: Safer TASK-005 helper update routed through Riela session
+  `codex-simple-work-package-session-421`. Updated
+  `scripts/live-calendar-reminders-check.sh` so default mode is a successful
+  non-prompting dry-run that prints the checklist path, reports Calendar and
+  Reminders permission states, verifies full/reader schema readiness, and
+  states that no live EventKit query or mutation was performed. Kept live
+  scratch verification behind explicit `--execute`, which refuses with exit 4
+  before mutation unless Calendar and Reminders permissions are both `GRANTED`.
+  Live execution remains permission-gated and was not run in this session.
+- 2026-07-03: Schema readiness hardening routed through Riela session
+  `codex-simple-work-package-session-432`. Updated
+  `scripts/live-calendar-reminders-check.sh` so default dry-run extracts the
+  GraphQL `Query` and `Mutation` root blocks before validating exact
+  Calendar/Reminders root field exposure. Full and reader schemas must expose
+  the exact read root fields, the full schema must expose the exact mutation
+  root fields, and the reader schema must not expose those mutation root
+  fields. Default dry-run remains non-prompting, non-mutating,
+  non-live-querying, and permission-gated live execution was not run.

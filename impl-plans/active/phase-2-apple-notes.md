@@ -1,6 +1,7 @@
 # Phase 2: Apple Notes
 
-**Status**: In Progress (Phase 2 TASK-005 complete; live Notes manual verification remains permission-gated)
+**Status**: Implementation complete; live Notes manual verification remains
+permission-gated
 **Design Reference**: `design-docs/specs/design-apple-notes.md`
 
 ## Purpose
@@ -15,13 +16,17 @@ reuses.
       JSON-only argument passing, chunking, timeout, -1712 retry, error
       taxonomy; TASK-001 runner complete, TASK-002 read-side adapter chunk
       orchestration complete)
-- [ ] `Domains/NotesAdapter/` with JXA script templates for accounts,
+- [x] `Domains/NotesAdapter/` with JXA script templates for accounts,
       folders, bulk note metadata, body fetch, search, create, update,
       delete, move, attachment export
 - [x] Schema module: noteAccounts, noteFolders, notes, note; createNote,
       updateNoteBody, deleteNote, moveNote
 - [x] Body inlining rule (64 KiB) with `bodyFile` materialization via the
       Phase 0 file store
+- [x] Live readiness helper:
+      `scripts/live-notes-check.sh` dry-run permission checks plus exact
+      Notes Query/Mutation root-field schema checks and permission-gated
+      read-only metadata mode
 
 ## Tasks
 
@@ -248,3 +253,44 @@ Implementation tasks:
   Verification passed with the Xcode SDK environment: `task build`,
   `task test`, `task lint`, `swift run apple-gateway --help`, and
   `git diff --check`.
+- 2026-07-03: Documentation/status cleanup routed through Riela session
+  `codex-simple-work-package-session-395`; the workflow identified the stale
+  unchecked NotesAdapter deliverable, then the local process was stopped
+  before file edits. Updated the deliverable checkbox to match the completed
+  JXA template, adapter, read/write, schema, smoke, and live-checklist
+  evidence already recorded above. Live manual verification remains
+  permission-gated. Verification: `git diff --check`, `task build`, and
+  `swift run apple-gateway --help`.
+- 2026-07-03: Documentation-only Phase 2 status cleanup completed via Riela
+  session `codex-simple-work-package-session-410`. Updated the top-level
+  status to state implementation complete while preserving the live Notes
+  manual verification permission-gated blocker. Verified with `rg` that the
+  document preserves the permission-gated manual verification blocker.
+  Verification: `rg` status/blocker checks and `git diff --check`.
+- 2026-07-03: Added Phase 2 Notes live readiness helper via
+  `codex-simple-work-package-session-418`. The default
+  `scripts/live-notes-check.sh` path is dry-run, non-prompting, and
+  non-mutating: it prints the live checklist path, runs
+  `permissions status --json`, reports `notesAutomation`, checks exact Query
+  root fields `noteAccounts`, `noteFolders`, `notes`, and `note` in full and
+  reader schemas, checks exact Mutation root fields `createNote`,
+  `updateNoteBody`, `deleteNote`, and `moveNote` are full-schema only, and
+  states that no live Notes query was performed. The explicit `--read-only`
+  mode refuses unless Notes Automation is `GRANTED`; when granted it is
+  limited to metadata reads for `noteAccounts`, `noteFolders`, and
+  `notes(input: { first: 5 })`. Scratch write verification remains a
+  permission-gated manual checklist step.
+- 2026-07-03: Hardened the default Phase 2 Notes live readiness helper via
+  Riela session `codex-simple-work-package-session-430` so dry-run schema
+  readiness extracts the `type Query` and `type Mutation` root blocks before
+  exact-line checks. The dry-run validates full and reader schemas expose
+  exact Notes Query root fields `noteAccounts: [NoteAccount!]!`,
+  `noteFolders(accountId: ID): [NoteFolder!]!`,
+  `notes(input: NoteSearchInput!): NoteConnection!`, and
+  `note(noteId: ID!): Note`; validates the full schema exposes exact Notes
+  Mutation root fields `createNote(input: CreateNoteInput!): Note!`,
+  `updateNoteBody(input: UpdateNoteBodyInput!): Note!`,
+  `deleteNote(noteId: ID!): DeleteResult!`, and
+  `moveNote(noteId: ID!, folderId: ID!): Note!`; and validates reader schema
+  does not expose those Mutation root fields. Default dry-run remains
+  non-prompting, non-mutating, and does not query live Notes metadata.

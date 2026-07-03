@@ -13,6 +13,39 @@ production notes.
 - [ ] `limits.apple_event_batch_size` recorded:
 - [ ] `limits.apple_event_timeout_seconds` recorded:
 
+## Readiness Helper
+
+- [ ] Run the dry-run readiness helper:
+
+```bash
+scripts/live-notes-check.sh
+```
+
+- [ ] Confirm it prints the checklist path, reports `notesAutomation`, checks
+      exact Query root fields `noteAccounts: [NoteAccount!]!`,
+      `noteFolders(accountId: ID): [NoteFolder!]!`,
+      `notes(input: NoteSearchInput!): NoteConnection!`, and
+      `note(noteId: ID!): Note` in full and reader schemas, checks exact
+      Mutation root fields `createNote(input: CreateNoteInput!): Note!`,
+      `updateNoteBody(input: UpdateNoteBodyInput!): Note!`,
+      `deleteNote(noteId: ID!): DeleteResult!`, and
+      `moveNote(noteId: ID!, folderId: ID!): Note!` are full-schema only,
+      and states that no live Notes query was performed.
+- [ ] If Notes Automation is not `GRANTED`, confirm guarded read-only mode
+      refuses without querying live Notes data:
+
+```bash
+scripts/live-notes-check.sh --read-only
+```
+
+- [ ] After Notes Automation is manually granted, optionally run guarded
+      read-only mode and record the limited metadata counts for
+      `noteAccounts`, `noteFolders`, and `notes(input: { first: 5 })`:
+
+```bash
+scripts/live-notes-check.sh --read-only
+```
+
 ## Automation Prompt
 
 - [ ] Revoke or start from a clean Notes Automation permission state when safe.

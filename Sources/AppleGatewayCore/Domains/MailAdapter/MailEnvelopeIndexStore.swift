@@ -35,17 +35,32 @@ struct MailEnvelopeIndexStore: Sendable {
 
   @discardableResult
   func open(config: AppleGatewayConfig) throws -> any MailSQLiteDatabaseHandle {
+    try sqliteOpener.open(openRequest(config: config))
+  }
+
+  func openDatabase(config: AppleGatewayConfig) throws -> MailSQLiteDatabase {
+    let request = try openRequest(config: config)
+    guard let database = try sqliteOpener.open(request) as? MailSQLiteDatabase else {
+      throw AppleGatewayError(
+        code: .fileOperationFailed,
+        message: "Mail SQLite opener returned an unsupported database handle",
+        details: ["path": request.snapshotPath]
+      )
+    }
+    return database
+  }
+
+  private func openRequest(config: AppleGatewayConfig) throws -> MailSQLiteOpenRequest {
     let paths = try rootResolver.resolve(config: config)
     let snapshot = try snapshotter.snapshotEnvelopeIndex(
       sourcePath: paths.envelopeIndex.path,
       sourceId: Self.sourceId(for: paths.root.path)
     )
-    let request = MailSQLiteOpenRequest(
+    return MailSQLiteOpenRequest(
       snapshotPath: snapshot.databasePath,
       uri: MailSQLiteDatabase.immutableReadOnlyURI(forSnapshotPath: snapshot.databasePath),
       flags: MailSQLiteOpenFlags.mailReadOnlySnapshot
     )
-    return try sqliteOpener.open(request)
   }
 
   private static func sourceId(for mailRoot: String) -> String {

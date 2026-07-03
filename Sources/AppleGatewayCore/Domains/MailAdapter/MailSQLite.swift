@@ -130,6 +130,10 @@ final class MailSQLiteStatement: @unchecked Sendable {
     sqlite3_column_int64(statement, index)
   }
 
+  func int(at index: Int32) -> Int {
+    Int(sqlite3_column_int(statement, index))
+  }
+
   func double(at index: Int32) -> Double {
     sqlite3_column_double(statement, index)
   }
@@ -141,10 +145,46 @@ final class MailSQLiteStatement: @unchecked Sendable {
     return String(cString: value)
   }
 
+  func blob(at index: Int32) -> Data? {
+    guard let bytes = sqlite3_column_blob(statement, index) else {
+      return nil
+    }
+    let count = Int(sqlite3_column_bytes(statement, index))
+    return Data(bytes: bytes, count: count)
+  }
+
+  func isNull(at index: Int32) -> Bool {
+    sqlite3_column_type(statement, index) == SQLITE_NULL
+  }
+
+  func bind(_ value: String, at index: Int32) throws {
+    try bindResult(sqlite3_bind_text(statement, index, value, -1, sqliteTransient))
+  }
+
+  func bind(_ value: Int64, at index: Int32) throws {
+    try bindResult(sqlite3_bind_int64(statement, index, value))
+  }
+
+  func bind(_ value: Double, at index: Int32) throws {
+    try bindResult(sqlite3_bind_double(statement, index, value))
+  }
+
+  func bindNull(at index: Int32) throws {
+    try bindResult(sqlite3_bind_null(statement, index))
+  }
+
   func finalize() {
     if let statement {
       sqlite3_finalize(statement)
       self.statement = nil
     }
   }
+
+  private func bindResult(_ result: Int32) throws {
+    guard result == SQLITE_OK else {
+      throw database.sqliteError(message: "Could not bind SQLite statement value")
+    }
+  }
 }
+
+private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)

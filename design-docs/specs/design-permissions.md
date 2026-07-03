@@ -93,8 +93,10 @@ embedded plist section. The same check should be applied to
 - Notifications helper: helper app resolvable and its
   `getNotificationSettings` reports authorized (queried over the helper
   IPC described in `design-notifications.md`).
-- Shortcuts bridge: `shortcuts list` contains the expected
-  `apple-gateway-*` shortcuts.
+- Shortcuts bridge: `shortcuts list` contains the exact expected bridge
+  shortcut names for the configured `clock_alarms.shortcut_prefix`. On
+  macOS 13-15 this means get/create/toggle; on macOS 26+ it also requires
+  update/delete. The probe is list-only and must never run shortcuts.
 
 Exposed three ways with one implementation:
 

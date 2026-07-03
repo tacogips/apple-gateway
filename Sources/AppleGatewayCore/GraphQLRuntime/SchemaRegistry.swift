@@ -52,6 +52,9 @@ struct GraphQLExecutionContext {
   var calendarWriteService: CalendarWriteService
   var notesReadService: NotesReadService
   var notesWriteService: NotesWriteService
+  var mailReadService: MailReadService
+  var notificationsService: any NotificationsProviding
+  var clockAlarmsService: any ClockAlarmsProviding
 }
 
 struct GraphQLSchemaRegistry {
@@ -80,7 +83,10 @@ struct GraphQLSchemaRegistry {
   }
 
   static func bootstrap(role: AppleGatewayRole) -> GraphQLSchemaRegistry {
-    GraphQLSchemaRegistry(modules: [.permissions, .calendarReminders, .notes], role: role)
+    GraphQLSchemaRegistry(
+      modules: [.permissions, .calendarReminders, .notes, .mail, .notifications, .clockAlarms],
+      role: role
+    )
   }
 
   func rootFields(for kind: GraphQLOperationKind) -> [GraphQLFieldDefinition] {

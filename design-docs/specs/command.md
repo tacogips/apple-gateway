@@ -236,7 +236,7 @@ manifest of materialized files:
       "downloadKey": "agdk1...",
       "domain": "mail",
       "kind": "BODY_TEXT",
-      "path": "/Users/me/.cache/apple-gateway/downloads/mail/.../body.txt"
+      "path": "~/.cache/apple-gateway/downloads/mail/.../body.txt"
     }]
   },
   "extensions": {
@@ -269,8 +269,11 @@ with counts of removed files/directories.
 Clock-alarm mutations require the bridge shortcuts to be installed once:
 
 ```bash
-open packaging/shortcuts/apple-gateway-get-alarms.shortcut   # etc.
+open packaging/shortcuts/apple-gateway-get-alarms.shortcut   # after export
+scripts/live-clock-alarms-check.sh                           # list-only readiness
 apple-gateway permissions status    # reports shortcutsClockBridge
 ```
 
-See `design-alarms.md` and `packaging/shortcuts/README.md`.
+See `design-alarms.md`, `packaging/shortcuts/README.md`, and
+`packaging/shortcuts/SOURCE.md`. If the exported `.shortcut` files are not
+present yet, create them in Shortcuts.app from the source build sheet first.

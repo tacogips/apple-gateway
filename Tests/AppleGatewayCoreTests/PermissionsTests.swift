@@ -76,6 +76,78 @@ import Testing
   #expect(status.state == .granted)
 }
 
+@Test func shortcutsClockBridgeRequiresExactExpectedShortcutNames() {
+  let output = """
+  apple-gateway-get-alarms
+  apple-gateway-create-alarm
+  apple-gateway-toggle-alarm
+  apple-gateway-unrelated
+  """
+  let status = LivePermissionProbe.shortcutsClockBridgeStatus(
+    config: .defaultValue,
+    shortcutsListOutput: output,
+    osVersion: OperatingSystemVersion(majorVersion: 15, minorVersion: 5, patchVersion: 0)
+  )
+
+  #expect(status.state == .granted)
+  #expect(status.details["expectedShortcuts"] == [
+    "apple-gateway-get-alarms",
+    "apple-gateway-create-alarm",
+    "apple-gateway-toggle-alarm"
+  ].joined(separator: ","))
+}
+
+@Test func shortcutsClockBridgeRejectsPrefixOnlyFalsePositive() {
+  let output = """
+  apple-gateway-get-alarms
+  apple-gateway-random
+  """
+  let status = LivePermissionProbe.shortcutsClockBridgeStatus(
+    config: .defaultValue,
+    shortcutsListOutput: output,
+    osVersion: OperatingSystemVersion(majorVersion: 15, minorVersion: 5, patchVersion: 0)
+  )
+
+  #expect(status.state == .unknown)
+  #expect(status.details["reason"] == "Missing Clock alarm bridge shortcuts")
+  #expect(status.details["missingShortcuts"] == "apple-gateway-create-alarm,apple-gateway-toggle-alarm")
+}
+
+@Test func shortcutsClockBridgeRequiresUpdateAndDeleteOnMacOS26() {
+  let output = """
+  apple-gateway-get-alarms
+  apple-gateway-create-alarm
+  apple-gateway-toggle-alarm
+  """
+  let status = LivePermissionProbe.shortcutsClockBridgeStatus(
+    config: .defaultValue,
+    shortcutsListOutput: output,
+    osVersion: OperatingSystemVersion(majorVersion: 26, minorVersion: 0, patchVersion: 0)
+  )
+
+  #expect(status.state == .unknown)
+  #expect(status.details["missingShortcuts"] == "apple-gateway-update-alarm,apple-gateway-delete-alarm")
+}
+
+@Test func shortcutsClockBridgeUsesConfiguredPrefix() {
+  var config = AppleGatewayConfig.defaultValue
+  config.clockAlarms.shortcutPrefix = "custom"
+  let output = """
+  custom-get-alarms
+  custom-create-alarm
+  custom-toggle-alarm
+  custom-update-alarm
+  custom-delete-alarm
+  """
+  let status = LivePermissionProbe.shortcutsClockBridgeStatus(
+    config: config,
+    shortcutsListOutput: output,
+    osVersion: OperatingSystemVersion(majorVersion: 26, minorVersion: 0, patchVersion: 0)
+  )
+
+  #expect(status.state == .granted)
+}
+
 @Test func permissionFailureFormatterMatchesContractOrdering() {
   let message = PermissionFailureFormatter().message(
     domainName: "Calendar",

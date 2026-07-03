@@ -23,6 +23,9 @@ struct AppleGatewaySmokeTests {
     try fakeBackedFileDownload()
     try fakeBackedCalendarReminderGraphQLFlows()
     try fakeBackedNotesGraphQLFlows()
+    try fakeBackedMailGraphQLFlows()
+    try fakeBackedNotificationsGraphQLFlows()
+    try fakeBackedClockAlarmsGraphQLFlows()
   }
 
   private static func queryAndQueryFileExclusivity() throws {
@@ -409,6 +412,175 @@ struct AppleGatewaySmokeTests {
     try expect(readerCode == "WRITE_DISABLED_IN_READER", "reader notes mutation rejection code")
   }
 
+  private static func fakeBackedMailGraphQLFlows() throws {
+    let root = try SmokeTemporaryDirectory()
+    let cache = root.root.appendingPathComponent("cache")
+    let emlx = root.root.appendingPathComponent("message.emlx")
+    try writeEMLX(
+      raw: """
+      Content-Type: text/plain; charset="utf-8"
+
+      Smoke mail body
+      """,
+      to: emlx
+    )
+    let fileStore = FileStore(cacheRoot: cache.path)
+    let files = try MailMessageFileFactory(fileStore: fileStore).files(emlxPath: emlx.path)
+    let fake = SmokeMailProvider(files: files)
+    let readService = MailReadService(provider: fake)
+    let mailQuery = runCommand(
+      role: .full,
+      arguments: [
+        "apple-gateway",
+        "graphql",
+        "--query",
+        """
+        {
+          mailAccounts { id name kind }
+          mailboxes(accountId: "mail-account-smoke") { id path }
+          mailMessages(input: { first: 5 }) {
+            totalCount
+            edges { node { id subject files { bodyText { kind downloadKey } } } }
+          }
+          mailMessage(messageId: "message-smoke") { id files { rawSource { kind } } }
+        }
+        """
+      ],
+      environment: [
+        "HOME": root.home,
+        "APPLE_GATEWAY_STORAGE_CACHE_DIR": cache.path
+      ],
+      mailReadService: readService
+    )
+
+    try expect(mailQuery.exitCode == 0, "fake-backed Mail GraphQL succeeds")
+    try expect(mailQuery.stderr.isEmpty, "fake-backed Mail GraphQL leaves stderr empty")
+    try expect(mailQuery.stdout.contains("\"mailAccounts\""), "fake-backed Mail GraphQL returns accounts")
+    try expect(mailQuery.stdout.contains("\"BODY_TEXT\""), "fake-backed Mail GraphQL returns body key")
+
+    let bodyKey = try requireBodyTextKey(in: files)
+    let download = runCommand(
+      role: .full,
+      arguments: [
+        "apple-gateway",
+        "file",
+        "download",
+        "--key", bodyKey
+      ],
+      environment: [
+        "HOME": root.home,
+        "APPLE_GATEWAY_STORAGE_CACHE_DIR": cache.path
+      ],
+      fileMaterializer: MailFileMaterializer()
+    )
+
+    try expect(download.exitCode == 0, "fake-backed Mail file download succeeds")
+    try expect(download.stderr.isEmpty, "fake-backed Mail file download leaves stderr empty")
+    try expect(download.stdout.contains("\"BODY_TEXT\""), "fake-backed Mail file download returns manifest")
+  }
+
+  private static func fakeBackedNotificationsGraphQLFlows() throws {
+    let root = try SmokeTemporaryDirectory()
+    let fake = SmokeNotificationsProvider()
+    let query = runCommand(
+      role: .full,
+      arguments: [
+        "apple-gateway",
+        "graphql",
+        "--query",
+        """
+        {
+          notifications(input: { source: SYSTEM_DB, first: 5 }) {
+            totalCount
+            edges { node { id source title } }
+          }
+        }
+        """
+      ],
+      environment: ["HOME": root.home],
+      notificationsService: fake
+    )
+    try expect(query.exitCode == 0, "fake-backed notifications query succeeds")
+    try expect(query.stdout.contains("\"source\":\"SYSTEM_DB\""), "fake-backed notifications query returns source")
+
+    let post = runCommand(
+      role: .full,
+      arguments: [
+        "apple-gateway",
+        "graphql",
+        "--query",
+        #"mutation { postNotification(input: { title: "Smoke", allowFallback: true }) { id usedFallback } }"#
+      ],
+      environment: ["HOME": root.home],
+      notificationsService: fake
+    )
+    try expect(post.exitCode == 0, "fake-backed notification post succeeds")
+    try expect(post.stdout.contains("\"id\":\"notification-smoke\""), "fake-backed notification post returns id")
+
+    let invalidDismiss = runCommand(
+      role: .full,
+      arguments: [
+        "apple-gateway",
+        "graphql",
+        "--query",
+        #"mutation { dismissNotifications(ids: ["system-db-1"]) { dismissedCount } }"#
+      ],
+      environment: ["HOME": root.home],
+      notificationsService: fake
+    )
+    let code = try firstErrorCode(in: invalidDismiss.stdout)
+    try expect(invalidDismiss.exitCode == 5, "SYSTEM_DB dismiss rejection exits 5")
+    try expect(code == "INVALID_ARGUMENT", "SYSTEM_DB dismiss rejection code")
+  }
+
+  private static func fakeBackedClockAlarmsGraphQLFlows() throws {
+    let root = try SmokeTemporaryDirectory()
+    let fake = SmokeClockAlarmsProvider()
+    let query = runCommand(
+      role: .full,
+      arguments: [
+        "apple-gateway",
+        "graphql",
+        "--query",
+        "{ clockAlarms { label time isEnabled repeatDays } }"
+      ],
+      environment: ["HOME": root.home],
+      clockAlarmsService: fake
+    )
+    try expect(query.exitCode == 0, "fake-backed clock alarms query succeeds")
+    try expect(query.stdout.contains("\"clockAlarms\""), "fake-backed clock alarms query returns data")
+    try expect(query.stdout.contains("\"MONDAY\""), "fake-backed clock alarms query returns repeat days")
+
+    let create = runCommand(
+      role: .full,
+      arguments: [
+        "apple-gateway",
+        "graphql",
+        "--query",
+        #"mutation { createClockAlarm(input: { time: "09:00", label: "Focus" }) { success alarm { label time } } }"#
+      ],
+      environment: ["HOME": root.home],
+      clockAlarmsService: fake
+    )
+    try expect(create.exitCode == 0, "fake-backed create clock alarm succeeds")
+    try expect(create.stdout.contains("\"label\":\"Focus\""), "fake-backed create clock alarm returns label")
+
+    let readerCreate = runCommand(
+      role: .reader,
+      arguments: [
+        "apple-gateway-reader",
+        "graphql",
+        "--query",
+        #"mutation { createClockAlarm(input: { time: "09:00" }) { success } }"#
+      ],
+      environment: ["HOME": root.home],
+      clockAlarmsService: fake
+    )
+    let readerCode = try firstErrorCode(in: readerCreate.stdout)
+    try expect(readerCreate.exitCode == 5, "reader rejects clock alarm mutation")
+    try expect(readerCode == "WRITE_DISABLED_IN_READER", "reader clock alarm mutation rejection code")
+  }
+
   private static func runCommand(
     role: AppleGatewayRole,
     arguments: [String],
@@ -417,7 +589,10 @@ struct AppleGatewaySmokeTests {
     calendarReadService: CalendarReadService = CalendarReminderServiceFactory.unavailableReadService(),
     calendarWriteService: CalendarWriteService = CalendarReminderServiceFactory.unavailableWriteService(),
     notesReadService: NotesReadService = NotesServiceFactory.unavailableReadService(),
-    notesWriteService: NotesWriteService = NotesServiceFactory.unavailableWriteService()
+    notesWriteService: NotesWriteService = NotesServiceFactory.unavailableWriteService(),
+    mailReadService: MailReadService = MailServiceFactory.unavailableReadService(),
+    notificationsService: any NotificationsProviding = SmokeUnavailableNotificationsProvider(),
+    clockAlarmsService: any ClockAlarmsProviding = SmokeUnavailableClockAlarmsProvider()
   ) -> CapturedCommandResult {
     let stdout = Pipe()
     let stderr = Pipe()
@@ -432,6 +607,9 @@ struct AppleGatewaySmokeTests {
       calendarWriteService: calendarWriteService,
       notesReadService: notesReadService,
       notesWriteService: notesWriteService,
+      mailReadService: mailReadService,
+      notificationsService: notificationsService,
+      clockAlarmsService: clockAlarmsService,
       standardOutput: stdout.fileHandleForWriting,
       standardError: stderr.fileHandleForWriting
     )
@@ -461,6 +639,20 @@ struct AppleGatewaySmokeTests {
     guard condition() else {
       throw SmokeError(message)
     }
+  }
+
+  private static func writeEMLX(raw: String, to url: URL) throws {
+    let data = Data(raw.utf8)
+    var emlx = Data("\(data.count)\n".utf8)
+    emlx.append(data)
+    try emlx.write(to: url)
+  }
+
+  private static func requireBodyTextKey(in files: MailMessageFileSet) throws -> String {
+    guard let key = files.bodyText?.downloadKey else {
+      throw SmokeError("missing Mail BODY_TEXT download key")
+    }
+    return key
   }
 }
 
@@ -519,6 +711,180 @@ private struct SmokeFileMaterializer: FileStoreMaterializing {
 
   func sourceFile(for payload: FileStoreDownloadKeyPayload) throws -> URL {
     source
+  }
+}
+
+private final class SmokeMailProvider: MailProviding, @unchecked Sendable {
+  private let files: MailMessageFileSet
+
+  init(files: MailMessageFileSet) {
+    self.files = files
+  }
+
+  func accounts() throws -> [MailAccount] {
+    [MailAccount(id: "mail-account-smoke", name: "Smoke Mail", kind: .imap)]
+  }
+
+  func mailboxes(accountId: String?) throws -> [Mailbox] {
+    guard accountId == nil || accountId == "mail-account-smoke" else {
+      throw AppleGatewayError(code: .invalidArgument, message: "Unknown Mail account id")
+    }
+    return [
+      Mailbox(
+        id: "mailbox-smoke",
+        accountId: "mail-account-smoke",
+        name: "INBOX",
+        path: "INBOX",
+        totalCount: 1,
+        unreadCount: 0
+      )
+    ]
+  }
+
+  func messages(input: MailSearchInput) throws -> MailMessageConnection {
+    MailMessageConnection(
+      edges: [MailMessageEdge(cursor: "mail-cursor-smoke", node: message)],
+      pageInfo: PageInfo(hasNextPage: false, endCursor: "mail-cursor-smoke"),
+      totalCount: 1
+    )
+  }
+
+  func message(messageId: String) throws -> MailMessage? {
+    messageId == "message-smoke" ? message : nil
+  }
+
+  private var message: MailMessage {
+    MailMessage(
+      id: "message-smoke",
+      mailboxId: "mailbox-smoke",
+      accountId: "mail-account-smoke",
+      messageId: "rfc-smoke",
+      subject: "Smoke Mail",
+      snippet: "Smoke snippet",
+      from: MailAddress(raw: "Smoke <smoke@example.com>", name: "Smoke", email: "smoke@example.com"),
+      to: [MailAddress(raw: "QA <qa@example.com>", name: "QA", email: "qa@example.com")],
+      cc: [],
+      dateSent: Date(timeIntervalSince1970: 1_783_000_000),
+      dateReceived: Date(timeIntervalSince1970: 1_783_000_060),
+      isRead: true,
+      isFlagged: false,
+      hasAttachments: false,
+      files: files
+    )
+  }
+}
+
+private final class SmokeNotificationsProvider: NotificationsProviding, @unchecked Sendable {
+  func notifications(input: NotificationSearchInput) throws -> DeliveredNotificationConnection {
+    DeliveredNotificationConnection(
+      edges: [
+        DeliveredNotificationEdge(
+          cursor: "notification-smoke-cursor",
+          node: DeliveredNotification(
+            id: "system-db-1",
+            source: .systemDb,
+            appBundleId: "com.example.smoke",
+            title: "Smoke notification",
+            deliveredAt: "2026-07-03T12:00:00Z"
+          )
+        )
+      ],
+      pageInfo: PageInfo(hasNextPage: false, endCursor: "notification-smoke-cursor"),
+      totalCount: 1
+    )
+  }
+
+  func postNotification(_ input: PostNotificationInput) throws -> PostedNotification {
+    PostedNotification(id: "notification-smoke", delivered: true, usedFallback: input.allowFallback)
+  }
+
+  func listGatewayNotifications() throws -> [DeliveredNotification] {
+    []
+  }
+
+  func dismissNotifications(ids: [String]) throws -> DismissResult {
+    DismissResult(dismissedCount: ids.count)
+  }
+
+  func dismissAllGatewayNotifications() throws -> DismissResult {
+    DismissResult(dismissedCount: 0)
+  }
+}
+
+private struct SmokeUnavailableNotificationsProvider: NotificationsProviding {
+  func notifications(input: NotificationSearchInput) throws -> DeliveredNotificationConnection {
+    throw unavailable()
+  }
+
+  func postNotification(_ input: PostNotificationInput) throws -> PostedNotification {
+    throw unavailable()
+  }
+
+  func listGatewayNotifications() throws -> [DeliveredNotification] {
+    throw unavailable()
+  }
+
+  func dismissNotifications(ids: [String]) throws -> DismissResult {
+    throw unavailable()
+  }
+
+  func dismissAllGatewayNotifications() throws -> DismissResult {
+    throw unavailable()
+  }
+
+  private func unavailable() -> AppleGatewayError {
+    AppleGatewayError(code: .domainDisabled, message: "Smoke notifications provider is unavailable")
+  }
+}
+
+private final class SmokeClockAlarmsProvider: ClockAlarmsProviding, @unchecked Sendable {
+  func clockAlarms() throws -> [ClockAlarm] {
+    [ClockAlarm(label: "Wake", time: "07:30", isEnabled: true, repeatDays: [.monday])]
+  }
+
+  func createClockAlarm(_ input: CreateClockAlarmInput) throws -> ClockAlarmResult {
+    ClockAlarmResult(
+      success: true,
+      alarm: ClockAlarm(label: input.label ?? "", time: input.time, isEnabled: true, repeatDays: input.repeatDays)
+    )
+  }
+
+  func toggleClockAlarm(_ input: ToggleClockAlarmInput) throws -> ClockAlarmResult {
+    ClockAlarmResult(success: true, alarm: ClockAlarm(label: input.label, time: "07:30", isEnabled: input.enabled ?? false))
+  }
+
+  func updateClockAlarm(_ input: UpdateClockAlarmInput) throws -> ClockAlarmResult {
+    ClockAlarmResult(success: true, alarm: ClockAlarm(label: input.newLabel ?? input.label, time: input.time ?? "07:30", isEnabled: true))
+  }
+
+  func deleteClockAlarm(_ input: DeleteClockAlarmInput) throws -> ClockAlarmResult {
+    ClockAlarmResult(success: true)
+  }
+}
+
+private struct SmokeUnavailableClockAlarmsProvider: ClockAlarmsProviding {
+  func clockAlarms() throws -> [ClockAlarm] {
+    throw unavailable()
+  }
+
+  func createClockAlarm(_ input: CreateClockAlarmInput) throws -> ClockAlarmResult {
+    throw unavailable()
+  }
+
+  func toggleClockAlarm(_ input: ToggleClockAlarmInput) throws -> ClockAlarmResult {
+    throw unavailable()
+  }
+
+  func updateClockAlarm(_ input: UpdateClockAlarmInput) throws -> ClockAlarmResult {
+    throw unavailable()
+  }
+
+  func deleteClockAlarm(_ input: DeleteClockAlarmInput) throws -> ClockAlarmResult {
+    throw unavailable()
+  }
+
+  private func unavailable() -> AppleGatewayError {
+    AppleGatewayError(code: .domainDisabled, message: "Smoke clock alarms provider is unavailable")
   }
 }
 

@@ -4,12 +4,16 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 product="apple-gateway"
+reader_product="apple-gateway-reader"
+notifier_product="AppleGatewayNotifier"
+notifier_app="AppleGatewayNotifier.app"
 artifact_name="apple-gateway"
+shortcuts_dir="packaging/shortcuts"
 
 usage() {
   cat <<EOF
 Usage:
-  scripts/build-homebrew-release.sh [--dry-run] [target ...]
+  scripts/build-homebrew-release.sh [--dry-run|--validate-shortcuts-only] [target ...]
 
 Targets:
   darwin-arm64  darwin-x64
@@ -20,6 +24,9 @@ Environment:
   SWIFT_BIN             Swift executable. Defaults to Xcode's Swift toolchain on macOS, then PATH.
   SWIFT_DEVELOPER_DIR   Defaults to /Applications/Xcode.app/Contents/Developer on macOS.
   SWIFT_SDKROOT         Defaults to Xcode's macOS SDK path on macOS.
+  APPLE_GATEWAY_ALLOW_INCOMPLETE_SHORTCUT_EXPORTS
+                        Set to 1 only for incomplete local/manual checks when
+                        exported .shortcut files are intentionally absent.
 
 Examples:
   scripts/build-homebrew-release.sh
@@ -29,6 +36,11 @@ Examples:
 This builder stages Swift macOS archives for a Homebrew formula. It does not
 publish release assets, mutate a tap, render a formula, or push commits.
 EOF
+}
+
+validate_shortcut_assets() {
+  APPLE_GATEWAY_SHORTCUTS_DIR="$repo_root/$shortcuts_dir" \
+    "$repo_root/scripts/validate-shortcut-assets.sh"
 }
 
 detect_target() {
@@ -155,8 +167,9 @@ swift_bin() {
 }
 
 swift_release_bin_path() {
-  local target swift_exe developer_dir sdkroot triple
+  local target swift_exe developer_dir sdkroot triple product_name
   target="$1"
+  product_name="$2"
   swift_exe="$(swift_bin)"
   developer_dir="${SWIFT_DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
   sdkroot="${SWIFT_SDKROOT:-/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk}"
@@ -165,20 +178,34 @@ swift_release_bin_path() {
   (
     cd "$repo_root"
     DEVELOPER_DIR="$developer_dir" SDKROOT="$sdkroot" \
-      "$swift_exe" build -c release --product "$product" --triple "$triple" >/dev/null
+      "$swift_exe" build -c release --product "$product_name" --triple "$triple" >/dev/null
     DEVELOPER_DIR="$developer_dir" SDKROOT="$sdkroot" \
-      "$swift_exe" build -c release --product "$product" --triple "$triple" --show-bin-path
+      "$swift_exe" build -c release --product "$product_name" --triple "$triple" --show-bin-path
   )
 }
 
+build_notifier_app() {
+  local target app_path notifier_bin_path
+  target="$1"
+  app_path="$2"
+  notifier_bin_path="$(swift_release_bin_path "$target" "$notifier_product" | tail -n 1)"
+  APPLE_GATEWAY_NOTIFIER_SIGNING=none "$repo_root/scripts/build-notifier-app.sh" \
+    --configuration release \
+    --executable "$notifier_bin_path/$notifier_product" \
+    --output "$app_path" >/dev/null
+}
+
 print_plan() {
-  local version target release_dir work_dir archive binary triple
+  local version target release_dir work_dir archive binary reader_binary helper_app shortcuts triple
   version="$1"
   target="$2"
   release_dir="$3"
   work_dir="$release_dir/work/$artifact_name-$version-$target"
   archive="$release_dir/$artifact_name-$version-$target.tar.gz"
   binary="$work_dir/bin/$product"
+  reader_binary="$work_dir/bin/$reader_product"
+  helper_app="$work_dir/libexec/$notifier_app"
+  shortcuts="$work_dir/share/$artifact_name/shortcuts"
   triple="$(swift_triple_for_target "$target")"
 
   assert_child_path "$release_dir" "$work_dir"
@@ -190,32 +217,43 @@ print_plan() {
   printf '  swift triple: %s\n' "$triple"
   printf '  release bin path command: swift build -c release --product %s --triple %s --show-bin-path\n' "$product" "$triple"
   printf '  staged binary: %s\n' "$binary"
+  printf '  staged reader binary: %s\n' "$reader_binary"
+  printf '  staged notifier helper: %s\n' "$helper_app"
+  printf '  staged shortcuts: %s\n' "$shortcuts"
   printf '  archive: %s\n' "$archive"
   printf '  checksum: %s.sha256\n' "$archive"
   printf '  publish side effects: false\n'
 }
 
 build_target() {
-  local version target release_dir bin_path work_dir archive binary
+  local version target release_dir bin_path reader_bin_path work_dir archive binary reader_binary helper_app shortcuts
   version="$1"
   target="$2"
   release_dir="$3"
   work_dir="$release_dir/work/$artifact_name-$version-$target"
   archive="$release_dir/$artifact_name-$version-$target.tar.gz"
   binary="$work_dir/bin/$product"
+  reader_binary="$work_dir/bin/$reader_product"
+  helper_app="$work_dir/libexec/$notifier_app"
+  shortcuts="$work_dir/share/$artifact_name/shortcuts"
 
   assert_child_path "$release_dir" "$work_dir"
   assert_child_path "$release_dir" "$archive"
 
   rm -rf "$work_dir" "$archive" "$archive.sha256"
-  mkdir -p "$work_dir/bin"
+  mkdir -p "$work_dir/bin" "$work_dir/libexec" "$(dirname "$shortcuts")"
 
-  bin_path="$(swift_release_bin_path "$target" | tail -n 1)"
+  bin_path="$(swift_release_bin_path "$target" "$product" | tail -n 1)"
+  reader_bin_path="$(swift_release_bin_path "$target" "$reader_product" | tail -n 1)"
   cp "$bin_path/$product" "$binary"
+  cp "$reader_bin_path/$reader_product" "$reader_binary"
   chmod 0755 "$binary"
+  chmod 0755 "$reader_binary"
+  build_notifier_app "$target" "$helper_app"
+  cp -R "$repo_root/$shortcuts_dir" "$shortcuts"
   cp "$repo_root/README.md" "$work_dir/README.md"
 
-  tar -C "$work_dir" -czf "$archive" .
+  COPYFILE_DISABLE=1 tar --no-xattrs -C "$work_dir" -czf "$archive" .
   write_sha256 "$archive" > "$archive.sha256"
 
   printf 'built %s\n' "$archive"
@@ -236,6 +274,11 @@ main() {
     shift
   fi
 
+  if [[ "${1:-}" == "--validate-shortcuts-only" ]]; then
+    validate_shortcut_assets
+    return
+  fi
+
   local version release_dir
   version="$(package_version)"
   validate_version "$version"
@@ -247,6 +290,10 @@ main() {
     targets=("$(detect_target)")
   else
     targets=("$@")
+  fi
+
+  if [[ "$dry_run" == false ]]; then
+    validate_shortcut_assets
   fi
 
   local target

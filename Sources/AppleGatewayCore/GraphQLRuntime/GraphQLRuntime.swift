@@ -11,6 +11,9 @@ enum GraphQLRuntime {
     calendarWriteService: CalendarWriteService = CalendarReminderServiceFactory.unavailableWriteService(),
     notesReadService: NotesReadService = NotesServiceFactory.unavailableReadService(),
     notesWriteService: NotesWriteService = NotesServiceFactory.unavailableWriteService(),
+    mailReadService: MailReadService = MailServiceFactory.unavailableReadService(),
+    notificationsService: any NotificationsProviding = NotificationsServiceFactory.unavailableService(),
+    clockAlarmsService: any ClockAlarmsProviding = ClockAlarmsServiceFactory.unavailableService(),
     schema: GraphQLSchemaRegistry? = nil,
     pretty: Bool = false
   ) -> Data {
@@ -24,6 +27,9 @@ enum GraphQLRuntime {
       calendarWriteService: calendarWriteService,
       notesReadService: notesReadService,
       notesWriteService: notesWriteService,
+      mailReadService: mailReadService,
+      notificationsService: notificationsService,
+      clockAlarmsService: clockAlarmsService,
       schema: schema,
       pretty: pretty
     ).data
@@ -39,6 +45,9 @@ enum GraphQLRuntime {
     calendarWriteService: CalendarWriteService = CalendarReminderServiceFactory.unavailableWriteService(),
     notesReadService: NotesReadService = NotesServiceFactory.unavailableReadService(),
     notesWriteService: NotesWriteService = NotesServiceFactory.unavailableWriteService(),
+    mailReadService: MailReadService = MailServiceFactory.unavailableReadService(),
+    notificationsService: any NotificationsProviding = NotificationsServiceFactory.unavailableService(),
+    clockAlarmsService: any ClockAlarmsProviding = ClockAlarmsServiceFactory.unavailableService(),
     schema suppliedSchema: GraphQLSchemaRegistry? = nil,
     pretty: Bool = false
   ) -> AppleGatewayJSONResponse {
@@ -57,7 +66,10 @@ enum GraphQLRuntime {
           calendarReadService: calendarReadService,
           calendarWriteService: calendarWriteService,
           notesReadService: notesReadService,
-          notesWriteService: notesWriteService
+          notesWriteService: notesWriteService,
+          mailReadService: mailReadService,
+          notificationsService: notificationsService,
+          clockAlarmsService: clockAlarmsService
         )
       ).execute(document: document, variables: variables)
       return encode(data: Optional(result.data), errors: result.errors, pretty: pretty)

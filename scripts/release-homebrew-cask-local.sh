@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 artifact_name="apple-gateway"
-github_repository="user/repo"
+github_repository="${APPLE_GATEWAY_GITHUB_REPOSITORY:-tacogips/apple-gateway}"
 
 usage() {
   cat <<EOF
@@ -16,6 +16,12 @@ Required local environment variables:
   APPLE_ID                Apple ID email for notarization.
   APPLE_PASSWORD          Apple app-specific password for notarization.
   APPLE_TEAM_ID           Apple Developer Team ID for notarization.
+
+Optional local environment variables:
+  APPLE_GATEWAY_GITHUB_REPOSITORY  GitHub owner/repo for release upload.
+                                   Also defaults the rendered Cask release URL.
+                                   Defaults to tacogips/apple-gateway.
+  CASK_RELEASE_BASE_URL            Full rendered Cask release URL base.
 
 The signing certificate must already be installed in the local macOS keychain.
 Use kinko or another local password-manager workflow to provide the environment.
@@ -95,10 +101,11 @@ fi
 
 gh release upload "$release_tag" "$arm_dmg" "$x64_dmg" --repo "$github_repository" --clobber
 
-scripts/render-homebrew-cask.sh "$version" "$tap_cask_file"
+render_release_base_url="${CASK_RELEASE_BASE_URL:-https://github.com/$github_repository/releases/download/$release_tag}"
+CASK_RELEASE_BASE_URL="$render_release_base_url" scripts/render-homebrew-cask.sh "$version" "$tap_cask_file"
 
 printf '\nRendered tap cask: %s\n' "$tap_cask_file"
 printf 'Review, commit, and push the tap change from the tap repository.\n'
 printf 'Then install with:\n'
-printf '  brew tap user/tap\n'
+printf '  brew tap tacogips/tap\n'
 printf '  brew install --cask apple-gateway\n'

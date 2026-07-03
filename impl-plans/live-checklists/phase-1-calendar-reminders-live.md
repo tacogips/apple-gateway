@@ -32,15 +32,30 @@ Dry-run readiness and checklist:
 scripts/live-calendar-reminders-check.sh
 ```
 
+Default dry-run behavior:
+
+- Prints this checklist path.
+- Runs `permissions status --json` without requesting permissions or prompting.
+- Reports `calendars` and `reminders` permission states.
+- Extracts the GraphQL `Query` root block and verifies the full and reader
+  schemas expose the exact Calendar/Reminders root read fields.
+- Extracts the GraphQL `Mutation` root block and verifies the exact
+  Calendar/Reminders root mutation fields are present only in the full schema
+  and absent from the reader schema.
+- Exits 0 even when Calendar or Reminders permissions are not `GRANTED`.
+- Clearly states that no live EventKit query or mutation was performed.
+
 Execute live scratch verification:
 
 ```bash
 scripts/live-calendar-reminders-check.sh --execute
 ```
 
-The script refuses to execute unless Calendar and Reminders are already
-`GRANTED`. It creates only scratch items named `apple-gateway-test` by default
-and cleans up only IDs created during the current run.
+The script refuses `--execute` with exit 4 unless Calendar and Reminders are
+already `GRANTED`, before any live EventKit mutation. When permissions are
+granted and the operator explicitly runs `--execute`, it creates only scratch
+items named `apple-gateway-test` by default and cleans up only IDs created
+during the current run.
 
 ## Manual Assertions
 
@@ -64,5 +79,7 @@ and cleans up only IDs created during the current run.
 - Calendar permission: `NOT_DETERMINED`
 - Reminders permission: `NOT_DETERMINED`
 
-Live mutation was not executed because doing so would require prompting for
-Calendar and Reminders access first.
+Dry-run readiness does not require permissions and performs no live EventKit
+query or mutation. Live mutation was not executed because doing so would require
+the operator to grant Calendar and Reminders access first, then explicitly run
+`scripts/live-calendar-reminders-check.sh --execute`.
