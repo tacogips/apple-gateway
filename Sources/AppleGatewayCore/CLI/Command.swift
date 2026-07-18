@@ -119,22 +119,31 @@ public struct AppleGatewayCommand: Sendable {
       throw Error.invalidUsage("Missing command")
     }
 
-    return AppleGatewayCommandResult(output: "Hello from apple-gateway")
+    return AppleGatewayCommandResult(output: usage)
   }
 
   public var usage: String {
     """
-    Usage: apple-gateway [--help] [--version]
-           apple-gateway [--config <path>] [--pretty] <command>
-           apple-gateway config validate [--config <path>]
-           apple-gateway graphql --query <query> | --query-file <path>
+    Usage: \(executableName) [--help] [--version]
+           \(executableName) [--config <path>] [--pretty] <command>
+           \(executableName) config validate [--config <path>]
+           \(executableName) graphql --query <query> | --query-file <path>
                          [--variables <json> | --variables-file <path>] [--pretty]
-           apple-gateway permissions status [--json]
-           apple-gateway permissions request --domain calendar|reminders|notes|notifications|clock-alarms
-           apple-gateway file download --key <key> [--key <key> ...] [--output-dir <dir>]
-           apple-gateway cache prune [--all]
-           apple-gateway schema print [--role full|reader]
+           \(executableName) permissions status [--json]
+           \(executableName) permissions request --domain calendar|reminders|notes|notifications|clock-alarms
+           \(executableName) file download --key <key> [--key <key> ...] [--output-dir <dir>]
+           \(executableName) cache prune [--all]
+           \(executableName) schema print [--role full|reader]
     """
+  }
+
+  private var executableName: String {
+    switch role {
+    case .full:
+      "apple-gateway"
+    case .reader:
+      "apple-gateway-reader"
+    }
   }
 
   private static func initialLiveConfig(

@@ -18,6 +18,10 @@ Both share the same command surface:
 <binary> [--config <path>] [--pretty] <command>
 ```
 
+Invoking either binary without arguments prints that binary's help text and
+exits successfully. The reader help uses `apple-gateway-reader` in its usage
+examples rather than the full-access executable name.
+
 The binary decides only the role passed into `AppleGatewayCore`: `.full`
 for `apple-gateway`, `.reader` for `apple-gateway-reader`. All user-visible
 command behavior is shared in the core CLI frame. The executable

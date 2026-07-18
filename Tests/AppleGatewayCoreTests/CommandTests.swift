@@ -14,6 +14,18 @@ import Testing
   #expect(output.contains("calendar|reminders|notes|notifications|clock-alarms"))
 }
 
+@Test func commandWithoutArgumentsReportsUsage() throws {
+  let command = AppleGatewayCommand(arguments: [])
+  #expect(try command.run() == command.usage)
+}
+
+@Test func readerCommandReportsReaderUsage() throws {
+  let command = AppleGatewayCommand(arguments: ["--help"], role: .reader)
+  let output = try command.run()
+  #expect(output.hasPrefix("Usage: apple-gateway-reader "))
+  #expect(output.contains("       apple-gateway-reader graphql"))
+}
+
 @Test func commandPermissionsRequestUsageIncludesClockAlarms() throws {
   let command = AppleGatewayCommand(arguments: ["permissions", "request"])
 
