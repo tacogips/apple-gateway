@@ -340,8 +340,29 @@ public struct LiveNotificationsAdapter: NotificationsProviding {
   }
 
   private func gatewayConnection(input: NotificationSearchInput) throws -> DeliveredNotificationConnection {
+    if let deliveredAfter = input.deliveredAfter,
+       let deliveredBefore = input.deliveredBefore,
+       deliveredAfter > deliveredBefore {
+      throw AppleGatewayError(
+        code: .invalidArgument,
+        message: "notifications input deliveredAfter must not be after deliveredBefore"
+      )
+    }
+    let hasDateFilter = input.deliveredAfter != nil || input.deliveredBefore != nil
     let notifications = try listGatewayNotifications().filter { notification in
       if let appBundleId = input.appBundleId, notification.appBundleId != appBundleId {
+        return false
+      }
+      guard hasDateFilter else {
+        return true
+      }
+      guard let deliveredAt = Self.helperDate(notification.deliveredAt) else {
+        return false
+      }
+      if let deliveredAfter = input.deliveredAfter, deliveredAt < deliveredAfter {
+        return false
+      }
+      if let deliveredBefore = input.deliveredBefore, deliveredAt >= deliveredBefore {
         return false
       }
       return true
@@ -362,6 +383,18 @@ public struct LiveNotificationsAdapter: NotificationsProviding {
       ),
       totalCount: notifications.count
     )
+  }
+
+  private static func helperDate(_ value: String?) -> Date? {
+    guard let value else {
+      return nil
+    }
+    let formatter = ISO8601DateFormatter()
+    if let date = formatter.date(from: value) {
+      return date
+    }
+    formatter.formatOptions.insert(.withFractionalSeconds)
+    return formatter.date(from: value)
   }
 
   private func gatewayOffset(after cursor: String?, notifications: [DeliveredNotification]) throws -> Int {

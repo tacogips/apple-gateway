@@ -31,7 +31,7 @@ public struct AppleGatewayCommand: Sendable {
     role: AppleGatewayRole = .full,
     permissionsProvider: any PermissionsProviding = LivePermissionsProvider(),
     responsibleProcessDetector: any ResponsibleProcessDetecting = DefaultResponsibleProcessDetector(),
-    fileMaterializer: any FileStoreMaterializing = MailFileMaterializer(),
+    fileMaterializer: (any FileStoreMaterializing)? = nil,
     calendarReadService: CalendarReadService? = nil,
     calendarWriteService: CalendarWriteService? = nil,
     notesReadService: NotesReadService? = nil,
@@ -43,15 +43,18 @@ public struct AppleGatewayCommand: Sendable {
     let liveServices = calendarReadService == nil || calendarWriteService == nil
       ? CalendarReminderServiceFactory.liveServices()
       : nil
-    let liveNotesServices = notesReadService == nil || notesWriteService == nil
-      ? NotesServiceFactory.liveServices()
+    let liveConfig = Self.initialLiveConfig(arguments: arguments, environment: environment)
+    let liveNotesServices = notesReadService == nil || notesWriteService == nil || fileMaterializer == nil
+      ? NotesServiceFactory.liveServices(config: liveConfig)
       : nil
     self.arguments = arguments
     self.environment = environment
     self.role = role
     self.permissionsProvider = permissionsProvider
     self.responsibleProcessDetector = responsibleProcessDetector
-    self.fileMaterializer = fileMaterializer
+    self.fileMaterializer = fileMaterializer ?? DomainFileStoreMaterializer(
+      notes: liveNotesServices?.fileMaterializer ?? NotesServiceFactory.liveServices(config: liveConfig).fileMaterializer
+    )
     self.calendarReadService = calendarReadService ?? liveServices?.readService ?? CalendarReminderServiceFactory.liveReadService()
     self.calendarWriteService = calendarWriteService ?? liveServices?.writeService ?? CalendarReminderServiceFactory.liveWriteService()
     self.notesReadService = notesReadService ?? liveNotesServices?.readService ?? NotesServiceFactory.liveReadService()
@@ -127,11 +130,38 @@ public struct AppleGatewayCommand: Sendable {
            apple-gateway graphql --query <query> | --query-file <path>
                          [--variables <json> | --variables-file <path>] [--pretty]
            apple-gateway permissions status [--json]
-           apple-gateway permissions request --domain calendar|reminders|notes|notifications
+           apple-gateway permissions request --domain calendar|reminders|notes|notifications|clock-alarms
            apple-gateway file download --key <key> [--key <key> ...] [--output-dir <dir>]
            apple-gateway cache prune [--all]
            apple-gateway schema print [--role full|reader]
     """
+  }
+
+  private static func initialLiveConfig(
+    arguments: [String],
+    environment: [String: String]
+  ) -> AppleGatewayConfig {
+    var configPath: String?
+    var index = 0
+    while index < arguments.count {
+      let argument = arguments[index]
+      if argument == "--config", index + 1 < arguments.count {
+        configPath = arguments[index + 1]
+        break
+      }
+      if argument.hasPrefix("--config=") {
+        configPath = String(argument.dropFirst("--config=".count))
+        break
+      }
+      if !argument.hasPrefix("-") {
+        break
+      }
+      index += 1
+    }
+    return (try? AppleGatewayConfigResolver().resolve(
+      cliConfigPath: configPath,
+      environment: environment
+    ).config) ?? .defaultValue
   }
 
   private func parseGlobalFrame(_ arguments: [String]) throws -> GlobalCommandFrame {
@@ -599,7 +629,9 @@ public struct AppleGatewayCommand: Sendable {
       }
     }
     guard let domain else {
-      throw Error.invalidUsage("Usage: apple-gateway permissions request --domain calendar|reminders|notes|notifications")
+      throw Error.invalidUsage(
+        "Usage: apple-gateway permissions request --domain calendar|reminders|notes|notifications|clock-alarms"
+      )
     }
     return domain
   }
@@ -693,7 +725,7 @@ public enum AppleGatewayCommandLine {
     environment: [String: String],
     permissionsProvider: any PermissionsProviding = LivePermissionsProvider(),
     responsibleProcessDetector: any ResponsibleProcessDetecting = DefaultResponsibleProcessDetector(),
-    fileMaterializer: any FileStoreMaterializing = MailFileMaterializer(),
+    fileMaterializer: (any FileStoreMaterializing)? = nil,
     calendarReadService: CalendarReadService? = nil,
     calendarWriteService: CalendarWriteService? = nil,
     notesReadService: NotesReadService? = nil,

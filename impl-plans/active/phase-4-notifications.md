@@ -1,12 +1,13 @@
 # Phase 4: Notifications
 
-**Status**: Implementation complete; live notification verification remains
-manual
+**Status**: TASK-001 through TASK-005 implementation complete; live
+notification verification remains manual
 **Design Reference**: `design-docs/specs/design-notifications.md`
-**Issue Reference**: Phase 4 TASK-001: Notification helper app target,
-shared JSON protocol, and bundle assembly. No GitHub issue URL or
-repository-plus-number was provided; this plan uses the workflow input title
-and body as the issue reference.
+**Issue References**: Phase 4 TASK-001 used "Notification helper app target,
+shared JSON protocol, and bundle assembly." TASK-005 uses "Implement Notes
+attachments (list/export/isShared), GATEWAY_HELPER notification date filters,
+and clock-alarms CLI help in apple-gateway." No GitHub repository, issue
+number, or URL was provided for either reference.
 
 ## Purpose
 
@@ -25,6 +26,8 @@ listing from the usernoted store, and the osascript fallback.
       usernoted snapshot reader, osascript fallback)
 - [x] Schema module: notifications query; postNotification,
       dismissNotifications, dismissAllGatewayNotifications
+- [x] `GATEWAY_HELPER` `deliveredAfter` / `deliveredBefore` parity with the
+      `SYSTEM_DB` half-open date interval, applied before cursor pagination
 
 ## Tasks
 
@@ -150,9 +153,107 @@ reply text, dismiss, system-wide list on macOS 14 and 15+).
       `--read-only` listing is source-scoped with `SYSTEM_DB` guarded by
       `notificationDbFullDiskAccess: GRANTED`
 
+### TASK-005: Gateway-helper date-filter parity
+
+**Feature ID**: `notification-helper-date-filters`
+
+**Feature Title**: `GATEWAY_HELPER notification date filtering`
+
+**Workflow Mode**: `issue-resolution`
+
+**Issue Reference**: "Implement Notes attachments
+(list/export/isShared), GATEWAY_HELPER notification date filters, and
+clock-alarms CLI help in apple-gateway". No repository, issue number, or URL
+was provided.
+
+**Codex-Agent References**: None provided.
+
+**Parallelizable**: No; this bounded correction depends on the completed
+TASK-002 helper adapter and its connection pagination behavior plus the
+TASK-003 `SYSTEM_DB` filter contract used as the semantic reference.
+
+Implement the accepted contract in
+`Sources/AppleGatewayCore/Domains/NotificationsAdapter/NotificationHelperAdapter.swift`:
+
+- Validate that `deliveredAfter` is not later than `deliveredBefore`, using
+  the same `INVALID_ARGUMENT` behavior and message as
+  `UsernotedNotificationQueryService`.
+- Parse helper `deliveredAt` ISO-8601 strings, including current helper output
+  and fractional-second variants, without changing the public notification
+  model or one-shot helper protocol.
+- Apply the inclusive lower bound (`>=`) and exclusive upper bound (`<`)
+  together with the existing application-id filter before cursor lookup,
+  page slicing, and connection metadata calculation.
+- Exclude missing or malformed helper timestamps only when a date filter is
+  active. Preserve the helper's returned ordering and current unfiltered
+  behavior.
+
+Add focused coverage in
+`Tests/AppleGatewayCoreTests/NotificationAdapterTests.swift` through the
+public `notifications(input:)` adapter surface. The fixture response must
+contain records below, exactly on, and above each bound plus a missing or
+malformed timestamp. Assertions must cover lower-bound inclusion,
+upper-bound exclusion, equal and reversed bounds, `totalCount`, `hasNextPage`,
+end cursor, and a second page so the tests prove filtering precedes
+pagination.
+
+#### TASK-005 Dependencies and Deliverables
+
+- [x] Accepted source-independent date semantics in
+      `design-docs/specs/design-notifications.md`
+- [x] Existing helper connection and `SYSTEM_DB` reference behavior inspected
+- [x] Gateway-helper validation, ISO-8601 parsing, and pre-pagination filters
+- [x] Boundary and pagination regression tests
+- [x] Narrow and full verification recorded in the progress log
+
+#### TASK-005 Verification
+
+Run the narrowest regression first, then the repository-required full checks:
+
+```bash
+swift test --filter notificationAdapterGatewayConnectionAppliesDateFiltersBeforePagination
+swift test --filter NotificationAdapter
+task build
+task test
+task lint
+git diff --check
+```
+
+If `task lint` reports that SwiftLint is unavailable, record that environment
+limitation; `task build`, `task test`, and `git diff --check` remain required.
+Live Notification Center state is not required for this deterministic adapter
+test. If go-task itself is unavailable, use `swift build` and `swift test` as
+the recorded build and full-suite fallbacks.
+
+**Completion Criteria**:
+
+- [x] `GATEWAY_HELPER` and `SYSTEM_DB` use the same inclusive lower and
+      exclusive upper date boundaries.
+- [x] Date filtering occurs before cursor resolution and page slicing, and
+      connection metadata describes the filtered collection.
+- [x] Reversed bounds fail consistently; equal bounds return an empty
+      connection.
+- [x] Missing or malformed helper timestamps do not pass an active date
+      filter and remain visible when no date bound is supplied.
+- [x] Focused adapter tests, `task build`, and the full `task test` suite pass.
+
 ## Progress Log
 
+- 2026-07-18: TASK-005 implemented. `GATEWAY_HELPER` now validates reversed
+  ranges with the SYSTEM_DB message, parses ISO-8601 timestamps with and
+  without fractional seconds, applies the inclusive/exclusive date interval
+  before cursor pagination, and excludes invalid timestamps only for active
+  date filters. Focused NotificationAdapter tests (7 tests), `task build`,
+  full `task test` (181 tests plus AppleGatewaySmokeTests), `task lint` (0
+  violations), and `git diff --check` passed.
+
 - 2026-07-02: Plan created from approved design docs.
+- 2026-07-18: Feature-local planning for
+  `notification-helper-date-filters` in issue-resolution mode defined
+  source-independent half-open date semantics, pre-pagination filtering,
+  malformed timestamp handling, focused adapter tests, completion criteria,
+  and narrow/full verification. The supplied issue had no repository, number,
+  or URL, and no codex-agent references or prior review TODOs were provided.
 - 2026-07-03: TASK-001 issue-resolution design update for workflow
   `codex-design-and-implement-review-loop-session-382` documented the
   helper target, shared protocol, validation, bundle assembly, explicit

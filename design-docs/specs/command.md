@@ -187,6 +187,12 @@ reports an unavailable `UNKNOWN` diagnostic; TASK-005 does not create,
 install, sign, package, or launch `AppleGatewayNotifier.app`. Non-requestable
 domains continue to be reported by `status` with manual remediation text.
 
+Permission-domain discovery uses the same complete value list everywhere:
+`calendar|reminders|notes|notifications|clock-alarms`. Both top-level `--help`
+and the usage diagnostic produced when `permissions request` omits `--domain`
+must include that list. Regression tests cover both surfaces so a supported
+request domain cannot remain callable while disappearing from CLI guidance.
+
 ## config
 
 ```bash

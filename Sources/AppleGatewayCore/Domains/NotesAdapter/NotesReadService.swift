@@ -4,15 +4,18 @@ public struct NotesReadService: Sendable {
   private let provider: any NotesProviding
   private let limits: AppleGatewayConfig.Limits
   private let fileStore: FileStore
+  private let attachmentExportStore: NotesAttachmentExportStore
 
   public init(
     provider: any NotesProviding,
     limits: AppleGatewayConfig.Limits = .defaultValue,
-    fileStore: FileStore = FileStore(cacheRoot: AppleGatewayConfig.Storage.defaultValue.cacheDir)
+    fileStore: FileStore = FileStore(cacheRoot: AppleGatewayConfig.Storage.defaultValue.cacheDir),
+    attachmentExportStore: NotesAttachmentExportStore? = nil
   ) {
     self.provider = provider
     self.limits = limits
     self.fileStore = fileStore
+    self.attachmentExportStore = attachmentExportStore ?? NotesAttachmentExportStore(cacheRoot: fileStore.cacheRoot)
   }
 
   public func accounts() throws -> [NoteAccount] {
@@ -152,6 +155,15 @@ public struct NotesReadService: Sendable {
     guard attachment.downloadKey == nil, !attachment.id.isEmpty else {
       return attachment
     }
+    let filename = NotesFileStoreIdentifier.sanitizedFilename(attachment.name, fallback: "attachment.bin")
+    guard case .exported = try? attachmentExportStore.export(
+      provider: provider,
+      noteId: noteId,
+      attachmentId: attachment.id,
+      filename: filename
+    ) else {
+      return attachment
+    }
     var keyed = attachment
     keyed.downloadKey = try? fileStore.issueDownloadKey(
       FileStoreDownloadKeyPayload(
@@ -159,7 +171,7 @@ public struct NotesReadService: Sendable {
         sourceId: NotesFileStoreIdentifier.encode(noteId),
         sourceIds: ["attachmentId": NotesFileStoreIdentifier.encode(attachment.id)],
         kind: .attachment,
-        filename: NotesFileStoreIdentifier.sanitizedFilename(attachment.name, fallback: "attachment.bin")
+        filename: filename
       )
     )
     return keyed

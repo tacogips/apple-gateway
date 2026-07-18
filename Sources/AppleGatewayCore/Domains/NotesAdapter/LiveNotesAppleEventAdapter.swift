@@ -126,6 +126,36 @@ public struct LiveNotesAppleEventAdapter: NotesProviding, NotesWriting {
     }
   }
 
+  public func exportAttachment(
+    noteId: String,
+    attachmentId: String,
+    to destination: URL
+  ) throws -> NotesAttachmentExportResult {
+    let payload: NotesAttachmentExportPayload = try run(
+      template: .exportAttachment,
+      arguments: NotesAttachmentExportArguments(
+        noteId: noteId,
+        attachmentId: attachmentId,
+        destinationPath: destination.path
+      )
+    )
+    switch payload.status {
+    case "exported":
+      guard let path = payload.path else {
+        return .unavailable
+      }
+      return .exported(URL(fileURLWithPath: path))
+    case "noteMissing":
+      return .noteMissing
+    case "attachmentMissing":
+      return .attachmentMissing
+    case "unavailable":
+      return .unavailable
+    default:
+      throw AppleGatewayError(code: .unexpectedError, message: "Notes attachment export returned unknown status")
+    }
+  }
+
   public func createNote(_ request: NotesCreateRequest) throws -> String {
     let payload: NotesWritePayload = try run(
       template: .createNote,
@@ -209,6 +239,12 @@ private struct NotesBodyArguments: Encodable {
   var kind: NoteBodyKind
 }
 
+private struct NotesAttachmentExportArguments: Encodable {
+  var noteId: String
+  var attachmentId: String
+  var destinationPath: String
+}
+
 private struct NotesDeleteArguments: Encodable {
   var noteId: String
 }
@@ -228,6 +264,11 @@ private struct NotesBodyPayload: Decodable {
   var note: Note?
   var kind: NoteBodyKind
   var body: String
+}
+
+private struct NotesAttachmentExportPayload: Decodable {
+  var status: String
+  var path: String?
 }
 
 private struct NotesWritePayload: Decodable {

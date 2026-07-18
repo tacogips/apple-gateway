@@ -373,14 +373,160 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
 ]
 
 @Test func notesJXATemplatesMatchGoldens() {
-  #expect(NotesJXATemplate.allCases.count == noteTemplateGoldens.count)
-  for template in NotesJXATemplate.allCases {
+  let metadataTemplates: Set<NotesJXATemplate> = [
+    .fetchNoteMetadataBatch,
+    .probeNoteVisibility,
+    .fetchNoteBody,
+    .exportAttachment
+  ]
+  for template in NotesJXATemplate.allCases where !metadataTemplates.contains(template) {
     #expect(template.source == noteTemplateGoldens[template])
   }
+
+  let helperMarker = "\n\nfunction run(argv) {"
+  let helperPrefix = NotesJXATemplate.fetchNoteMetadataBatch.source.components(separatedBy: helperMarker)[0]
+  for template in [
+    NotesJXATemplate.fetchNoteMetadataBatch,
+    .probeNoteVisibility,
+    .fetchNoteBody,
+    .exportAttachment
+  ] {
+    #expect(template.source.hasPrefix(helperPrefix + helperMarker))
+  }
+  for template in [
+    NotesJXATemplate.fetchNoteMetadataBatch,
+    .probeNoteVisibility,
+    .fetchNoteBody
+  ] {
+    #expect(template.source.contains("isShared: notesSharedState(note)"))
+    #expect(template.source.contains("attachments: notesAttachmentMetadata(note)"))
+    #expect(!template.source.contains("isShared: false"))
+    #expect(!template.source.contains("attachments: []"))
+  }
+
+  let expectedExportRun = """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    for (const account of app.accounts()) {
+      for (const folder of account.folders()) {
+        for (const note of folder.notes()) {
+          if (String(note.id()) !== input.noteId) {
+            continue;
+          }
+          let attachments;
+          try {
+            attachments = note.attachments();
+          } catch (error) {
+            if (error && (error.number === -1743 || error.number === -1712)) {
+              throw error;
+            }
+            return JSON.stringify({ status: 'unavailable', path: null });
+          }
+          for (const attachment of attachments) {
+            const attachmentId = normalizedNotesValue(guardedNotesProperty(attachment, 'id'));
+            if (attachmentId !== input.attachmentId) {
+              continue;
+            }
+            try {
+              app.save(attachment, { in: Path(input.destinationPath) });
+              return JSON.stringify({ status: 'exported', path: input.destinationPath });
+            } catch (error) {
+              if (error && (error.number === -1743 || error.number === -1712)) {
+                throw error;
+              }
+              return JSON.stringify({ status: 'unavailable', path: null });
+            }
+          }
+          return JSON.stringify({ status: 'attachmentMissing', path: null });
+        }
+      }
+    }
+    return JSON.stringify({ status: 'noteMissing', path: null });
+  }
+  """
+  #expect(NotesJXATemplate.exportAttachment.source == helperPrefix + "\n\n" + expectedExportRun)
+}
+
+@Test func liveNotesAdapterDecodesAttachmentsAndKeepsExportArgumentsOutOfSource() throws {
+  let metadataResponse = """
+  {
+    "status": "found",
+    "note": {
+      "id": "note-1",
+      "accountId": "icloud",
+      "folderId": "inbox",
+      "name": "Shared",
+      "snippet": "",
+      "plaintext": null,
+      "bodyHtml": null,
+      "bodyFile": null,
+      "isPasswordProtected": false,
+      "isShared": true,
+      "creationDate": "2026-07-03T10:00:00Z",
+      "modificationDate": "2026-07-03T11:00:00Z",
+      "attachments": [
+        {
+          "id": "attachment-1",
+          "name": "Receipt.pdf",
+          "contentIdentifier": "cid-1",
+          "downloadKey": null
+        },
+        {
+          "id": "attachment-2",
+          "name": "Untitled Attachment",
+          "contentIdentifier": null,
+          "downloadKey": null
+        }
+      ]
+    }
+  }
+  """
+  let metadataFixture = try NotesOsascriptFixture(response: metadataResponse)
+  let metadataAdapter = LiveNotesAppleEventAdapter(
+    bridge: AppleEventBridge(osascriptPath: metadataFixture.executablePath, environment: metadataFixture.environment)
+  )
+
+  let lookup = try metadataAdapter.noteMetadata(noteId: "note-1")
+  guard case .found(let note) = lookup else {
+    Issue.record("Expected canned Notes metadata")
+    return
+  }
+  #expect(note.isShared)
+  #expect(note.attachments == [
+    NoteAttachment(id: "attachment-1", name: "Receipt.pdf", contentIdentifier: "cid-1"),
+    NoteAttachment(id: "attachment-2", name: "Untitled Attachment")
+  ])
+
+  let adversarialNoteId = #"note-\"; throw new Error('injected')"#
+  let adversarialAttachmentId = #"attachment-\\-\""#
+  let destination = try makeNotesTemporaryRoot().appendingPathComponent("quoted-\"-attachment.bin")
+  let exportObject: [String: Any] = ["status": "exported", "path": destination.path]
+  let exportData = try JSONSerialization.data(withJSONObject: exportObject)
+  let exportFixture = try NotesOsascriptFixture(response: try #require(String(data: exportData, encoding: .utf8)))
+  let exportAdapter = LiveNotesAppleEventAdapter(
+    bridge: AppleEventBridge(osascriptPath: exportFixture.executablePath, environment: exportFixture.environment)
+  )
+
+  let exportResult = try exportAdapter.exportAttachment(
+    noteId: adversarialNoteId,
+    attachmentId: adversarialAttachmentId,
+    to: destination
+  )
+  let captured = try exportFixture.capturedArguments()
+  let argumentsJSON = try #require(captured.last)
+
+  #expect(exportResult == .exported(destination))
+  #expect(captured[3] == NotesJXATemplate.exportAttachment.source)
+  #expect(!captured[3].contains(adversarialNoteId))
+  #expect(!captured[3].contains(adversarialAttachmentId))
+  #expect(!captured[3].contains(destination.path))
+  #expect(argumentsJSON.contains("injected"))
+  #expect(argumentsJSON.contains("destinationPath"))
 }
 
 @Test func notesReadServiceSearchesNamesAndBodiesWithoutReturningBodies() throws {
-  let provider = FakeNotesProvider()
+  let provider = NotesTestProvider()
   provider.notes = [
     note(id: "note-title", name: "Project Plan", modified: 20, plaintext: "body"),
     note(id: "note-body", name: "Weekly", modified: 30, bodyHtml: "<p>body</p>"),
@@ -388,7 +534,7 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
   ]
   provider.bodySearchIdsByQuery["plan"] = ["note-body"]
   provider.snippetsById = ["note-body": "body matched snippet", "note-title": "planning"]
-  let service = NotesReadService(provider: provider, limits: testLimits(batchSize: 3))
+  let service = NotesReadService(provider: provider, limits: notesTestLimits(batchSize: 3))
 
   let result = try service.notes(input: NoteSearchInput(query: "plan"))
 
@@ -402,7 +548,7 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
 }
 
 @Test func notesReadServiceAppliesDateFolderFiltersAndPaginates() throws {
-  let provider = FakeNotesProvider()
+  let provider = NotesTestProvider()
   provider.notes = [
     note(id: "outside-account", accountId: "other", folderId: "inbox", name: "Other", modified: 50),
     note(id: "too-old", folderId: "inbox", name: "Old", modified: 5),
@@ -411,7 +557,7 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
     note(id: "upper-bound", folderId: "inbox", name: "Boundary", modified: 35),
     note(id: "wrong-folder", folderId: "archive", name: "Archive", modified: 40)
   ]
-  let service = NotesReadService(provider: provider, limits: testLimits(defaultPageSize: 1, batchSize: 2))
+  let service = NotesReadService(provider: provider, limits: notesTestLimits(defaultPageSize: 1, batchSize: 2))
 
   let firstPage = try service.notes(input: NoteSearchInput(
     accountId: "icloud",
@@ -438,8 +584,8 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
 }
 
 @Test func notesReadServiceRejectsUnknownScopeBeforeEnumeration() throws {
-  let provider = FakeNotesProvider()
-  let service = NotesReadService(provider: provider, limits: testLimits())
+  let provider = NotesTestProvider()
+  let service = NotesReadService(provider: provider, limits: notesTestLimits())
 
   do {
     _ = try service.notes(input: NoteSearchInput(accountId: "missing"))
@@ -463,13 +609,13 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
 }
 
 @Test func notesReadServiceOmitsLockedNotesAndReportsStaleLockedIds() throws {
-  let provider = FakeNotesProvider()
+  let provider = NotesTestProvider()
   provider.notes = [
     note(id: "visible", name: "Visible", modified: 20),
     note(id: "locked", name: "Locked", modified: 30, isPasswordProtected: true)
   ]
   provider.lookupResults["locked"] = .locked
-  let service = NotesReadService(provider: provider, limits: testLimits())
+  let service = NotesReadService(provider: provider, limits: notesTestLimits())
 
   let result = try service.notes(input: NoteSearchInput())
   #expect(result.edges.map(\.node.id) == ["visible"])
@@ -486,20 +632,20 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
 
 @Test func notesReadServiceAppliesBodyInlineBoundary() throws {
   let secret = Data("notes-body-boundary-secret-32-byte".utf8)
-  let provider = FakeNotesProvider()
-  provider.bodyResults["x-coredata://under"] = [
-    .plaintext: bodyResult(noteId: "x-coredata://under", kind: .plaintext, body: "abc")
+  let provider = NotesTestProvider()
+  provider.notesBodyResults["x-coredata://under"] = [
+    .plaintext: notesBodyResult(noteId: "x-coredata://under", kind: .plaintext, body: "abc")
   ]
-  provider.bodyResults["x-coredata://equal"] = [
-    .plaintext: bodyResult(noteId: "x-coredata://equal", kind: .plaintext, body: "1234")
+  provider.notesBodyResults["x-coredata://equal"] = [
+    .plaintext: notesBodyResult(noteId: "x-coredata://equal", kind: .plaintext, body: "1234")
   ]
-  provider.bodyResults["x-coredata://over"] = [
-    .plaintext: bodyResult(noteId: "x-coredata://over", kind: .plaintext, body: "12345")
+  provider.notesBodyResults["x-coredata://over"] = [
+    .plaintext: notesBodyResult(noteId: "x-coredata://over", kind: .plaintext, body: "12345")
   ]
   let service = NotesReadService(
     provider: provider,
-    limits: testLimits(maxInlineBodyBytes: 4),
-    fileStore: FileStore(cacheRoot: try makeTemporaryRoot().path, secret: secret)
+    limits: notesTestLimits(maxInlineBodyBytes: 4),
+    fileStore: FileStore(cacheRoot: try makeNotesTemporaryRoot().path, secret: secret)
   )
 
   let under = try #require(try service.note(noteId: "x-coredata://under"))
@@ -522,14 +668,14 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
 
 @Test func notesReadServiceValidatesHTMLBodyFileKey() throws {
   let secret = Data("notes-html-body-secret-32-byte-key".utf8)
-  let provider = FakeNotesProvider()
-  provider.bodyResults["x-coredata://html"] = [
-    .html: bodyResult(noteId: "x-coredata://html", kind: .html, body: "<p>12345</p>")
+  let provider = NotesTestProvider()
+  provider.notesBodyResults["x-coredata://html"] = [
+    .html: notesBodyResult(noteId: "x-coredata://html", kind: .html, body: "<p>12345</p>")
   ]
   let service = NotesReadService(
     provider: provider,
-    limits: testLimits(maxInlineBodyBytes: 4),
-    fileStore: FileStore(cacheRoot: try makeTemporaryRoot().path, secret: secret)
+    limits: notesTestLimits(maxInlineBodyBytes: 4),
+    fileStore: FileStore(cacheRoot: try makeNotesTemporaryRoot().path, secret: secret)
   )
 
   let note = try #require(try service.note(noteId: "x-coredata://html", bodyKind: .html))
@@ -546,16 +692,16 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
 
 @Test func notesFileDownloadMaterializesBodyFiles() throws {
   let secret = Data("notes-file-download-secret-32-by".utf8)
-  let root = try makeTemporaryRoot()
-  let provider = FakeNotesProvider()
-  provider.bodyResults["x-coredata://plain"] = [
-    .plaintext: bodyResult(noteId: "x-coredata://plain", kind: .plaintext, body: "plain body")
+  let root = try makeNotesTemporaryRoot()
+  let provider = NotesTestProvider()
+  provider.notesBodyResults["x-coredata://plain"] = [
+    .plaintext: notesBodyResult(noteId: "x-coredata://plain", kind: .plaintext, body: "plain body")
   ]
-  provider.bodyResults["x-coredata://html"] = [
-    .html: bodyResult(noteId: "x-coredata://html", kind: .html, body: "<p>html body</p>")
+  provider.notesBodyResults["x-coredata://html"] = [
+    .html: notesBodyResult(noteId: "x-coredata://html", kind: .html, body: "<p>html body</p>")
   ]
   let store = FileStore(cacheRoot: root.appendingPathComponent("cache").path, secret: secret)
-  let service = NotesReadService(provider: provider, limits: testLimits(maxInlineBodyBytes: 4), fileStore: store)
+  let service = NotesReadService(provider: provider, limits: notesTestLimits(maxInlineBodyBytes: 4), fileStore: store)
   let plain = try #require(try service.note(noteId: "x-coredata://plain")?.bodyFile)
   let html = try #require(try service.note(noteId: "x-coredata://html", bodyKind: .html)?.bodyFile)
 
@@ -573,41 +719,7 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
   #expect(try String(contentsOfFile: #require(filesByKind["HTML"]), encoding: .utf8) == "<p>html body</p>")
 }
 
-@Test func notesReadServiceReturnsBestEffortAttachmentKeys() throws {
-  let secret = Data("notes-attachment-secret-32-byte-key".utf8)
-  let provider = FakeNotesProvider()
-  provider.bodyResults["x-coredata://attachments"] = [
-    .plaintext: bodyResult(
-      noteId: "x-coredata://attachments",
-      kind: .plaintext,
-      body: "body",
-      attachments: [
-        NoteAttachment(id: "attachment/1", name: "receipt.pdf", contentIdentifier: "cid-1"),
-        NoteAttachment(id: "", name: "unaddressable")
-      ]
-    )
-  ]
-  let service = NotesReadService(
-    provider: provider,
-    limits: testLimits(maxInlineBodyBytes: 100),
-    fileStore: FileStore(cacheRoot: try makeTemporaryRoot().path, secret: secret)
-  )
-
-  let note = try #require(try service.note(noteId: "x-coredata://attachments"))
-  let keyed = try #require(note.attachments.first)
-  let unkeyed = try #require(note.attachments.dropFirst().first)
-  let key = try #require(keyed.downloadKey)
-  let payload = try FileStoreDownloadKeyCodec(secret: secret).decode(key)
-
-  #expect(payload.domain == .notes)
-  #expect(payload.kind == .attachment)
-  #expect(payload.filename == "receipt.pdf")
-  #expect(try NotesFileStoreIdentifier.decode(payload.sourceId) == "x-coredata://attachments")
-  #expect(try NotesFileStoreIdentifier.decode(#require(payload.sourceIds["attachmentId"])) == "attachment/1")
-  #expect(unkeyed.downloadKey == nil)
-}
-
-private final class FakeNotesProvider: NotesProviding, @unchecked Sendable {
+final class NotesTestProvider: NotesProviding, @unchecked Sendable {
   var accountsValue: [NoteAccount] = [
     NoteAccount(id: "icloud", name: "iCloud", isDefault: true),
     NoteAccount(id: "other", name: "Other", isDefault: false)
@@ -620,12 +732,18 @@ private final class FakeNotesProvider: NotesProviding, @unchecked Sendable {
   var bodySearchIdsByQuery: [String: [String]] = [:]
   var snippetsById: [String: String] = [:]
   var lookupResults: [String: NoteLookupResult] = [:]
-  var bodyResults: [String: [NoteBodyKind: NoteBodyLookupResult]] = [:]
+  var notesBodyResults: [String: [NoteBodyKind: NoteBodyLookupResult]] = [:]
   var noteIDRequests: [(accountId: String?, folderId: String?)] = []
   var noteIDBatchSizes: [Int] = []
   var metadataBatchSizes: [Int] = []
   var bodySearchInputs: [NotesBodySearchInput] = []
   var snippetRequests: [(noteIds: [String], query: String?)] = []
+  var attachmentExportResults: [String: NotesAttachmentExportResult] = [:]
+  var attachmentExportData: [String: Data] = [:]
+  var attachmentPartialData: [String: Data] = [:]
+  var attachmentExportDestinations: [URL] = []
+  var attachmentExportError: Error?
+  var attachmentExportHandler: ((URL) throws -> NotesAttachmentExportResult)?
 
   func accounts() throws -> [NoteAccount] {
     accountsValue
@@ -667,7 +785,7 @@ private final class FakeNotesProvider: NotesProviding, @unchecked Sendable {
   }
 
   func noteBody(noteId: String, kind: NoteBodyKind) throws -> NoteBodyLookupResult {
-    if let result = bodyResults[noteId]?[kind] {
+    if let result = notesBodyResults[noteId]?[kind] {
       return result
     }
     if let result = lookupResults[noteId] {
@@ -684,6 +802,28 @@ private final class FakeNotesProvider: NotesProviding, @unchecked Sendable {
       return .found(NoteBodyFetchResult(note: note, kind: kind, body: ""))
     }
     return .missing
+  }
+
+  func exportAttachment(
+    noteId: String,
+    attachmentId: String,
+    to destination: URL
+  ) throws -> NotesAttachmentExportResult {
+    attachmentExportDestinations.append(destination)
+    if let attachmentExportError {
+      throw attachmentExportError
+    }
+    if let attachmentExportHandler {
+      return try attachmentExportHandler(destination)
+    }
+    if let partialData = attachmentPartialData[attachmentId] {
+      try partialData.write(to: destination)
+    }
+    if let data = attachmentExportData[attachmentId] {
+      try data.write(to: destination)
+      return .exported(destination)
+    }
+    return attachmentExportResults[attachmentId] ?? .unavailable
   }
 }
 
@@ -714,7 +854,7 @@ private func note(
   )
 }
 
-private func bodyResult(
+func notesBodyResult(
   noteId: String,
   kind: NoteBodyKind,
   body: String,
@@ -738,7 +878,7 @@ private func testDate(_ seconds: TimeInterval) -> Date {
   Date(timeIntervalSince1970: seconds)
 }
 
-private func testLimits(
+func notesTestLimits(
   defaultPageSize: Int = 20,
   maxPageSize: Int = 200,
   maxInlineBodyBytes: Int = 65_536,
@@ -753,10 +893,49 @@ private func testLimits(
   )
 }
 
-private func makeTemporaryRoot() throws -> URL {
+func makeNotesTemporaryRoot() throws -> URL {
   let root = FileManager.default.temporaryDirectory
     .appendingPathComponent("apple-gateway-notes-tests")
     .appendingPathComponent(UUID().uuidString)
   try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
   return root
+}
+
+private struct NotesOsascriptFixture {
+  let executablePath: String
+  let environment: [String: String]
+  private let capturePath: String
+
+  init(response: String) throws {
+    let root = try makeNotesTemporaryRoot()
+    let executable = root.appendingPathComponent("osascript-stub")
+    let capture = root.appendingPathComponent("argv.txt")
+    try Self.stubSource.write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+    executablePath = executable.path
+    capturePath = capture.path
+    environment = [
+      "APPLE_GATEWAY_NOTES_STUB_CAPTURE": capture.path,
+      "APPLE_GATEWAY_NOTES_STUB_RESPONSE": response,
+      "PATH": "/usr/bin:/bin"
+    ]
+  }
+
+  func capturedArguments() throws -> [String] {
+    try String(contentsOfFile: capturePath, encoding: .utf8)
+      .split(separator: "\n")
+      .compactMap { Data(base64Encoded: String($0)) }
+      .compactMap { String(data: $0, encoding: .utf8) }
+  }
+
+  private static let stubSource = """
+  #!/usr/bin/env bash
+  set -euo pipefail
+  : > "${APPLE_GATEWAY_NOTES_STUB_CAPTURE:?}"
+  for argument in "$@"; do
+    printf '%s' "$argument" | /usr/bin/base64 | /usr/bin/tr -d '\n' >> "${APPLE_GATEWAY_NOTES_STUB_CAPTURE:?}"
+    printf '\n' >> "${APPLE_GATEWAY_NOTES_STUB_CAPTURE:?}"
+  done
+  printf '%s\n' "${APPLE_GATEWAY_NOTES_STUB_RESPONSE:?}"
+  """
 }

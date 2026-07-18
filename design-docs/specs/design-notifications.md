@@ -132,6 +132,40 @@ Read-only parsing of the Notification Center store:
   details; the spec explicitly labels this surface "unsupported store,
   best effort".
 
+## Gateway Helper Date-Filter Parity
+
+Feature `notification-helper-date-filters` is an issue-resolution correction
+to the `GATEWAY_HELPER` listing path. Its issue reference is "Implement Notes
+attachments (list/export/isShared), GATEWAY_HELPER notification date filters,
+and clock-alarms CLI help in apple-gateway"; no repository, issue number, URL,
+or codex-agent reference was supplied.
+
+`NotificationSearchInput.deliveredAfter` and `deliveredBefore` have one
+source-independent contract:
+
+- `deliveredAfter` is inclusive: retain a notification when
+  `deliveredAt >= deliveredAfter`.
+- `deliveredBefore` is exclusive: retain a notification when
+  `deliveredAt < deliveredBefore`.
+- Equal bounds are valid and describe an empty half-open interval. A lower
+  bound later than the upper bound fails with `INVALID_ARGUMENT` and message
+  `notifications input deliveredAfter must not be after deliveredBefore`,
+  matching the `SYSTEM_DB` query service.
+- The helper's ISO-8601 `deliveredAt` value is parsed as an instant before
+  comparison. Parser support includes the helper's current internet-date-time
+  output and otherwise valid ISO-8601 values with fractional seconds.
+- When either date bound is active, a helper notification with a missing or
+  malformed `deliveredAt` value is excluded because its membership in the
+  requested interval cannot be established. Without date bounds, existing
+  best-effort listing behavior is unchanged.
+
+The `GATEWAY_HELPER` connection applies source validation, application-id and
+date filters to the full helper response before resolving `after`, applying
+`first`, or calculating connection metadata. `totalCount` is the filtered
+count, `hasNextPage` is relative to the filtered collection, and a cursor that
+is absent from that collection is invalid. The helper's returned order is
+preserved; this correction does not introduce a source-specific reorder.
+
 ## GraphQL Types
 
 ```graphql
@@ -211,6 +245,10 @@ dismissal.
 - Helper protocol: encode/decode round-trip tests shared between CLI and
   helper target; a stub helper executable drives CLI-side integration in
   smoke tests.
+- Gateway-helper connection tests cover inclusive `deliveredAfter`, exclusive
+  `deliveredBefore`, equal and reversed bounds, missing or malformed helper
+  timestamps under an active date filter, and filtering before cursor
+  pagination and connection metadata calculation.
 - usernoted decoding tested against fixture databases with synthetic
   keyed-archiver blobs (both pre- and post-Sequoia schema variants).
 - Manual live checklist: post with actions and reply, verify prompt,

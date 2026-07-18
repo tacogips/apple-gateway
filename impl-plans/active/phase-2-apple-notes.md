@@ -1,7 +1,7 @@
 # Phase 2: Apple Notes
 
-**Status**: Implementation complete; live Notes manual verification remains
-permission-gated
+**Status**: TASK-001 through TASK-006 implementation complete; live Notes
+manual verification remains permission-gated
 **Design Reference**: `design-docs/specs/design-apple-notes.md`
 
 ## Purpose
@@ -18,7 +18,9 @@ reuses.
       orchestration complete)
 - [x] `Domains/NotesAdapter/` with JXA script templates for accounts,
       folders, bulk note metadata, body fetch, search, create, update,
-      delete, move, attachment export
+      delete, and move
+- [x] Live Notes attachment metadata, capability-backed export, nullable-key
+      fallback, and best-effort shared-state derivation (TASK-006)
 - [x] Schema module: noteAccounts, noteFolders, notes, note; createNote,
       updateNoteBody, deleteNote, moveNote
 - [x] Body inlining rule (64 KiB) with `bodyFile` materialization via the
@@ -177,7 +179,175 @@ Implementation tasks:
 - [x] Verification passes with `task build`, `task test`, `task lint`, and
       `swift run apple-gateway --help`
 
+### TASK-006: Attachment Metadata, Export, and Shared State
+
+**Status**: Complete
+
+**Parallelizable**: No within the Notes adapter; depends on TASK-003 and uses
+the existing FileStore contract
+
+Replace the live adapter's three hardcoded `attachments: []` and
+`isShared: false` payload fields with guarded Notes JXA metadata mapping.
+Make attachment download keys conditional on a successful best-effort export,
+and make `NotesFileMaterializer` serve an exported file instead of
+unconditionally returning `FILE_OPERATION_FAILED`.
+
+Design details are recorded in
+`design-docs/specs/design-apple-notes.md#notes-attachment-metadata-export-and-shared-state-refinement`.
+This task is limited to the Notes feature. Notification-helper date filtering
+and permission-domain CLI help belong to separate feature fanout paths and
+must not be changed here.
+
+Implementation tasks:
+
+1. Add one shared static JXA helper fragment for attachment metadata and
+   shared-state mapping. Compose it into `fetchNoteMetadataBatch`,
+   `probeNoteVisibility`, and `fetchNoteBody`; preserve static templates and
+   JSON-only argv input.
+2. Map attachment `id`, name/file-name fallback, and nullable content
+   identifier. Reject null/undefined, JXA missing values, whitespace-only
+   values, and normalized sentinel strings. Skip only the malformed
+   attachment when its stable id is empty or unavailable; do not synthesize
+   ids or transfer binary contents in JSON.
+3. Derive `isShared` from a bridge-exposed boolean `shared` or `isShared`
+   property. Preserve the documented `false` fallback when neither property
+   is usable, without failing the enclosing note lookup.
+4. Add a static attachment-export JXA template and a typed provider export
+   result with distinct `exported(URL)`, `noteMissing`,
+   `attachmentMissing`, and `unavailable` outcomes. Extend `NotesProviding`,
+   `LiveNotesAppleEventAdapter`, `UnavailableNotesProvider`, Notes test
+   doubles, and smoke fakes together.
+5. Add a contained prepared-export location under the existing
+   `snapshots/notes/attachments` subtree of the normalized FileStore cache so
+   `file prune` already owns cleanup. Build its path only from path-safe
+   encoded note/attachment ids and a sanitized filename. Canonicalize the
+   root, reject symlink components before export, then revalidate the result
+   as a contained non-symlink regular readable file; clean partial files on
+   unsuccessful exports.
+6. Change `NotesReadService.attachmentWithBestEffortKey` to issue an
+   `ATTACHMENT` key only after a prepared export produces a regular readable
+   file. During this preparation only, catch and clean up every non-success
+   outcome and export-only error, returning the original attachment with
+   `downloadKey == nil` without failing the note body response.
+7. Change `NotesFileMaterializer.sourceFile` to decode and validate note and
+   attachment ids, serve the prepared file when available, and otherwise
+   retry provider export into its contained scratch directory. Map missing
+   notes to `NOTE_NOT_FOUND`, `attachmentMissing`/`unavailable` stale keys to
+   `INVALID_DOWNLOAD_KEY`, preserve Apple Event permission and timeout
+   classifications, and reserve `FILE_OPERATION_FAILED` for actual filesystem
+   I/O failure.
+8. Add or extend Notes tests for canned JXA attachment decoding, shared-state
+   true/false/fallback cases, successful export/download, nil-key fallback,
+   empty and sentinel ids, filename sanitization, canonical containment,
+   symlink rejection, partial-file cleanup, missing-note versus
+   missing-attachment mapping, explicit-download permission/timeout
+   propagation, filesystem-only `FILE_OPERATION_FAILED`, and
+   provider/test-double conformance.
+9. Add a generated-source golden for the export template plus adversarial
+   tests proving `noteId`, `attachmentId`, and `destinationPath` travel only
+   through encoded JSON argv and are never interpolated into script source.
+10. Introduce one prepared-export store/root dependency and inject it into
+    both `NotesReadService` and `NotesFileMaterializer`. Update
+    `NotesServiceFactory`, `NotesServices`, and the live CLI/FileStore
+    materializer composition so key preparation and download use the same
+    configured storage cache root; preserve explicit test injection.
+11. Update this task's checkboxes and Progress Log only after implementation
+   and verification complete. Record any permission-gated live Notes result
+   separately; automated completion does not require user Notes data.
+
+**Dependencies and deliverables**:
+
+- Existing `NotesProviding`, `LiveNotesAppleEventAdapter`,
+  `NotesReadService`, `NotesFileMaterializer`, `NotesServiceFactory`,
+  `NotesServices`, live file-materializer composition, FileStore key codec,
+  and path-safety helpers remain the owning boundaries.
+- Deliverables are the JXA metadata/export templates, provider export
+  contract, capability-backed key fallback, working materializer path,
+  updated fakes, focused tests, and this design/plan documentation.
+- No GraphQL schema change is required: `NoteAttachment.downloadKey` and
+  `contentIdentifier` are already nullable, and `Note.isShared` is already
+  non-null.
+
+**Completion Criteria**:
+
+- [x] Live-template payload decoding can produce non-empty
+      `[NoteAttachment]` with id, display name, and nullable content id
+- [x] All three live note payload templates use the same attachment and
+      shared-state mapping rules; no hardcoded empty/false placeholders remain
+- [x] Shared state is true when exposed as true and false when explicitly
+      false or unavailable, with fallback semantics preserved in the spec
+- [x] Exportable attachments receive a valid `ATTACHMENT` key and download to
+      the exported bytes through `NotesFileMaterializer`
+- [x] Unsupported or unavailable export returns `downloadKey: null`; the note
+      lookup still succeeds and no always-failing key is issued
+- [x] Empty/malformed attachment ids, unsafe filenames, partial files, and
+      canonical/symlink-safe cache containment have focused automated coverage
+- [x] Provider outcomes distinguish missing note, missing attachment, and
+      unavailable export; explicit materialization maps each outcome and
+      preserves permission/timeout errors as designed
+- [x] Export-template golden and adversarial tests prove all note ids,
+      attachment ids, and destination paths remain JSON argv data
+- [x] Live service/runtime composition shares one configured prepared-export
+      root between key preparation and attachment materialization
+- [x] `FILE_OPERATION_FAILED` coverage is limited to genuine filesystem I/O
+      failures, not unsupported export or every attachment key
+- [x] `UnavailableNotesProvider` and every Notes fake/smoke provider compile
+      against the revised provider contract
+- [x] `task build`, focused Notes tests, full `task test`, `task lint`, and
+      `git diff --check` pass before any commit or push
+
+**Verification commands**:
+
+```bash
+task build
+swift test --filter Notes
+task test
+task lint
+git diff --check
+```
+
+**Progress tracking**:
+
+- [x] JXA metadata and shared-state mapping implemented
+- [x] Provider export contract and all conformers updated
+- [x] Capability-backed key issuance and materializer export implemented
+- [x] Shared prepared-export root wired through live service composition
+- [x] Focused Notes tests passing
+- [x] Full build, test, lint, and diff verification passing
+- [x] Progress Log updated with results and any residual manual-only risk
+- [x] SELF-REVIEW-001 resolved by splitting attachment/export tests and
+      smoke test doubles into cohesive Swift files below 1000 lines
+- [x] SELF-REVIEW-002 resolved with deterministic behavioral coverage for
+      normalization, shared false/fallback behavior, filename safety,
+      canonical/symlink rejection, and timeout propagation
+
 ## Progress Log
+
+- 2026-07-18: TASK-006 self-review revisions completed for
+  `SELF-REVIEW-001` and `SELF-REVIEW-002`. Split attachment/export coverage
+  into `Tests/AppleGatewayCoreTests/NotesAttachmentTests.swift`; split smoke
+  entrypoint and test doubles into
+  `Tests/AppleGatewaySmokeTests/AppleGatewaySmokeTests.swift` and
+  `Tests/AppleGatewaySmokeTests/SmokeTestDoubles.swift`. All modified
+  non-generated Swift files are now below 1000 lines. Added executable JXA
+  behavior tests for empty, whitespace, and sentinel attachment values plus
+  explicit-false and unavailable shared-state fallback; added unsafe filename,
+  canonical escape, post-export symlink, and explicit timeout propagation
+  tests. Verification passed with the Xcode SDK/toolchain pinned over the
+  ambient incompatible Nix SDK: `swift test --filter Notes` (29 tests),
+  `task build`, `task test` (185 tests plus AppleGatewaySmokeTests), and
+  `task lint` (0 violations). `git diff --check` is recorded after this plan
+  update.
+
+- 2026-07-18: TASK-006 implemented. Added guarded shared JXA metadata helpers,
+  typed attachment export outcomes, canonical prepared-export containment,
+  capability-backed attachment keys, explicit materializer retry/error
+  classification, configured-root service/materializer composition, and
+  focused decoding/export/fallback/containment/injection tests. Verification
+  passed: `task build`, `swift test --filter Notes` (25 tests), `task test`
+  (181 tests plus AppleGatewaySmokeTests), `task lint` (0 violations), and
+  `git diff --check`. Live Notes.app export remains optional manual
+  verification because TCC and Notes scripting support vary by macOS release.
 
 - 2026-07-02: Plan created from approved design docs.
 - 2026-07-03: TASK-001 design boundary refined for static JXA templates,

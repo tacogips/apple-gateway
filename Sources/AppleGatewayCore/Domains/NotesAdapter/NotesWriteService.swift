@@ -9,11 +9,17 @@ public struct NotesWriteService: Sendable {
     provider: any NotesProviding,
     writer: any NotesWriting,
     limits: AppleGatewayConfig.Limits = .defaultValue,
-    fileStore: FileStore = FileStore(cacheRoot: AppleGatewayConfig.Storage.defaultValue.cacheDir)
+    fileStore: FileStore = FileStore(cacheRoot: AppleGatewayConfig.Storage.defaultValue.cacheDir),
+    attachmentExportStore: NotesAttachmentExportStore? = nil
   ) {
     self.provider = provider
     self.writer = writer
-    readService = NotesReadService(provider: provider, limits: limits, fileStore: fileStore)
+    readService = NotesReadService(
+      provider: provider,
+      limits: limits,
+      fileStore: fileStore,
+      attachmentExportStore: attachmentExportStore
+    )
   }
 
   public func createNote(_ input: CreateNoteInput) throws -> Note {

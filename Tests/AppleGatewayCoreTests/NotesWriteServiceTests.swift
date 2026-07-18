@@ -214,6 +214,14 @@ private final class FakeNotesWriteBackend: NotesProviding, NotesWriting, @unchec
     return .found(NoteBodyFetchResult(note: note, kind: kind, body: body))
   }
 
+  func exportAttachment(
+    noteId: String,
+    attachmentId: String,
+    to destination: URL
+  ) throws -> NotesAttachmentExportResult {
+    .unavailable
+  }
+
   func createNote(_ request: NotesCreateRequest) throws -> String {
     createRequests.append(request)
     let noteId = "created-\(createRequests.count)"

@@ -9,7 +9,20 @@ import Testing
 
 @Test func commandReportsUsage() throws {
   let command = AppleGatewayCommand(arguments: ["--help"])
-  #expect(try command.run().contains("Usage: apple-gateway"))
+  let output = try command.run()
+  #expect(output.contains("Usage: apple-gateway"))
+  #expect(output.contains("calendar|reminders|notes|notifications|clock-alarms"))
+}
+
+@Test func commandPermissionsRequestUsageIncludesClockAlarms() throws {
+  let command = AppleGatewayCommand(arguments: ["permissions", "request"])
+
+  do {
+    _ = try command.run()
+    Issue.record("Expected missing permission domain usage")
+  } catch AppleGatewayCommand.Error.invalidUsage(let usage) {
+    #expect(usage.contains("calendar|reminders|notes|notifications|clock-alarms"))
+  }
 }
 
 @Test func commandRejectsUnknownFlags() throws {

@@ -1,11 +1,28 @@
 import Foundation
 
 public enum NotesServiceFactory {
-  public static func liveServices() -> NotesServices {
+  public static func liveServices(config: AppleGatewayConfig = .defaultValue) -> NotesServices {
     let adapter = LiveNotesAppleEventAdapter()
+    let fileStore = FileStore(cacheRoot: config.storage.cacheDir)
+    let attachmentExportStore = NotesAttachmentExportStore(cacheRoot: config.storage.cacheDir)
     return NotesServices(
-      readService: NotesReadService(provider: adapter),
-      writeService: NotesWriteService(provider: adapter, writer: adapter)
+      readService: NotesReadService(
+        provider: adapter,
+        limits: config.limits,
+        fileStore: fileStore,
+        attachmentExportStore: attachmentExportStore
+      ),
+      writeService: NotesWriteService(
+        provider: adapter,
+        writer: adapter,
+        limits: config.limits,
+        fileStore: fileStore,
+        attachmentExportStore: attachmentExportStore
+      ),
+      fileMaterializer: NotesFileMaterializer(
+        provider: adapter,
+        attachmentExportStore: attachmentExportStore
+      )
     )
   }
 
@@ -30,10 +47,16 @@ public enum NotesServiceFactory {
 public struct NotesServices: Sendable {
   public var readService: NotesReadService
   public var writeService: NotesWriteService
+  public var fileMaterializer: NotesFileMaterializer
 
-  public init(readService: NotesReadService, writeService: NotesWriteService) {
+  public init(
+    readService: NotesReadService,
+    writeService: NotesWriteService,
+    fileMaterializer: NotesFileMaterializer
+  ) {
     self.readService = readService
     self.writeService = writeService
+    self.fileMaterializer = fileMaterializer
   }
 }
 
@@ -69,6 +92,14 @@ public struct UnavailableNotesProvider: NotesProviding, NotesWriting {
   }
 
   public func noteBody(noteId: String, kind: NoteBodyKind) throws -> NoteBodyLookupResult {
+    throw unavailable("Notes provider is unavailable")
+  }
+
+  public func exportAttachment(
+    noteId: String,
+    attachmentId: String,
+    to destination: URL
+  ) throws -> NotesAttachmentExportResult {
     throw unavailable("Notes provider is unavailable")
   }
 

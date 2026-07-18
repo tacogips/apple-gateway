@@ -161,6 +161,71 @@ import Testing
   }
 }
 
+@Test func notificationAdapterGatewayConnectionAppliesDateFiltersBeforePagination() throws {
+  let root = try NotificationAdapterTemporaryDirectory()
+  let helper = try root.makeHelperApp(name: "AppleGatewayNotifier.app", mode: "dispatch")
+  let delivered = [
+    NotificationHelperDeliveredNotification(id: "below", deliveredAt: "2026-07-03T09:59:59Z"),
+    NotificationHelperDeliveredNotification(id: "at-lower", deliveredAt: "2026-07-03T10:00:00Z"),
+    NotificationHelperDeliveredNotification(id: "inside", deliveredAt: "2026-07-03T10:30:00.500Z"),
+    NotificationHelperDeliveredNotification(id: "at-upper", deliveredAt: "2026-07-03T11:00:00Z"),
+    NotificationHelperDeliveredNotification(id: "above", deliveredAt: "2026-07-03T11:00:01Z"),
+    NotificationHelperDeliveredNotification(id: "missing"),
+    NotificationHelperDeliveredNotification(id: "malformed", deliveredAt: "not-a-date")
+  ]
+  let adapter = LiveNotificationsAdapter(
+    config: root.config(helperAppPath: helper.app.path),
+    resolver: root.resolver(),
+    helperExecutor: StaticNotificationHelperExecutor(notifications: delivered),
+    fallbackPoster: CountingNotificationFallback()
+  )
+  let lower = try #require(ISO8601DateFormatter().date(from: "2026-07-03T10:00:00Z"))
+  let upper = try #require(ISO8601DateFormatter().date(from: "2026-07-03T11:00:00Z"))
+
+  let firstPage = try adapter.notifications(input: NotificationSearchInput(
+    source: .gatewayHelper,
+    deliveredAfter: lower,
+    deliveredBefore: upper,
+    first: 1
+  ))
+  let secondPage = try adapter.notifications(input: NotificationSearchInput(
+    source: .gatewayHelper,
+    deliveredAfter: lower,
+    deliveredBefore: upper,
+    first: 1,
+    after: firstPage.pageInfo.endCursor
+  ))
+  let equalBounds = try adapter.notifications(input: NotificationSearchInput(
+    source: .gatewayHelper,
+    deliveredAfter: lower,
+    deliveredBefore: lower
+  ))
+  let unfiltered = try adapter.notifications(input: NotificationSearchInput(source: .gatewayHelper))
+
+  #expect(firstPage.edges.map(\.node.id) == ["at-lower"])
+  #expect(firstPage.totalCount == 2)
+  #expect(firstPage.pageInfo.hasNextPage)
+  #expect(firstPage.pageInfo.endCursor == "gateway:at-lower")
+  #expect(secondPage.edges.map(\.node.id) == ["inside"])
+  #expect(secondPage.totalCount == 2)
+  #expect(!secondPage.pageInfo.hasNextPage)
+  #expect(equalBounds.edges.isEmpty)
+  #expect(equalBounds.totalCount == 0)
+  #expect(unfiltered.totalCount == delivered.count)
+
+  do {
+    _ = try adapter.notifications(input: NotificationSearchInput(
+      source: .gatewayHelper,
+      deliveredAfter: upper,
+      deliveredBefore: lower
+    ))
+    Issue.record("Expected reversed notification date bounds to fail")
+  } catch let error as AppleGatewayError {
+    #expect(error.code == .invalidArgument)
+    #expect(error.message == "notifications input deliveredAfter must not be after deliveredBefore")
+  }
+}
+
 private struct NotificationAdapterTemporaryDirectory {
   let root: URL
   let home: URL
@@ -270,5 +335,14 @@ private final class CountingNotificationFallback: NotificationFallbackPosting, @
 private struct FailingNotificationHelperExecutor: NotificationHelperExecuting {
   func execute(_ request: NotificationHelperRequest, bundle: NotificationHelperBundle) throws -> NotificationHelperResponse {
     throw AppleGatewayError(code: .notifierHelperMissing, message: "missing test helper")
+  }
+}
+
+private struct StaticNotificationHelperExecutor: NotificationHelperExecuting {
+  var notifications: [NotificationHelperDeliveredNotification]
+
+  func execute(_ request: NotificationHelperRequest, bundle: NotificationHelperBundle) throws -> NotificationHelperResponse {
+    #expect(request.operation == .list)
+    return .success(NotificationHelperResult(notifications: notifications))
   }
 }

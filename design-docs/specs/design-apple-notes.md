@@ -237,6 +237,106 @@ contents from those keys; attachment listing with both keyed and unkeyed
 attachments; and regression checks that TASK-001 static-template JSON argv
 behavior and TASK-002 read-side list/search body exclusion remain intact.
 
+### Notes Attachment Metadata, Export, and Shared-State Refinement
+
+The live adapter must not synthesize empty attachment collections or a
+permanent unshared state. The metadata payloads produced by
+`fetchNoteMetadataBatch`, `probeNoteVisibility`, and `fetchNoteBody` use the
+same guarded JXA mapping rules so list, explicit metadata lookup, and body
+lookup cannot disagree about attachment metadata or sharing state.
+
+For every visible note, the mapper enumerates `note.attachments()` without
+reading attachment contents. Each addressable attachment is returned as:
+
+- `id`: the stable Notes attachment id, converted to `String`;
+- `name`: `name` when exposed, otherwise `fileName`, otherwise the literal
+  `Untitled Attachment`; and
+- `contentIdentifier`: the scripting bridge's content identifier when it is
+  a non-empty value, otherwise `null`.
+
+Before converting a property to `String`, the mapper rejects JavaScript
+`null`/`undefined`, JXA missing-value objects, whitespace-only strings, and
+the sentinel strings `missing value`, `null`, and `undefined` after trimming
+and case folding. An attachment whose object cannot be enumerated or has no
+stable non-empty id is skipped independently; one malformed attachment must
+not erase other attachment metadata or fail the note lookup. No synthetic
+attachment id is allowed. Attachment-property reads are individually guarded
+because Notes scripting dictionaries vary across macOS releases.
+
+`isShared` is derived best-effort from a boolean sharing property exposed by
+the note object. The mapper probes the supported `shared`/`isShared` spelling,
+accepts only an actual boolean result, and catches an unavailable-property
+error without failing the note lookup. When neither spelling exposes a
+boolean, `isShared` is `false`. This is an observation fallback, not proof
+that the underlying note is private; callers cannot distinguish an unshared
+note from a Notes version that does not expose sharing state.
+
+Attachment export uses a separate static JXA template. Swift passes `noteId`,
+`attachmentId`, and an already-contained destination path through the JSON
+argument channel. The template resolves the exact note and attachment and
+returns a typed result: exported file, missing note/attachment, or export
+unavailable. Paths and identifiers are never interpolated into JXA source.
+The provider boundary is extended with a best-effort attachment-export
+operation returning `exported(URL)`, `noteMissing`, `attachmentMissing`, or
+`unavailable`; all live, unavailable, fake, and smoke providers implement the
+new requirement. A shared Swift template fragment supplies the metadata
+helpers to all three static sources so the guard and fallback logic has one
+implementation.
+
+Download keys are capability-backed, not optimistic. While constructing a
+single-note response, `NotesReadService` attempts a prepared export beneath
+the existing `snapshots/notes/attachments` subtree of the normalized,
+configured FileStore cache. This keeps prepared files inside the existing
+`file prune` lifecycle. The directory layout uses the reversible path-safe
+encodings of the note and attachment ids, and the final filename is sanitized
+before any filesystem or JXA call.
+
+Swift creates and canonicalizes the prepared-export root before invoking JXA.
+Every existing path component from that root through the destination parent
+must be a real directory rather than a symbolic link, and the standardized
+destination must remain contained by the canonical root. After JXA returns,
+Swift resolves the result again, rejects a symlink at any component or at the
+file itself, and accepts only a contained, regular, readable file. Failed
+postconditions remove the partial destination and count as export unavailable
+during preparation.
+
+1. A successful prepared export that produces a regular readable file allows
+   `attachmentWithBestEffortKey` to issue the existing `domain: notes`,
+   `kind: ATTACHMENT` key.
+2. Key preparation is subordinate to an already-successful note body lookup.
+   `noteMissing`, `attachmentMissing`, `unavailable`, a missing exported file,
+   and any export-only Apple Event or filesystem error are caught at this
+   stage, cleaned up, and downgraded to `downloadKey: null`; they do not fail
+   the note body response.
+3. `NotesFileMaterializer` decodes and validates both ids. It serves the
+   prepared file when present; otherwise it retries the same provider export
+   into its contained scratch directory and returns the resulting file.
+4. Explicit materialization is not a best-effort response decoration, so its
+   failures are not downgraded. `noteMissing` maps to `NOTE_NOT_FOUND`;
+   `attachmentMissing` or `unavailable` for a validly decoded but stale key
+   maps to `INVALID_DOWNLOAD_KEY`; Apple Event permission and timeout errors
+   retain their existing classifications. `FILE_OPERATION_FAILED` is
+   reserved for genuine filesystem I/O failures during the explicit request,
+   rather than being the deterministic result of every attachment key.
+5. Partial export files are removed after either preparation or explicit
+   materialization failure.
+
+Prepared files are cache artifacts, not durable references. A valid key may
+therefore require a fresh export after cache pruning. Notes mutation is never
+used, attachment content is never included in a JXA JSON payload, and an
+attachment export failure remains isolated from body retrieval.
+
+Automated coverage uses canned JXA JSON and fake export providers. It must
+cover non-empty attachment decoding, nullable content identifiers, filename
+fallbacks, shared true/false/fallback mapping, successful prepared export and
+download, `downloadKey: null` for unavailable export, malformed/empty ids,
+sentinel normalization, canonical containment and symlink rejection, cleanup
+of partial files, distinct missing-note/missing-attachment outcomes, explicit
+download error classification, and export-template JSON-argv injection
+resistance. A live Notes.app check with a scratch note and attachment is
+optional manual verification because TCC, Notes versions, and user data are
+not deterministic test dependencies.
+
 ### TASK-004 Write-Side Contract
 
 TASK-004 adds only Notes mutations at the domain/provider boundary:

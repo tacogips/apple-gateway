@@ -9,6 +9,7 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
   case fetchSearchSnippetsBatch
   case probeNoteVisibility
   case fetchNoteBody
+  case exportAttachment
   case createNote
   case replaceNoteBody
   case deleteNote
@@ -32,6 +33,8 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
       return Self.probeNoteVisibilitySource
     case .fetchNoteBody:
       return Self.fetchNoteBodySource
+    case .exportAttachment:
+      return Self.exportAttachmentSource
     case .createNote:
       return Self.createNoteSource
     case .replaceNoteBody:
@@ -120,7 +123,74 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
   }
   """
 
-  private static let fetchNoteMetadataBatchSource = """
+  private static let noteMetadataHelpersSource = """
+  function normalizedNotesValue(value) {
+    try {
+      if (value === null || value === undefined) {
+        return null;
+      }
+      const text = String(value).trim();
+      const sentinel = text.toLowerCase();
+      if (!text || sentinel === 'missing value' || sentinel === 'null' || sentinel === 'undefined') {
+        return null;
+      }
+      return text;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function guardedNotesProperty(object, propertyName) {
+    try {
+      const property = object[propertyName];
+      if (property === null || property === undefined) {
+        return null;
+      }
+      return typeof property === 'function' ? property.call(object) : property;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function notesAttachmentMetadata(note) {
+    let attachments;
+    try {
+      attachments = note.attachments();
+    } catch (error) {
+      return [];
+    }
+    const output = [];
+    attachments.forEach(attachment => {
+      try {
+        const id = normalizedNotesValue(guardedNotesProperty(attachment, 'id'));
+        if (!id) {
+          return;
+        }
+        const name = normalizedNotesValue(guardedNotesProperty(attachment, 'name'))
+          || normalizedNotesValue(guardedNotesProperty(attachment, 'fileName'))
+          || 'Untitled Attachment';
+        const contentIdentifier = normalizedNotesValue(
+          guardedNotesProperty(attachment, 'contentIdentifier')
+        );
+        output.push({ id: id, name: name, contentIdentifier: contentIdentifier, downloadKey: null });
+      } catch (error) {
+        // A malformed attachment must not hide other attachment metadata.
+      }
+    });
+    return output;
+  }
+
+  function notesSharedState(note) {
+    const shared = guardedNotesProperty(note, 'shared');
+    if (typeof shared === 'boolean') {
+      return shared;
+    }
+    const isShared = guardedNotesProperty(note, 'isShared');
+    return typeof isShared === 'boolean' ? isShared : false;
+  }
+  """
+
+  private static let fetchNoteMetadataBatchSource = noteMetadataHelpersSource + "\n\n" + """
   function run(argv) {
     const input = JSON.parse(argv[0]);
     const wanted = {};
@@ -149,10 +219,10 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
             bodyHtml: null,
             bodyFile: null,
             isPasswordProtected: false,
-            isShared: false,
+            isShared: notesSharedState(note),
             creationDate: note.creationDate().toISOString(),
             modificationDate: note.modificationDate().toISOString(),
-            attachments: []
+            attachments: notesAttachmentMetadata(note)
           });
         });
       });
@@ -229,7 +299,7 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
   }
   """
 
-  private static let probeNoteVisibilitySource = """
+  private static let probeNoteVisibilitySource = noteMetadataHelpersSource + "\n\n" + """
   function run(argv) {
     const input = JSON.parse(argv[0]);
     const app = Application('Notes');
@@ -258,10 +328,10 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
               bodyHtml: null,
               bodyFile: null,
               isPasswordProtected: false,
-              isShared: false,
+              isShared: notesSharedState(note),
               creationDate: note.creationDate().toISOString(),
               modificationDate: note.modificationDate().toISOString(),
-              attachments: []
+              attachments: notesAttachmentMetadata(note)
             }
           });
         }
@@ -271,7 +341,7 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
   }
   """
 
-  private static let fetchNoteBodySource = """
+  private static let fetchNoteBodySource = noteMetadataHelpersSource + "\n\n" + """
   function run(argv) {
     const input = JSON.parse(argv[0]);
     const app = Application('Notes');
@@ -303,16 +373,58 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
               bodyHtml: null,
               bodyFile: null,
               isPasswordProtected: false,
-              isShared: false,
+              isShared: notesSharedState(note),
               creationDate: note.creationDate().toISOString(),
               modificationDate: note.modificationDate().toISOString(),
-              attachments: []
+              attachments: notesAttachmentMetadata(note)
             }
           });
         }
       }
     }
     return JSON.stringify({ status: 'missing', note: null, kind: input.kind, body: '' });
+  }
+  """
+
+  private static let exportAttachmentSource = noteMetadataHelpersSource + "\n\n" + """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    for (const account of app.accounts()) {
+      for (const folder of account.folders()) {
+        for (const note of folder.notes()) {
+          if (String(note.id()) !== input.noteId) {
+            continue;
+          }
+          let attachments;
+          try {
+            attachments = note.attachments();
+          } catch (error) {
+            if (error && (error.number === -1743 || error.number === -1712)) {
+              throw error;
+            }
+            return JSON.stringify({ status: 'unavailable', path: null });
+          }
+          for (const attachment of attachments) {
+            const attachmentId = normalizedNotesValue(guardedNotesProperty(attachment, 'id'));
+            if (attachmentId !== input.attachmentId) {
+              continue;
+            }
+            try {
+              app.save(attachment, { in: Path(input.destinationPath) });
+              return JSON.stringify({ status: 'exported', path: input.destinationPath });
+            } catch (error) {
+              if (error && (error.number === -1743 || error.number === -1712)) {
+                throw error;
+              }
+              return JSON.stringify({ status: 'unavailable', path: null });
+            }
+          }
+          return JSON.stringify({ status: 'attachmentMissing', path: null });
+        }
+      }
+    }
+    return JSON.stringify({ status: 'noteMissing', path: null });
   }
   """
 

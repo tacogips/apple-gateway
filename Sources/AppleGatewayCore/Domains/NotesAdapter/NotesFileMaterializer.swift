@@ -3,14 +3,19 @@ import Foundation
 public struct NotesFileMaterializer: FileStoreMaterializing {
   private let provider: any NotesProviding
   private let scratchDirectory: URL
+  private let attachmentExportStore: NotesAttachmentExportStore
 
   public init(
     provider: any NotesProviding,
     scratchDirectory: URL = FileManager.default.temporaryDirectory
-      .appendingPathComponent("apple-gateway-notes-materializer", isDirectory: true)
+      .appendingPathComponent("apple-gateway-notes-materializer", isDirectory: true),
+    attachmentExportStore: NotesAttachmentExportStore = NotesAttachmentExportStore(
+      cacheRoot: AppleGatewayConfig.Storage.defaultValue.cacheDir
+    )
   ) {
     self.provider = provider
     self.scratchDirectory = scratchDirectory
+    self.attachmentExportStore = attachmentExportStore
   }
 
   public func sourceFile(for payload: FileStoreDownloadKeyPayload) throws -> URL {
@@ -25,16 +30,55 @@ public struct NotesFileMaterializer: FileStoreMaterializing {
     case .plaintext, .html:
       return try materializeBody(payload)
     case .attachment:
-      throw AppleGatewayError(
-        code: .fileOperationFailed,
-        message: "Notes attachment export is unavailable",
-        details: ["sourceId": payload.sourceId]
-      )
+      return try materializeAttachment(payload)
     case .bodyText, .bodyHTML, .rawSource:
       throw AppleGatewayError(
         code: .fileOperationFailed,
         message: "Unsupported Notes file kind",
         details: ["kind": payload.kind.rawValue]
+      )
+    }
+  }
+
+  private func materializeAttachment(_ payload: FileStoreDownloadKeyPayload) throws -> URL {
+    let noteId = try NotesFileStoreIdentifier.decode(payload.sourceId)
+    guard let encodedAttachmentId = payload.sourceIds["attachmentId"] else {
+      throw AppleGatewayError(
+        code: .invalidDownloadKey,
+        message: "Notes attachment download key is missing attachmentId"
+      )
+    }
+    let attachmentId = try NotesFileStoreIdentifier.decode(encodedAttachmentId)
+    let filename = NotesFileStoreIdentifier.sanitizedFilename(
+      payload.filename ?? "attachment.bin",
+      fallback: "attachment.bin"
+    )
+    if let prepared = try attachmentExportStore.preparedFile(
+      noteId: noteId,
+      attachmentId: attachmentId,
+      filename: filename
+    ) {
+      return prepared
+    }
+    switch try attachmentExportStore.export(
+      provider: provider,
+      noteId: noteId,
+      attachmentId: attachmentId,
+      filename: filename
+    ) {
+    case .exported(let file):
+      return file
+    case .noteMissing:
+      throw AppleGatewayError(code: .noteNotFound, message: "Note not found")
+    case .attachmentMissing:
+      throw AppleGatewayError(
+        code: .invalidDownloadKey,
+        message: "Notes attachment no longer exists"
+      )
+    case .unavailable:
+      throw AppleGatewayError(
+        code: .invalidDownloadKey,
+        message: "Notes attachment export is unavailable"
       )
     }
   }

@@ -94,3 +94,31 @@ public struct UnavailableFileStoreMaterializer: FileStoreMaterializing {
     )
   }
 }
+
+public struct DomainFileStoreMaterializer: FileStoreMaterializing {
+  private let mail: any FileStoreMaterializing
+  private let notes: any FileStoreMaterializing
+
+  public init(
+    mail: any FileStoreMaterializing = MailFileMaterializer(),
+    notes: any FileStoreMaterializing
+  ) {
+    self.mail = mail
+    self.notes = notes
+  }
+
+  public func sourceFile(for payload: FileStoreDownloadKeyPayload) throws -> URL {
+    switch payload.domain {
+    case .mail:
+      return try mail.sourceFile(for: payload)
+    case .notes:
+      return try notes.sourceFile(for: payload)
+    case .notifications:
+      throw AppleGatewayError(
+        code: .fileOperationFailed,
+        message: "No file materializer is registered for notifications",
+        details: ["domain": payload.domain.rawValue, "sourceId": payload.sourceId]
+      )
+    }
+  }
+}
