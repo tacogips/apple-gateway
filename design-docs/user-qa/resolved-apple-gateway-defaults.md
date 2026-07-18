@@ -44,9 +44,9 @@ remain rejected.
 
 - Calendar/Reminders/EK alarms: EventKit direct (AppleScript is
   minutes-slow and needs GUI apps).
-- Clock alarms: Shortcuts bridge via `shortcuts run` with user-installed
-  shortcuts — the only supported path; the design states best-effort
-  semantics honestly. Private alarm stores are never written.
+- Clock alarms: JXA accessibility automation owned by apple-gateway. Clock
+  exposes neither a public alarm API nor an AppleScript dictionary, and private
+  alarm stores are never written.
 - Notes: batched Apple Events as JXA through osascript (only writable
   path; NoteStore.sqlite writing risks CloudKit corruption).
 - Mail: read-only Envelope Index SQLite snapshot + .emlx parsing

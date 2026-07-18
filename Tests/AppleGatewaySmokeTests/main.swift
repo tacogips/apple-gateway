@@ -691,7 +691,7 @@ private final class SmokePermissionsProvider: PermissionsProviding, @unchecked S
       mailFullDiskAccess: PermissionFieldStatus(state: .unknown),
       notificationsHelper: PermissionFieldStatus(state: .unknown),
       notificationDbFullDiskAccess: PermissionFieldStatus(state: .unknown),
-      shortcutsClockBridge: PermissionFieldStatus(state: .notRequired)
+      clockAutomation: PermissionFieldStatus(state: .notRequired)
     )
   }
 

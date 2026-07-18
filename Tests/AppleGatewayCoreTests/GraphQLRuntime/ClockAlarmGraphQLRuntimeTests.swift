@@ -145,7 +145,7 @@ private struct ClockAlarmsGraphQLPermissionsProvider: PermissionsStatusProviding
       mailFullDiskAccess: PermissionFieldStatus(state: .unknown),
       notificationsHelper: PermissionFieldStatus(state: .unknown),
       notificationDbFullDiskAccess: PermissionFieldStatus(state: .unknown),
-      shortcutsClockBridge: PermissionFieldStatus(state: .unknown)
+      clockAutomation: PermissionFieldStatus(state: .unknown)
     )
   }
 }

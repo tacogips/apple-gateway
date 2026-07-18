@@ -122,36 +122,23 @@ Notifications are posted through `AppleGatewayNotifier.app`, installed under
 Homebrew `libexec` by the formula and cask packages. The first notification
 request may prompt for notification authorization.
 
-Clock alarms require the Shortcuts bridge package installed from
-`packaging/shortcuts`. The default shortcuts are:
+Clock alarms are controlled directly through Clock.app accessibility
+automation. No Shortcuts assets or setup are required. Grant the terminal or
+installed `apple-gateway` identity access under System Settings > Privacy &
+Security > Accessibility and Automation, or request the permissions from the
+CLI:
 
-- `apple-gateway-get-alarms`
-- `apple-gateway-create-alarm`
-- `apple-gateway-toggle-alarm`
-- `apple-gateway-update-alarm` on macOS 26+
-- `apple-gateway-delete-alarm` on macOS 26+
+```bash
+apple-gateway permissions request --domain clock-alarms
+```
 
-Install or import the shortcuts in Shortcuts.app, keep their names aligned with
-`clock_alarms.shortcut_prefix`, then verify with the non-mutating checker:
+Run a non-mutating live check, or exercise the complete create/toggle/update/
+delete flow with an automatically cleaned-up scratch alarm:
 
 ```bash
 scripts/live-clock-alarms-check.sh
+scripts/live-clock-alarms-check.sh --execute
 ```
-
-The detailed source build sheet is `packaging/shortcuts/SOURCE.md`. After the
-shortcuts are installed, validate the read-only JSON contract with:
-
-```bash
-scripts/live-clock-alarms-check.sh --read-only
-```
-
-The permissions doctor also checks the exact expected bridge shortcut names for
-the configured `clock_alarms.shortcut_prefix`. With the default prefix, it
-expects `apple-gateway-get-alarms`, `apple-gateway-create-alarm`,
-`apple-gateway-toggle-alarm`, plus `apple-gateway-update-alarm` and
-`apple-gateway-delete-alarm` on macOS 26+. The JSON output includes
-missing-shortcut detail; a different shortcut that only shares the prefix is not
-sufficient.
 
 ```bash
 apple-gateway permissions status --json

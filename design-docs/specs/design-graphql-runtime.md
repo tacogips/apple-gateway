@@ -102,8 +102,8 @@ execution behavior.
 root before later domain modules so the runtime has a real field for parser,
 validator, executor, projection, and SDL tests. The resolver must be
 non-prompting: it may return static or config-derived placeholder values
-until TASK-005 adds real TCC/FDA/Shortcuts probes, but it must not trigger
-System Settings prompts, Apple Events, shortcut execution, or filesystem
+until TASK-005 adds real TCC/FDA/automation probes, but it must not trigger
+System Settings prompts, Apple Events, UI automation, or filesystem
 cache writes.
 
 When TASK-005 lands, this field remains non-prompting and is backed by the

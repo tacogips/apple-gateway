@@ -16,7 +16,7 @@ public protocol PermissionStatusProbe: Sendable {
   func mailFullDiskAccessStatus(config: AppleGatewayConfig) -> PermissionFieldStatus
   func notificationDbFullDiskAccessStatus() -> PermissionFieldStatus
   func notificationsHelperStatus(config: AppleGatewayConfig) -> PermissionFieldStatus
-  func shortcutsClockBridgeStatus(config: AppleGatewayConfig) -> PermissionFieldStatus
+  func clockAutomationStatus(config: AppleGatewayConfig) -> PermissionFieldStatus
 }
 
 public protocol PermissionRequestProvider: Sendable {
@@ -24,6 +24,7 @@ public protocol PermissionRequestProvider: Sendable {
   func requestReminders(config: AppleGatewayConfig) -> PermissionFieldStatus
   func requestNotes(config: AppleGatewayConfig) -> PermissionFieldStatus
   func requestNotifications(config: AppleGatewayConfig) -> PermissionFieldStatus
+  func requestClockAutomation(config: AppleGatewayConfig) -> PermissionFieldStatus
 }
 
 public protocol ResponsibleProcessDetecting: Sendable {
@@ -56,7 +57,7 @@ public struct PermissionsService<Probe: PermissionStatusProbe, Requester: Permis
       mailFullDiskAccess: domains.mail ? probe.mailFullDiskAccessStatus(config: config) : disabled("mail"),
       notificationsHelper: domains.notifications ? probe.notificationsHelperStatus(config: config) : disabled("notifications"),
       notificationDbFullDiskAccess: domains.notifications ? probe.notificationDbFullDiskAccessStatus() : disabled("notifications"),
-      shortcutsClockBridge: domains.clockAlarms ? probe.shortcutsClockBridgeStatus(config: config) : disabled("clock_alarms")
+      clockAutomation: domains.clockAlarms ? probe.clockAutomationStatus(config: config) : disabled("clock_alarms")
     )
   }
 
@@ -71,6 +72,8 @@ public struct PermissionsService<Probe: PermissionStatusProbe, Requester: Permis
       status = config.domains.notes ? requester.requestNotes(config: config) : disabled("notes")
     case .notifications:
       status = config.domains.notifications ? requester.requestNotifications(config: config) : disabled("notifications")
+    case .clockAlarms:
+      status = config.domains.clockAlarms ? requester.requestClockAutomation(config: config) : disabled("clock_alarms")
     }
     return PermissionRequestResult(domain: domain, status: status)
   }
@@ -137,57 +140,8 @@ public struct LivePermissionProbe: PermissionStatusProbe {
     helperStatus(config: config)
   }
 
-  public func shortcutsClockBridgeStatus(config: AppleGatewayConfig) -> PermissionFieldStatus {
-    guard let output = try? runProcess(executable: "/usr/bin/shortcuts", arguments: ["list"]) else {
-      return PermissionFieldStatus(
-        state: .unknown,
-        details: ["reason": "Could not list shortcuts without running them"]
-      )
-    }
-    return Self.shortcutsClockBridgeStatus(
-      config: config,
-      shortcutsListOutput: output,
-      osVersion: ProcessInfo.processInfo.operatingSystemVersion
-    )
-  }
-
-  static func shortcutsClockBridgeStatus(
-    config: AppleGatewayConfig,
-    shortcutsListOutput output: String,
-    osVersion: OperatingSystemVersion
-  ) -> PermissionFieldStatus {
-    let expected = expectedClockAlarmShortcutNames(config: config, osVersion: osVersion)
-    let installed = Set(output
-      .split(whereSeparator: \.isNewline)
-      .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-      .filter { !$0.isEmpty })
-    let missing = expected.filter { !installed.contains($0) }
-    guard missing.isEmpty else {
-      return PermissionFieldStatus(
-        state: .unknown,
-        details: [
-          "reason": "Missing Clock alarm bridge shortcuts",
-          "missingShortcuts": missing.joined(separator: ","),
-          "expectedShortcuts": expected.joined(separator: ",")
-        ]
-      )
-    }
-    return PermissionFieldStatus(
-      state: .granted,
-      details: ["expectedShortcuts": expected.joined(separator: ",")]
-    )
-  }
-
-  static func expectedClockAlarmShortcutNames(
-    config: AppleGatewayConfig,
-    osVersion: OperatingSystemVersion
-  ) -> [String] {
-    let names = ClockAlarmShortcutNames(prefix: config.clockAlarms.shortcutPrefix)
-    var expected = [names.getAlarms, names.createAlarm, names.toggleAlarm]
-    if osVersion.majorVersion >= 26 {
-      expected.append(contentsOf: [names.updateAlarm, names.deleteAlarm])
-    }
-    return expected
+  public func clockAutomationStatus(config _: AppleGatewayConfig) -> PermissionFieldStatus {
+    clockAutomationStatus(askUserIfNeeded: false)
   }
 
   fileprivate func helperStatus(config: AppleGatewayConfig) -> PermissionFieldStatus {
@@ -289,6 +243,10 @@ public struct LivePermissionRequester: PermissionRequestProvider {
     probe.helperStatus(config: config)
   }
 
+  public func requestClockAutomation(config _: AppleGatewayConfig) -> PermissionFieldStatus {
+    probe.clockAutomationStatus(askUserIfNeeded: true)
+  }
+
   private func requestEventKit(entity: EKEntityType) -> PermissionFieldStatus {
     #if canImport(EventKit)
     let store = EKEventStore()
@@ -328,16 +286,54 @@ public struct LivePermissionRequester: PermissionRequestProvider {
 
 private extension LivePermissionProbe {
   func notesAutomationStatus(askUserIfNeeded: Bool) -> PermissionFieldStatus {
+    automationStatus(
+      bundleID: "com.apple.Notes",
+      targetName: "Notes",
+      askUserIfNeeded: askUserIfNeeded
+    )
+  }
+
+  func clockAutomationStatus(askUserIfNeeded: Bool) -> PermissionFieldStatus {
+    #if canImport(ApplicationServices)
+    let accessibilityOptions = [
+      "AXTrustedCheckOptionPrompt": askUserIfNeeded
+    ] as CFDictionary
+    guard AXIsProcessTrustedWithOptions(accessibilityOptions) else {
+      return PermissionFieldStatus(
+        state: askUserIfNeeded ? .denied : .notDetermined,
+        details: [
+          "reason": "Accessibility access is required to automate Clock",
+          "target": "Clock"
+        ]
+      )
+    }
+    return automationStatus(
+      bundleID: "com.apple.systemevents",
+      targetName: "System Events",
+      askUserIfNeeded: askUserIfNeeded
+    )
+    #else
+    return PermissionFieldStatus(
+      state: .unknown,
+      details: ["reason": "ApplicationServices is unavailable"]
+    )
+    #endif
+  }
+
+  func automationStatus(
+    bundleID: String,
+    targetName: String,
+    askUserIfNeeded: Bool
+  ) -> PermissionFieldStatus {
     #if canImport(ApplicationServices)
     var target = AEAddressDesc()
-    let bundleID = "com.apple.Notes"
     let createStatus = bundleID.withCString { pointer in
       AECreateDesc(typeApplicationBundleID, pointer, bundleID.utf8.count, &target)
     }
     guard createStatus == noErr else {
       return PermissionFieldStatus(
         state: .unknown,
-        details: ["reason": "Could not create Notes automation target descriptor"]
+        details: ["reason": "Could not create \(targetName) automation target descriptor"]
       )
     }
     defer { AEDisposeDesc(&target) }
@@ -357,7 +353,7 @@ private extension LivePermissionProbe {
     default:
       return PermissionFieldStatus(
         state: .unknown,
-        details: ["reason": "Notes automation status \(status)"]
+        details: ["reason": "\(targetName) automation status \(status)"]
       )
     }
     #else

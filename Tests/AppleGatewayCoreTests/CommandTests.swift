@@ -325,7 +325,7 @@ private final class StaticPermissionsProvider: PermissionsProviding, @unchecked 
       mailFullDiskAccess: PermissionFieldStatus(state: .unknown),
       notificationsHelper: PermissionFieldStatus(state: .unknown),
       notificationDbFullDiskAccess: PermissionFieldStatus(state: .unknown),
-      shortcutsClockBridge: PermissionFieldStatus(state: .notRequired)
+      clockAutomation: PermissionFieldStatus(state: .notRequired)
     )
   }
 

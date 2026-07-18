@@ -4,11 +4,9 @@ apple-gateway is a macOS CLI and GraphQL bridge for Apple apps. This project
 ships two Homebrew release paths:
 
 - Formula: unsigned tarballs containing `bin/apple-gateway`,
-  `bin/apple-gateway-reader`, `libexec/AppleGatewayNotifier.app`, and
-  `share/apple-gateway/shortcuts`.
+  `bin/apple-gateway-reader`, and `libexec/AppleGatewayNotifier.app`.
 - Cask: signed, notarized, and stapled macOS DMGs containing both command line
-  tools, `AppleGatewayNotifier.app`, and the Clock alarm Shortcuts bridge
-  package.
+  tools and `AppleGatewayNotifier.app`.
 
 Swift formula archives are macOS-only by default. Add Linux archives only after
 the project has a reviewed Swift Linux build and runtime contract.
@@ -20,24 +18,6 @@ Build release archives:
 ```bash
 scripts/build-homebrew-release.sh darwin-arm64 darwin-x64
 ```
-
-Release builds validate that every Clock alarm bridge shortcut declared by
-`packaging/shortcuts/manifest.json` has a real exported `.shortcut` file in
-`packaging/shortcuts/`. The validation fails before archive or DMG staging if
-exports are missing, so release assets cannot silently ship only `README.md`,
-`SOURCE.md`, and `manifest.json` as the shortcut package.
-Both release builders force validation against the repo `packaging/shortcuts/`
-directory that they stage, so an `APPLE_GATEWAY_SHORTCUTS_DIR` override cannot
-make release packaging pass against a different temporary shortcuts directory.
-
-For incomplete local/manual checks only, use the documented bypass:
-
-```bash
-APPLE_GATEWAY_ALLOW_INCOMPLETE_SHORTCUT_EXPORTS=1 \
-  scripts/build-homebrew-release.sh --validate-shortcuts-only
-```
-
-Do not use that bypass for production release packaging.
 
 The command writes archives and checksums under `dist/homebrew/`:
 

@@ -8,12 +8,11 @@ reader_product="apple-gateway-reader"
 notifier_product="AppleGatewayNotifier"
 notifier_app="AppleGatewayNotifier.app"
 artifact_name="apple-gateway"
-shortcuts_dir="packaging/shortcuts"
 
 usage() {
   cat <<EOF
 Usage:
-  scripts/build-homebrew-cask-release.sh [--dry-run|--validate-shortcuts-only] [target ...]
+  scripts/build-homebrew-cask-release.sh [--dry-run] [target ...]
 
 Targets:
   darwin-arm64  darwin-x64
@@ -32,10 +31,6 @@ Optional environment:
   SWIFT_SDKROOT         Defaults to Xcode's macOS SDK path.
   NOTARYTOOL            Defaults to Xcode's notarytool.
   STAPLER               Defaults to Xcode's stapler.
-  APPLE_GATEWAY_ALLOW_INCOMPLETE_SHORTCUT_EXPORTS
-                        Set to 1 only for incomplete local/manual checks when
-                        exported .shortcut files are intentionally absent.
-
 Examples:
   scripts/build-homebrew-cask-release.sh --dry-run darwin-arm64 darwin-x64
   kinko exec --env APPLE_SIGNING_IDENTITY,APPLE_ID,APPLE_PASSWORD,APPLE_TEAM_ID -- \
@@ -44,11 +39,6 @@ Examples:
 This builder stages signed, notarized, and stapled macOS .dmg artifacts for a
 Homebrew Cask. It does not publish release assets, mutate a tap, or push commits.
 EOF
-}
-
-validate_shortcut_assets() {
-  APPLE_GATEWAY_SHORTCUTS_DIR="$repo_root/$shortcuts_dir" \
-    "$repo_root/scripts/validate-shortcut-assets.sh"
 }
 
 require_command() {
@@ -241,7 +231,7 @@ assert_codesigning_identity() {
 }
 
 print_plan() {
-  local version target release_dir work_dir dmg_path staged_binary staged_reader helper_app shortcuts triple install_prefix
+  local version target release_dir work_dir dmg_path staged_binary staged_reader helper_app triple install_prefix
   version="$1"
   target="$2"
   release_dir="$3"
@@ -250,7 +240,6 @@ print_plan() {
   staged_binary="$work_dir/$product"
   staged_reader="$work_dir/$reader_product"
   helper_app="$work_dir/libexec/$notifier_app"
-  shortcuts="$work_dir/share/$artifact_name/shortcuts"
   triple="$(swift_triple_for_target "$target")"
   install_prefix="$(install_prefix_for_target "$target")"
 
@@ -265,7 +254,6 @@ print_plan() {
   printf '  staged signed binary: %s\n' "$staged_binary"
   printf '  staged signed reader binary: %s\n' "$staged_reader"
   printf '  staged signed notifier helper: %s\n' "$helper_app"
-  printf '  staged shortcuts: %s\n' "$shortcuts"
   printf '  helper signing: codesign --force --options runtime --timestamp --sign APPLE_SIGNING_IDENTITY %s\n' "$helper_app"
   printf '  helper notarization: included inside notarized DMG\n'
   printf '  notarized DMG: %s\n' "$dmg_path"
@@ -275,7 +263,7 @@ print_plan() {
 }
 
 build_target() {
-  local version target release_dir work_dir dmg_path staged_binary staged_reader helper_app shortcuts bin_path reader_bin_path notarytool stapler
+  local version target release_dir work_dir dmg_path staged_binary staged_reader helper_app bin_path reader_bin_path notarytool stapler
   version="$1"
   target="$2"
   release_dir="$3"
@@ -284,7 +272,6 @@ build_target() {
   staged_binary="$work_dir/$product"
   staged_reader="$work_dir/$reader_product"
   helper_app="$work_dir/libexec/$notifier_app"
-  shortcuts="$work_dir/share/$artifact_name/shortcuts"
   notarytool="${NOTARYTOOL:-/Applications/Xcode.app/Contents/Developer/usr/bin/notarytool}"
   stapler="${STAPLER:-/Applications/Xcode.app/Contents/Developer/usr/bin/stapler}"
 
@@ -304,7 +291,7 @@ build_target() {
   assert_codesigning_identity "$APPLE_SIGNING_IDENTITY"
 
   rm -rf "$work_dir" "$dmg_path" "$dmg_path.sha256"
-  mkdir -p "$work_dir/libexec" "$(dirname "$shortcuts")"
+  mkdir -p "$work_dir/libexec"
 
   bin_path="$(swift_release_bin_path "$target" "$product" | tail -n 1)"
   reader_bin_path="$(swift_release_bin_path "$target" "$reader_product" | tail -n 1)"
@@ -313,7 +300,6 @@ build_target() {
   chmod 0755 "$staged_binary"
   chmod 0755 "$staged_reader"
   build_notifier_app "$target" "$helper_app" identity "$APPLE_SIGNING_IDENTITY"
-  cp -R "$repo_root/$shortcuts_dir" "$shortcuts"
 
   codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$staged_binary"
   codesign --verify --strict --verbose=2 "$staged_binary"
@@ -352,11 +338,6 @@ main() {
     shift
   fi
 
-  if [[ "${1:-}" == "--validate-shortcuts-only" ]]; then
-    validate_shortcut_assets
-    return
-  fi
-
   if [[ "$(uname -s)" != "Darwin" ]]; then
     printf 'Homebrew Cask DMG builds must run on macOS.\n' >&2
     return 1
@@ -373,10 +354,6 @@ main() {
     targets=("$(detect_target)")
   else
     targets=("$@")
-  fi
-
-  if [[ "$dry_run" == false ]]; then
-    validate_shortcut_assets
   fi
 
   local target

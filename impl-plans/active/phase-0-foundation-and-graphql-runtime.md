@@ -171,8 +171,7 @@ defaults for every key in `design-apple-gateway.md#configuration`,
       `APPLE_GATEWAY_DOMAINS_NOTES`,
       `APPLE_GATEWAY_DOMAINS_MAIL`,
       `APPLE_GATEWAY_DOMAINS_NOTIFICATIONS`,
-      `APPLE_GATEWAY_MAIL_MAIL_ROOT`,
-      `APPLE_GATEWAY_CLOCK_ALARMS_SHORTCUT_PREFIX`, and
+      `APPLE_GATEWAY_MAIL_MAIL_ROOT`, and
       `APPLE_GATEWAY_NOTIFICATIONS_HELPER_APP_PATH`. Ignore unrelated
       `APPLE_GATEWAY_*` variables, but reject shaped
       `APPLE_GATEWAY_<SECTION>_<KEY>` variables with no schema key.
@@ -236,7 +235,7 @@ defaults for every key in `design-apple-gateway.md#configuration`,
 - [x] `config validate` prints resolved-source/normalized-value JSON on
       success and `CONFIG_INVALID` envelope details on invalid config content
 - [x] Validation remains local to config loading and does not probe
-      permissions, create directories, run shortcuts, or validate GraphQL
+      permissions, create directories, operate application UI, or validate GraphQL
       behavior
 
 ### TASK-003: GraphQL runtime
@@ -279,7 +278,7 @@ printer. Register the `permissions` query field as the first real field.
       fields and the `Mutation` type.
 - [x] Register a bootstrap `permissions` query module before later domain
       modules. The resolver must return safe placeholder/config-derived data
-      only and must not prompt, run Apple Events, execute Shortcuts, write
+      only and must not prompt, run Apple Events, automate application UI, write
       cache files, or depend on TASK-005 permission probes.
 - [x] Add `Validator.swift` for unknown field/argument/type checks, required
       argument checks, operation-kind checks, enum/list/input coercion checks,
@@ -492,7 +491,7 @@ exit-code mapping table from the primary spec.
 **Parallelizable**: Yes (after TASK-004)
 
 Non-prompting probes (EventKit statuses, `AEDeterminePermissionToAutomateTarget`,
-FDA probe files, shortcuts list), the `PermissionsStatus` resolver,
+Accessibility trust, FDA probe files), the `PermissionsStatus` resolver,
 `permissions status [--json]` and `permissions request --domain`, and the
 shared failure-message formatter naming the responsible process.
 
@@ -515,12 +514,12 @@ shared failure-message formatter naming the responsible process.
       `PermissionState` values aligned to the GraphQL enum, a
       `PermissionsStatus` result with fields `calendars`, `reminders`,
       `notesAutomation`, `mailFullDiskAccess`, `notificationsHelper`,
-      `notificationDbFullDiskAccess`, and `shortcutsClockBridge`, structured
-      diagnostic details, and requestable-domain parsing for only
-      `calendar`, `reminders`, `notes`, and `notifications`.
+      `notificationDbFullDiskAccess`, and `clockAutomation`, structured
+      diagnostic details, and requestable-domain parsing for
+      `calendar`, `reminders`, `notes`, `notifications`, and `clock-alarms`.
 - [x] Add injectable protocol seams for status probes, prompt-capable request
       providers, protected-file opening, responsible-process detection,
-      Shortcuts listing, and notification-helper authorization IPC. Test fakes
+      Accessibility/automation status, and notification-helper authorization IPC. Test fakes
       must be able to prove that status paths never call request methods.
 - [x] Implement calendar and reminders status with EventKit authorization
       status APIs only, mapping full access to allowed, denied/restricted to
@@ -542,21 +541,20 @@ shared failure-message formatter naming the responsible process.
       return `UNKNOWN` with an unavailable diagnostic. TASK-005 must not
       scaffold, install, sign, notarize, package, upload, or launch
       `AppleGatewayNotifier.app`.
-- [x] Implement Shortcuts bridge status with a non-mutating shortcuts-list
-      probe for expected `apple-gateway-*` shortcuts. It must never run a
-      shortcut and must not attempt to install bridge shortcuts.
+- [x] Implement Clock automation status with non-prompting Accessibility and
+      System Events automation probes.
 - [x] Apply config-disabled-domain behavior consistently: disabled domains
       report `NOT_REQUIRED`, skip their underlying probe/request work, and
       include enough diagnostics for human doctor output and JSON details.
 - [x] Implement `permissions status [--json]` in the existing command frame.
       Human output is the doctor report with best-effort responsible-process
       hints, System Settings pane guidance, `tccutil reset` commands where
-      applicable, and manual remediation for Full Disk Access and Shortcuts.
+      applicable, and manual remediation for Full Disk Access and Accessibility.
       JSON output exposes the stable `PermissionsStatus` field names and a
       per-field details object while preserving stdout/stderr and exit-code
       discipline from TASK-004.
 - [x] Implement `permissions request --domain
-      calendar|reminders|notes|notifications`. Each domain must call only its
+      calendar|reminders|notes|notifications|clock-alarms`. Each domain must call only its
       corresponding request path: calendar EventKit calendar request,
       reminders EventKit reminders request, notes minimal Notes automation
       prompt path, and notifications preconfigured helper authorization path.
@@ -575,7 +573,7 @@ shared failure-message formatter naming the responsible process.
       parsing, no-prompt status behavior through fakes, request-domain
       isolation, disabled-domain `NOT_REQUIRED`, notification-helper
       unavailable `UNKNOWN`, Full Disk Access read-only probe mapping,
-      Shortcuts list-only status behavior, GraphQL `PermissionsStatus` fields,
+      Clock automation status behavior, GraphQL `PermissionsStatus` fields,
       and formatter contract output.
 - [x] Update this progress log with date, result, verification commands,
       environment-specific toolchain notes, and any follow-up discovered. Do
@@ -641,12 +639,12 @@ shared failure-message formatter naming the responsible process.
       unavailable `UNKNOWN` diagnostic and does not implement Phase 4 helper
       scaffolding
 - [x] Formatter output matches `design-permissions.md#failure-message-contract`
-- [x] `apple-gateway graphql --query '{ permissions { calendars reminders notesAutomation mailFullDiskAccess notificationsHelper notificationDbFullDiskAccess shortcutsClockBridge } }'`
+- [x] `apple-gateway graphql --query '{ permissions { calendars reminders notesAutomation mailFullDiskAccess notificationsHelper notificationDbFullDiskAccess clockAutomation } }'`
       returns a valid JSON envelope using `PermissionState` field values
 - [x] Disabled configured domains return `NOT_REQUIRED` without calling the
       underlying probe or request provider
-- [x] Full Disk Access and Shortcuts are reported with manual remediation
-      and are not requestable through `permissions request`
+- [x] Full Disk Access is reported with manual remediation; Clock automation
+      permissions are requestable through `permissions request`
 
 **Verification Commands**:
 
@@ -820,7 +818,7 @@ adapters (mail-gateway smoke pattern).
       links against `AppleGatewayCore` and exercises the same command frame
       with in-memory fake providers/materializers through existing core
       injection seams; it must not add hidden production test-mode flags or
-      call live TCC, Apple Events, Shortcuts, Mail, notification DB, signing,
+      call live TCC, Apple Events, application UI, Mail, notification DB, signing,
       notarization, release, commit, or push paths.
 - [x] Update `Taskfile.yml` so `task test` runs the unit test suite and the
       smoke executable. Keep release, signing, notarization, cask, tap, and
@@ -1001,7 +999,7 @@ adapters (mail-gateway smoke pattern).
   models, status/request protocols, live EventKit status/request probes,
   non-prompting Notes automation status via
   `AEDeterminePermissionToAutomateTarget`, read-only Full Disk Access probes,
-  Shortcuts list-only status, notification-helper unavailable diagnostics,
+  Clock Accessibility/automation status, notification-helper unavailable diagnostics,
   shared permission failure formatter, doctor output, `permissions status
   [--json]`, and `permissions request --domain ...`; replaced the GraphQL
   placeholder with the full non-prompting `PermissionsStatus` resolver and

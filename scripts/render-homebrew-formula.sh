@@ -46,49 +46,6 @@ sha_for_target() {
   awk '{print $1}' "$sha_file"
 }
 
-shortcut_assertions_from_manifest() {
-  local manifest_path
-  manifest_path="$1"
-
-  if command -v python3 >/dev/null 2>&1; then
-    python3 - "$manifest_path" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as manifest_file:
-    manifest = json.load(manifest_file)
-
-shortcuts = manifest.get("shortcuts")
-if not isinstance(shortcuts, list) or not shortcuts:
-    raise SystemExit("manifest shortcuts must be a non-empty array")
-
-for shortcut in shortcuts:
-    name = shortcut.get("name") if isinstance(shortcut, dict) else None
-    if not isinstance(name, str) or not name:
-        raise SystemExit("manifest shortcut entries must include non-empty name strings")
-    print(f"    assert_path_exists pkgshare/{json.dumps('shortcuts/' + name + '.shortcut')}")
-PY
-    return
-  fi
-
-  if command -v ruby >/dev/null 2>&1; then
-    ruby -rjson -e '
-      manifest = JSON.parse(File.read(ARGV.fetch(0)))
-      shortcuts = manifest["shortcuts"]
-      abort("manifest shortcuts must be a non-empty array") unless shortcuts.is_a?(Array) && !shortcuts.empty?
-      shortcuts.each do |shortcut|
-        name = shortcut.is_a?(Hash) ? shortcut["name"] : nil
-        abort("manifest shortcut entries must include non-empty name strings") unless name.is_a?(String) && !name.empty?
-        puts "    assert_path_exists pkgshare/#{("shortcuts/" + name + ".shortcut").inspect}"
-      end
-    ' "$manifest_path"
-    return
-  fi
-
-  printf 'missing JSON parser: expected python3 or ruby\n' >&2
-  return 1
-}
-
 main() {
   if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     usage
@@ -104,14 +61,6 @@ main() {
   output="${2:-$repo_root/Formula/$artifact_name.rb}"
   release_dir="${RELEASE_DIR:-$repo_root/dist/homebrew}"
   release_base_url="${RELEASE_BASE_URL:-https://github.com/$github_repository/releases/download/v$version}"
-
-  local shortcut_manifest shortcut_assertions
-  shortcut_manifest="$repo_root/packaging/shortcuts/manifest.json"
-  if [[ ! -f "$shortcut_manifest" ]]; then
-    printf 'missing shortcut manifest: %s\n' "$shortcut_manifest" >&2
-    return 1
-  fi
-  shortcut_assertions="$(shortcut_assertions_from_manifest "$shortcut_manifest")"
 
   local darwin_arm64_sha darwin_x64_sha
   darwin_arm64_sha="$(sha_for_target "$version" darwin-arm64 "$release_dir")"
@@ -144,17 +93,12 @@ class AppleGateway < Formula
     bin.install "bin/$product"
     bin.install "bin/$reader_product"
     libexec.install "libexec/$notifier_app"
-    pkgshare.install "share/$artifact_name/shortcuts"
   end
 
   test do
     assert_match "$version", shell_output("#{bin}/$product --version")
     assert_match "$version", shell_output("#{bin}/$reader_product --version")
     assert_path_exists libexec/"$notifier_app"
-    assert_path_exists pkgshare/"shortcuts/README.md"
-    assert_path_exists pkgshare/"shortcuts/SOURCE.md"
-    assert_path_exists pkgshare/"shortcuts/manifest.json"
-$shortcut_assertions
   end
 end
 EOF

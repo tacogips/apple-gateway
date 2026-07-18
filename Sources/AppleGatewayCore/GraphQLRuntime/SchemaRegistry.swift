@@ -146,7 +146,7 @@ extension GraphQLSchemaModule {
           type: .nonNull(.named("PermissionState")),
           arguments: []
         ),
-        GraphQLFieldDefinition(name: "shortcutsClockBridge", type: .nonNull(.named("PermissionState")), arguments: [])
+        GraphQLFieldDefinition(name: "clockAutomation", type: .nonNull(.named("PermissionState")), arguments: [])
       ])
     )
 

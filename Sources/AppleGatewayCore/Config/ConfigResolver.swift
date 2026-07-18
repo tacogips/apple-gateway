@@ -144,8 +144,6 @@ public struct AppleGatewayConfigResolver {
       config.domains.notifications = value
     case ("mail", "mail_root", .string(let value)):
       config.mail.mailRoot = value
-    case ("clock_alarms", "shortcut_prefix", .string(let value)):
-      config.clockAlarms.shortcutPrefix = value
     case ("notifications", "helper_app_path", .string(let value)):
       config.notifications.helperAppPath = value
     default:

@@ -21,8 +21,6 @@ public enum AppleGatewayErrorCode: String, CaseIterable, Codable, Sendable {
   case mailboxNotFound = "MAILBOX_NOT_FOUND"
   case messageNotFound = "MESSAGE_NOT_FOUND"
   case mailStoreNotFound = "MAIL_STORE_NOT_FOUND"
-  case shortcutNotInstalled = "SHORTCUT_NOT_INSTALLED"
-  case shortcutActionUnsupported = "SHORTCUT_ACTION_UNSUPPORTED"
   case notifierHelperMissing = "NOTIFIER_HELPER_MISSING"
   case notificationDBUnavailable = "NOTIFICATION_DB_UNAVAILABLE"
   case appleEventTimeout = "APPLE_EVENT_TIMEOUT"
@@ -61,9 +59,7 @@ public enum AppleGatewayErrorCode: String, CaseIterable, Codable, Sendable {
          .mailStoreNotFound,
          .invalidDownloadKey:
       return 5
-    case .shortcutNotInstalled,
-         .shortcutActionUnsupported,
-         .notifierHelperMissing,
+    case .notifierHelperMissing,
          .notificationDBUnavailable,
          .appleEventTimeout,
          .fileOperationFailed,

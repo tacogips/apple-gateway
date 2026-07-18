@@ -8,12 +8,11 @@ reader_product="apple-gateway-reader"
 notifier_product="AppleGatewayNotifier"
 notifier_app="AppleGatewayNotifier.app"
 artifact_name="apple-gateway"
-shortcuts_dir="packaging/shortcuts"
 
 usage() {
   cat <<EOF
 Usage:
-  scripts/build-homebrew-release.sh [--dry-run|--validate-shortcuts-only] [target ...]
+  scripts/build-homebrew-release.sh [--dry-run] [target ...]
 
 Targets:
   darwin-arm64  darwin-x64
@@ -24,10 +23,6 @@ Environment:
   SWIFT_BIN             Swift executable. Defaults to Xcode's Swift toolchain on macOS, then PATH.
   SWIFT_DEVELOPER_DIR   Defaults to /Applications/Xcode.app/Contents/Developer on macOS.
   SWIFT_SDKROOT         Defaults to Xcode's macOS SDK path on macOS.
-  APPLE_GATEWAY_ALLOW_INCOMPLETE_SHORTCUT_EXPORTS
-                        Set to 1 only for incomplete local/manual checks when
-                        exported .shortcut files are intentionally absent.
-
 Examples:
   scripts/build-homebrew-release.sh
   scripts/build-homebrew-release.sh --dry-run darwin-arm64 darwin-x64
@@ -36,11 +31,6 @@ Examples:
 This builder stages Swift macOS archives for a Homebrew formula. It does not
 publish release assets, mutate a tap, render a formula, or push commits.
 EOF
-}
-
-validate_shortcut_assets() {
-  APPLE_GATEWAY_SHORTCUTS_DIR="$repo_root/$shortcuts_dir" \
-    "$repo_root/scripts/validate-shortcut-assets.sh"
 }
 
 detect_target() {
@@ -196,7 +186,7 @@ build_notifier_app() {
 }
 
 print_plan() {
-  local version target release_dir work_dir archive binary reader_binary helper_app shortcuts triple
+  local version target release_dir work_dir archive binary reader_binary helper_app triple
   version="$1"
   target="$2"
   release_dir="$3"
@@ -205,7 +195,6 @@ print_plan() {
   binary="$work_dir/bin/$product"
   reader_binary="$work_dir/bin/$reader_product"
   helper_app="$work_dir/libexec/$notifier_app"
-  shortcuts="$work_dir/share/$artifact_name/shortcuts"
   triple="$(swift_triple_for_target "$target")"
 
   assert_child_path "$release_dir" "$work_dir"
@@ -219,14 +208,13 @@ print_plan() {
   printf '  staged binary: %s\n' "$binary"
   printf '  staged reader binary: %s\n' "$reader_binary"
   printf '  staged notifier helper: %s\n' "$helper_app"
-  printf '  staged shortcuts: %s\n' "$shortcuts"
   printf '  archive: %s\n' "$archive"
   printf '  checksum: %s.sha256\n' "$archive"
   printf '  publish side effects: false\n'
 }
 
 build_target() {
-  local version target release_dir bin_path reader_bin_path work_dir archive binary reader_binary helper_app shortcuts
+  local version target release_dir bin_path reader_bin_path work_dir archive binary reader_binary helper_app
   version="$1"
   target="$2"
   release_dir="$3"
@@ -235,13 +223,12 @@ build_target() {
   binary="$work_dir/bin/$product"
   reader_binary="$work_dir/bin/$reader_product"
   helper_app="$work_dir/libexec/$notifier_app"
-  shortcuts="$work_dir/share/$artifact_name/shortcuts"
 
   assert_child_path "$release_dir" "$work_dir"
   assert_child_path "$release_dir" "$archive"
 
   rm -rf "$work_dir" "$archive" "$archive.sha256"
-  mkdir -p "$work_dir/bin" "$work_dir/libexec" "$(dirname "$shortcuts")"
+  mkdir -p "$work_dir/bin" "$work_dir/libexec"
 
   bin_path="$(swift_release_bin_path "$target" "$product" | tail -n 1)"
   reader_bin_path="$(swift_release_bin_path "$target" "$reader_product" | tail -n 1)"
@@ -250,7 +237,6 @@ build_target() {
   chmod 0755 "$binary"
   chmod 0755 "$reader_binary"
   build_notifier_app "$target" "$helper_app"
-  cp -R "$repo_root/$shortcuts_dir" "$shortcuts"
   cp "$repo_root/README.md" "$work_dir/README.md"
 
   COPYFILE_DISABLE=1 tar --no-xattrs -C "$work_dir" -czf "$archive" .
@@ -274,11 +260,6 @@ main() {
     shift
   fi
 
-  if [[ "${1:-}" == "--validate-shortcuts-only" ]]; then
-    validate_shortcut_assets
-    return
-  fi
-
   local version release_dir
   version="$(package_version)"
   validate_version "$version"
@@ -290,10 +271,6 @@ main() {
     targets=("$(detect_target)")
   else
     targets=("$@")
-  fi
-
-  if [[ "$dry_run" == false ]]; then
-    validate_shortcut_assets
   fi
 
   local target

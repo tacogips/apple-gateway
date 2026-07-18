@@ -5,12 +5,13 @@ import Testing
 @Test func permissionRequestDomainParsingRejectsNonRequestableDomains() throws {
   #expect(try PermissionRequestDomain(commandValue: "calendar") == .calendar)
   #expect(try PermissionRequestDomain(commandValue: "notifications") == .notifications)
+  #expect(try PermissionRequestDomain(commandValue: "clock-alarms") == .clockAlarms)
 
   do {
     _ = try PermissionRequestDomain(commandValue: "mail")
     Issue.record("Expected mail to be rejected as non-requestable")
   } catch AppleGatewayCommand.Error.invalidUsage(let message) {
-    #expect(message.contains("calendar, reminders, notes, or notifications"))
+    #expect(message.contains("calendar, reminders, notes, notifications, or clock-alarms"))
   }
 }
 
@@ -76,76 +77,15 @@ import Testing
   #expect(status.state == .granted)
 }
 
-@Test func shortcutsClockBridgeRequiresExactExpectedShortcutNames() {
-  let output = """
-  apple-gateway-get-alarms
-  apple-gateway-create-alarm
-  apple-gateway-toggle-alarm
-  apple-gateway-unrelated
-  """
-  let status = LivePermissionProbe.shortcutsClockBridgeStatus(
-    config: .defaultValue,
-    shortcutsListOutput: output,
-    osVersion: OperatingSystemVersion(majorVersion: 15, minorVersion: 5, patchVersion: 0)
-  )
+@Test func requestPathCallsClockAutomationProvider() {
+  let requester = CountingPermissionRequester()
+  let service = PermissionsService(probe: CountingPermissionProbe(), requester: requester)
 
-  #expect(status.state == .granted)
-  #expect(status.details["expectedShortcuts"] == [
-    "apple-gateway-get-alarms",
-    "apple-gateway-create-alarm",
-    "apple-gateway-toggle-alarm"
-  ].joined(separator: ","))
-}
+  let result = service.request(domain: .clockAlarms, config: .defaultValue)
 
-@Test func shortcutsClockBridgeRejectsPrefixOnlyFalsePositive() {
-  let output = """
-  apple-gateway-get-alarms
-  apple-gateway-random
-  """
-  let status = LivePermissionProbe.shortcutsClockBridgeStatus(
-    config: .defaultValue,
-    shortcutsListOutput: output,
-    osVersion: OperatingSystemVersion(majorVersion: 15, minorVersion: 5, patchVersion: 0)
-  )
-
-  #expect(status.state == .unknown)
-  #expect(status.details["reason"] == "Missing Clock alarm bridge shortcuts")
-  #expect(status.details["missingShortcuts"] == "apple-gateway-create-alarm,apple-gateway-toggle-alarm")
-}
-
-@Test func shortcutsClockBridgeRequiresUpdateAndDeleteOnMacOS26() {
-  let output = """
-  apple-gateway-get-alarms
-  apple-gateway-create-alarm
-  apple-gateway-toggle-alarm
-  """
-  let status = LivePermissionProbe.shortcutsClockBridgeStatus(
-    config: .defaultValue,
-    shortcutsListOutput: output,
-    osVersion: OperatingSystemVersion(majorVersion: 26, minorVersion: 0, patchVersion: 0)
-  )
-
-  #expect(status.state == .unknown)
-  #expect(status.details["missingShortcuts"] == "apple-gateway-update-alarm,apple-gateway-delete-alarm")
-}
-
-@Test func shortcutsClockBridgeUsesConfiguredPrefix() {
-  var config = AppleGatewayConfig.defaultValue
-  config.clockAlarms.shortcutPrefix = "custom"
-  let output = """
-  custom-get-alarms
-  custom-create-alarm
-  custom-toggle-alarm
-  custom-update-alarm
-  custom-delete-alarm
-  """
-  let status = LivePermissionProbe.shortcutsClockBridgeStatus(
-    config: config,
-    shortcutsListOutput: output,
-    osVersion: OperatingSystemVersion(majorVersion: 26, minorVersion: 0, patchVersion: 0)
-  )
-
-  #expect(status.state == .granted)
+  #expect(result.domain == .clockAlarms)
+  #expect(result.status.state == .granted)
+  #expect(requester.requestedDomains == [.clockAlarms])
 }
 
 @Test func permissionFailureFormatterMatchesContractOrdering() {
@@ -200,7 +140,7 @@ private final class CountingPermissionProbe: PermissionStatusProbe, @unchecked S
     PermissionFieldStatus(state: .unknown)
   }
 
-  func shortcutsClockBridgeStatus(config: AppleGatewayConfig) -> PermissionFieldStatus {
+  func clockAutomationStatus(config: AppleGatewayConfig) -> PermissionFieldStatus {
     PermissionFieldStatus(state: .unknown)
   }
 }
@@ -226,5 +166,10 @@ private final class CountingPermissionRequester: PermissionRequestProvider, @unc
   func requestNotifications(config: AppleGatewayConfig) -> PermissionFieldStatus {
     requestedDomains.append(.notifications)
     return PermissionFieldStatus(state: .unknown)
+  }
+
+  func requestClockAutomation(config: AppleGatewayConfig) -> PermissionFieldStatus {
+    requestedDomains.append(.clockAlarms)
+    return PermissionFieldStatus(state: .granted)
   }
 }

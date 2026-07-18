@@ -20,7 +20,6 @@ enum ConfigSchema {
     "limits",
     "domains",
     "mail",
-    "clock_alarms",
     "notifications"
   ]
 
@@ -42,7 +41,6 @@ enum ConfigSchema {
       "notifications"
     ],
     "mail": ["mail_root"],
-    "clock_alarms": ["shortcut_prefix"],
     "notifications": ["helper_app_path"]
   ]
 
@@ -60,7 +58,6 @@ enum ConfigSchema {
     "APPLE_GATEWAY_DOMAINS_MAIL": ("domains", "mail"),
     "APPLE_GATEWAY_DOMAINS_NOTIFICATIONS": ("domains", "notifications"),
     "APPLE_GATEWAY_MAIL_MAIL_ROOT": ("mail", "mail_root"),
-    "APPLE_GATEWAY_CLOCK_ALARMS_SHORTCUT_PREFIX": ("clock_alarms", "shortcut_prefix"),
     "APPLE_GATEWAY_NOTIFICATIONS_HELPER_APP_PATH": ("notifications", "helper_app_path")
   ]
 
@@ -69,7 +66,6 @@ enum ConfigSchema {
     "APPLE_GATEWAY_LIMITS_",
     "APPLE_GATEWAY_DOMAINS_",
     "APPLE_GATEWAY_MAIL_",
-    "APPLE_GATEWAY_CLOCK_ALARMS_",
     "APPLE_GATEWAY_NOTIFICATIONS_"
   ]
 
@@ -81,7 +77,6 @@ enum ConfigSchema {
     switch (section, key) {
     case ("storage", "cache_dir"),
          ("mail", "mail_root"),
-         ("clock_alarms", "shortcut_prefix"),
          ("notifications", "helper_app_path"):
       .string
     case ("limits", _):

@@ -148,7 +148,7 @@ import Testing
         mailFullDiskAccess
         notificationsHelper
         notificationDbFullDiskAccess
-        shortcutsClockBridge
+        clockAutomation
       }
     }
     """,
@@ -162,7 +162,7 @@ import Testing
   #expect(permissions["mailFullDiskAccess"] as? String == "UNKNOWN")
   #expect(permissions["notificationsHelper"] as? String == "UNKNOWN")
   #expect(permissions["notificationDbFullDiskAccess"] as? String == "UNKNOWN")
-  #expect(permissions["shortcutsClockBridge"] as? String == "NOT_REQUIRED")
+  #expect(permissions["clockAutomation"] as? String == "NOT_REQUIRED")
 }
 
 @Test func runtimePreservesPartialDataAndUsesFirstErrorExit() throws {
@@ -469,7 +469,7 @@ private struct GraphQLTestPermissionsProvider: PermissionsStatusProviding {
       mailFullDiskAccess: PermissionFieldStatus(state: .unknown),
       notificationsHelper: PermissionFieldStatus(state: .unknown),
       notificationDbFullDiskAccess: PermissionFieldStatus(state: .unknown),
-      shortcutsClockBridge: PermissionFieldStatus(state: .unknown)
+      clockAutomation: PermissionFieldStatus(state: .unknown)
     )
   }
 }
@@ -483,7 +483,7 @@ private struct FullGraphQLPermissionsProvider: PermissionsStatusProviding {
       mailFullDiskAccess: PermissionFieldStatus(state: .unknown),
       notificationsHelper: PermissionFieldStatus(state: .unknown),
       notificationDbFullDiskAccess: PermissionFieldStatus(state: .unknown),
-      shortcutsClockBridge: PermissionFieldStatus(state: .notRequired)
+      clockAutomation: PermissionFieldStatus(state: .notRequired)
     )
   }
 }

@@ -17,8 +17,8 @@ public struct PermissionsDoctorReport: Sendable {
       if field == .mailFullDiskAccess || field == .notificationDbFullDiskAccess {
         line += " (System Settings > Privacy & Security > Full Disk Access)"
       }
-      if field == .shortcutsClockBridge {
-        line += " (install apple-gateway shortcuts manually)"
+      if field == .clockAutomation {
+        line += " (System Settings > Privacy & Security > Accessibility and Automation)"
       }
       return line
     }.joined(separator: "\n")
@@ -75,6 +75,8 @@ private extension PermissionRequestDomain {
       return "Notes"
     case .notifications:
       return "Notifications"
+    case .clockAlarms:
+      return "Clock automation"
     }
   }
 
@@ -88,6 +90,8 @@ private extension PermissionRequestDomain {
       return "System Settings > Privacy & Security > Automation"
     case .notifications:
       return "System Settings > Notifications"
+    case .clockAlarms:
+      return "System Settings > Privacy & Security > Accessibility and Automation"
     }
   }
 
@@ -105,6 +109,8 @@ private extension PermissionRequestDomain {
       return "tccutil reset AppleEvents"
     case .notifications:
       return nil
+    case .clockAlarms:
+      return "tccutil reset AppleEvents"
     }
   }
 }

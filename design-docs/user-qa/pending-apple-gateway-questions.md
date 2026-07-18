@@ -9,8 +9,8 @@ proposed so work can proceed; answers may override them.
 
 ## Question 1: Timers and stopwatch
 
-Shortcuts exposes "Start Timer" alongside the alarm actions. Should the
-gateway expose `startTimer` as a mutation in the Clock domain?
+Should the Clock accessibility adapter also expose `startTimer` as a mutation
+in the Clock domain?
 
 Proposed default: defer past v1; alarms only.
 

@@ -1,114 +1,46 @@
-# Alarms Design
+# Clock Alarms Design
 
-## Status
+## Scope
 
-Draft
+Apple Gateway lists, creates, enables or disables, updates, and deletes alarms
+in macOS Clock.app. Timers and stopwatch control are out of scope.
 
-## Scope and Honest Capability Statement
+## Automation boundary
 
-"Alarm" means two different things on macOS, and the gateway exposes both
-with different guarantees:
+Clock.app does not expose an AppleScript dictionary or a public alarm API. The
+gateway therefore owns an accessibility-automation adapter implemented with
+JXA executed through `/usr/bin/osascript`.
 
-1. EventKit alarms (`EKAlarm` on calendar events and reminders): fully
-   API-supported CRUD. This is the reliable, complete surface and the
-   recommended path for programmatic alarms. Its schema lives in
-   `design-calendar-reminders.md` (`Alarm`, `AlarmInput`,
-   `setEventAlarms`, `setReminderAlarms`, and alarm fields on create/update
-   inputs). On macOS 26.2+, a reminder with high priority and an alert can
-   be flagged Urgent by the user to fire a must-dismiss alarm.
+The adapter launches Clock.app, selects its Alarms tab, and uses stable
+accessibility identifiers such as `AXMTAAlarmCollectionView`,
+`AlarmNameLabel`, and `AlarmEnableSwitch`. Repeat-day checkboxes are addressed
+by their ordered positions because localized one-letter labels are not unique.
+No Shortcuts.app workflow or packaged `.shortcut` asset is required.
 
-2. Clock app alarms: macOS provides no public API and Clock.app is not
-   scriptable (research reference, section 2). The only supported
-   automation path is Shortcuts actions, which the gateway drives through
-   the `shortcuts` CLI. This surface is best-effort by construction, and
-   the design says so explicitly instead of pretending full control.
+## Permissions
 
-## Clock Alarms via the Shortcuts Bridge
+The responsible executable identity needs:
 
-### Mechanism
+- Accessibility permission to operate Clock.app controls.
+- Automation permission for System Events.
 
-The gateway invokes `shortcuts run <name> [--input-path <file>] --output-path <file>`
-as a subprocess. The user installs a set of bridge shortcuts once (the repo
-ships `.shortcut` files plus an install guide; shortcuts cannot be created
-programmatically). Bridge shortcuts, prefixed by config
-`clock_alarms.shortcut_prefix` (default `apple-gateway`):
+`apple-gateway permissions request --domain clock-alarms` requests these
+permissions, while `permissions status` and `permissions doctor` report their
+state and remediation instructions.
 
-| Shortcut | Clock action | Availability |
-| --- | --- | --- |
-| `apple-gateway-get-alarms` | Get All Alarms, serialize to JSON | macOS 13+ |
-| `apple-gateway-create-alarm` | Create Alarm from JSON input | macOS 13+ |
-| `apple-gateway-toggle-alarm` | Toggle Alarm by name | macOS 13+ |
-| `apple-gateway-update-alarm` | Update Alarm from JSON input | macOS 26+ |
-| `apple-gateway-delete-alarm` | Delete Alarms by name | macOS 26+ |
+## Addressing and verification
 
-`ClockAlarmsAdapter` checks `shortcuts list` output before each operation;
-a missing shortcut yields `SHORTCUT_NOT_INSTALLED` with the install-guide
-path. Operations whose backing action does not exist on the running macOS
-version yield `SHORTCUT_ACTION_UNSUPPORTED` / `UNSUPPORTED_OS_VERSION`.
-
-### GraphQL Types
-
-```graphql
-type ClockAlarm {
-  id: ID                 # stable identifier when the OS provides one; else null
-  label: String!
-  time: String!          # "HH:mm" local time
-  isEnabled: Boolean!
-  repeatDays: [Weekday!]!
-}
-
-enum Weekday { MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY }
-
-input CreateClockAlarmInput {
-  time: String!          # "HH:mm"
-  label: String
-  repeatDays: [Weekday!]
-}
-
-input ToggleClockAlarmInput { label: String!, enabled: Boolean }
-input UpdateClockAlarmInput { label: String!, time: String, newLabel: String, repeatDays: [Weekday!] }
-input DeleteClockAlarmInput { label: String! }
-
-type ClockAlarmResult {
-  success: Boolean!
-  alarm: ClockAlarm
-  warning: String        # e.g. "verified by re-listing; Shortcuts returned no output"
-}
-```
-
-Alarms are addressed by label because pre-Tahoe Shortcuts actions expose no
-stable identifier. Ambiguous labels (multiple matches) fail with
-`INVALID_ARGUMENT` listing the collisions.
-
-### Verification Strategy
-
-`shortcuts run` reports little on failure. Every mutation therefore
-re-reads via `apple-gateway-get-alarms` and diffs to confirm the change,
-populating `warning` when confirmation is inconclusive.
-
-### Read Fallback
-
-`clockAlarms` primarily uses the get-alarms shortcut. As a diagnostics-only
-extra, `permissions status --json` reports whether the local alarm store
-(`com.apple.mobiletimerd` plist on macOS 13-15, group-container SQLite on
-26+) is readable; the gateway never writes those stores and never uses them
-as the primary read path, since the Shortcuts path reflects daemon state.
-
-## Explicit Non-Capabilities
-
-Recorded so users and agent callers get errors instead of surprises:
-
-- Creating Clock alarms without the bridge shortcuts installed.
-- Editing/deleting Clock alarms on macOS 13-15 (actions absent).
-- Timers and stopwatch control (Start Timer exists in Shortcuts; deferred,
-  tracked as an open question in `design-docs/user-qa/`).
-- AlarmKit: Catalyst/iOS-only, not linkable from a CLI.
+The public GraphQL API addresses alarms by label. Mutations reject missing or
+ambiguous labels. After each UI mutation, the adapter re-reads Clock.app and
+polls briefly for the expected state so transient accessibility-tree refreshes
+do not produce false failures. Updates preserve the alarm's previous enabled
+state.
 
 ## Testing
 
-- `ClockAlarmsProviding` fake for resolver tests.
-- Subprocess layer tested with a stub `shortcuts` executable on `PATH`
-  (fixture scripts emitting canned JSON, nonzero exits, and garbage
-  output).
-- JSON contract between bridge shortcuts and adapter documented in
-  `packaging/shortcuts/README.md` and pinned by decoding unit tests.
+- Unit tests inject an automation executor to verify validation, ambiguity,
+  mapping, and mutation behavior without operating Clock.app.
+- Template tests pin the accessibility anchors and ensure no external bridge is
+  invoked.
+- `scripts/live-clock-alarms-check.sh` provides a read-only check and an
+  opt-in scratch create/toggle/update/delete flow with best-effort cleanup.

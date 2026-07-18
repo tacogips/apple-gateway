@@ -25,7 +25,7 @@ public enum PermissionStatusField: String, CaseIterable, Codable, Sendable {
   case mailFullDiskAccess
   case notificationsHelper
   case notificationDbFullDiskAccess
-  case shortcutsClockBridge
+  case clockAutomation
 }
 
 public struct PermissionFieldStatus: Codable, Equatable, Sendable {
@@ -45,7 +45,7 @@ public struct PermissionsStatus: Codable, Equatable, Sendable {
   public var mailFullDiskAccess: PermissionFieldStatus
   public var notificationsHelper: PermissionFieldStatus
   public var notificationDbFullDiskAccess: PermissionFieldStatus
-  public var shortcutsClockBridge: PermissionFieldStatus
+  public var clockAutomation: PermissionFieldStatus
 
   public init(
     calendars: PermissionFieldStatus,
@@ -54,7 +54,7 @@ public struct PermissionsStatus: Codable, Equatable, Sendable {
     mailFullDiskAccess: PermissionFieldStatus,
     notificationsHelper: PermissionFieldStatus,
     notificationDbFullDiskAccess: PermissionFieldStatus,
-    shortcutsClockBridge: PermissionFieldStatus
+    clockAutomation: PermissionFieldStatus
   ) {
     self.calendars = calendars
     self.reminders = reminders
@@ -62,7 +62,7 @@ public struct PermissionsStatus: Codable, Equatable, Sendable {
     self.mailFullDiskAccess = mailFullDiskAccess
     self.notificationsHelper = notificationsHelper
     self.notificationDbFullDiskAccess = notificationDbFullDiskAccess
-    self.shortcutsClockBridge = shortcutsClockBridge
+    self.clockAutomation = clockAutomation
   }
 
   public subscript(field: PermissionStatusField) -> PermissionFieldStatus {
@@ -79,8 +79,8 @@ public struct PermissionsStatus: Codable, Equatable, Sendable {
       return notificationsHelper
     case .notificationDbFullDiskAccess:
       return notificationDbFullDiskAccess
-    case .shortcutsClockBridge:
-      return shortcutsClockBridge
+    case .clockAutomation:
+      return clockAutomation
     }
   }
 
@@ -106,7 +106,7 @@ public struct PermissionsStatusJSON: Encodable, Sendable {
   public var mailFullDiskAccess: PermissionState
   public var notificationsHelper: PermissionState
   public var notificationDbFullDiskAccess: PermissionState
-  public var shortcutsClockBridge: PermissionState
+  public var clockAutomation: PermissionState
   public var details: [String: [String: String]]
 
   init(status: PermissionsStatus) {
@@ -116,7 +116,7 @@ public struct PermissionsStatusJSON: Encodable, Sendable {
     mailFullDiskAccess = status.mailFullDiskAccess.state
     notificationsHelper = status.notificationsHelper.state
     notificationDbFullDiskAccess = status.notificationDbFullDiskAccess.state
-    shortcutsClockBridge = status.shortcutsClockBridge.state
+    clockAutomation = status.clockAutomation.state
     details = Dictionary(
       uniqueKeysWithValues: PermissionStatusField.allCases.compactMap { field in
         let fieldDetails = status[field].details
@@ -134,11 +134,12 @@ public enum PermissionRequestDomain: String, CaseIterable, Sendable {
   case reminders
   case notes
   case notifications
+  case clockAlarms = "clock-alarms"
 
   public init(commandValue: String) throws {
     guard let domain = PermissionRequestDomain(rawValue: commandValue) else {
       throw AppleGatewayCommand.Error.invalidUsage(
-        "Domain must be calendar, reminders, notes, or notifications"
+        "Domain must be calendar, reminders, notes, notifications, or clock-alarms"
       )
     }
     self = domain

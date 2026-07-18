@@ -21,7 +21,7 @@ from `design-docs/references/macos-platform-research-2026-07.md`.
 | Mail | Read `~/Library/Mail` | Full Disk Access | No (manual grant only) | none |
 | Notifications: post/dismiss own | Helper .app | Notifications | Yes (helper's first request) | helper Info.plist |
 | Notifications: system-wide list | Read usernoted db2 | Full Disk Access | No | none |
-| Clock alarms | `shortcuts run` | none (Shortcuts mediates) | n/a | none |
+| Clock alarms | JXA accessibility automation | Accessibility + Apple Events to System Events | Yes | `NSAppleEventsUsageDescription` |
 
 ## The Responsible-Process Problem
 
@@ -93,16 +93,15 @@ embedded plist section. The same check should be applied to
 - Notifications helper: helper app resolvable and its
   `getNotificationSettings` reports authorized (queried over the helper
   IPC described in `design-notifications.md`).
-- Shortcuts bridge: `shortcuts list` contains the exact expected bridge
-  shortcut names for the configured `clock_alarms.shortcut_prefix`. On
-  macOS 13-15 this means get/create/toggle; on macOS 26+ it also requires
-  update/delete. The probe is list-only and must never run shortcuts.
+- Clock automation: `AXIsProcessTrustedWithOptions` checks Accessibility,
+  and `AEDeterminePermissionToAutomateTarget` checks System Events automation
+  without prompting.
 
 Exposed three ways with one implementation:
 
 ```bash
 apple-gateway permissions status            # human-readable table + JSON with --json
-apple-gateway permissions request --domain calendar|reminders|notes|notifications
+apple-gateway permissions request --domain calendar|reminders|notes|notifications|clock-alarms
 apple-gateway graphql --query '{ permissions { calendars mailFullDiskAccess } }'
 ```
 
@@ -129,7 +128,7 @@ The permissions service has two explicit entrypoints:
 - `status`: non-prompting, read-only probes for every field in
   `PermissionsStatus`.
 - `request(domain:)`: the only prompt-capable path, limited to
-  `calendar`, `reminders`, `notes`, and `notifications`.
+  `calendar`, `reminders`, `notes`, `notifications`, and `clock-alarms`.
 
 The status entrypoint must be injectable for tests, so unit tests can prove
 that CLI and GraphQL status paths do not call prompt APIs. Calendar and
@@ -137,7 +136,8 @@ reminders status use EventKit authorization-status APIs only. Notes
 automation status calls `AEDeterminePermissionToAutomateTarget` with
 `askUserIfNeeded=false`. Full Disk Access checks open known protected probe
 paths read-only and never create, modify, chmod, delete, or copy the probe
-locations. Shortcuts status may list shortcuts but must not run shortcuts.
+locations. Clock status uses non-prompting Accessibility and Apple Events
+permission checks.
 
 `permissions request --domain calendar` calls only the EventKit calendar
 request path. `--domain reminders` calls only the EventKit reminders request
@@ -149,8 +149,9 @@ cannot be resolved, TASK-005 must return `UNKNOWN` with an unavailable
 diagnostic for notification request/status instead of scaffolding,
 installing, signing, packaging, or launching a new helper app. Helper app
 creation and distribution remain Phase 4 notification-domain work. Full Disk
-Access and Shortcuts bridge setup are not requestable and remain manual
-instructions in status output.
+Access remains manual and is reported with instructions in status output.
+`--domain clock-alarms` deliberately requests Accessibility and System Events
+automation access.
 
 `permissions status --json` and GraphQL `permissions` use the same field
 names and state vocabulary as `PermissionsStatus`:
@@ -161,7 +162,7 @@ names and state vocabulary as `PermissionsStatus`:
 - `mailFullDiskAccess`
 - `notificationsHelper`
 - `notificationDbFullDiskAccess`
-- `shortcutsClockBridge`
+- `clockAutomation`
 
 Configuration-disabled domains report `NOT_REQUIRED`; unavailable or
 undetectable probes report `UNKNOWN` with details in the human doctor output

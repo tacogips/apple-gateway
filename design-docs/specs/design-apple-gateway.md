@@ -12,7 +12,7 @@ Apple's built-in productivity apps through a single GraphQL API surface:
 1. Apple Calendar: full read and write of calendars and events
 2. Apple Reminders: full read and write of reminder lists and reminders
 3. Alarms: full EventKit alarm (`EKAlarm`) control on events and reminders,
-   plus a Shortcuts-bridged interface to Clock app alarms
+   plus direct accessibility automation for Clock.app alarms
 4. Apple Notes: listing, search, and writing of notes
 5. Apple Mail: read-only message retrieval
 6. Notifications: posting, listing, and dismissal of user notifications
@@ -114,7 +114,7 @@ AppleGatewayCore (library)
   Domains/
     CalendarKitAdapter/     EventKit events + calendars (+ EKAlarm)
     RemindersAdapter/       EventKit reminders (+ EKAlarm)
-    ClockAlarmsAdapter/     Shortcuts bridge to Clock app alarms
+    ClockAlarmsAdapter/     JXA accessibility automation for Clock.app alarms
     NotesAdapter/           Apple Events (JXA) to Notes.app
     MailAdapter/            Envelope Index SQLite + .emlx parsing
     NotificationsAdapter/   helper app driver + usernoted DB reader
@@ -145,7 +145,7 @@ protocol NotificationsProviding: Sendable { ... }
 | Domain | Mechanism | Rationale |
 | --- | --- | --- |
 | Calendar, Reminders, EK alarms | EventKit direct | Full CRUD, fast, works from bare CLI; AppleScript alternative is minutes-slow |
-| Clock alarms | `shortcuts run` bridge | Only supported path; no public API, app not scriptable |
+| Clock alarms | JXA accessibility automation | Clock has no public alarm API or AppleScript dictionary |
 | Notes | Batched Apple Events (JXA via osascript) | Only writable path; store SQLite is read-only in practice |
 | Mail | Envelope Index SQLite (immutable) + .emlx | ~1000x faster than AppleScript, no Mail.app needed, immune to Tahoe -1712 regression |
 | Notifications post/dismiss-own | Bundled `AppleGatewayNotifier.app` | UNUserNotificationCenter requires a real .app; enables actions, reply, removal |
@@ -193,7 +193,7 @@ type PermissionsStatus {
   mailFullDiskAccess: PermissionState!
   notificationsHelper: PermissionState!
   notificationDbFullDiskAccess: PermissionState!
-  shortcutsClockBridge: PermissionState!
+  clockAutomation: PermissionState!
 }
 ```
 
@@ -214,7 +214,7 @@ type Query {
   reminders(input: ReminderSearchInput!): ReminderConnection!
   reminder(reminderId: ID!): Reminder
 
-  # Clock alarms (Shortcuts bridge; may fail with SHORTCUT_NOT_INSTALLED)
+  # Clock alarms (Accessibility and System Events automation required)
   clockAlarms: [ClockAlarm!]!
 
   # Notes
@@ -257,11 +257,11 @@ type Mutation {
                  span: RecurrenceSpan = THIS_EVENT): CalendarEvent!
   setReminderAlarms(reminderId: ID!, alarms: [AlarmInput!]!): Reminder!
 
-  # Clock alarms (Shortcuts bridge; capability depends on macOS version)
+  # Clock alarms (direct Clock.app accessibility automation)
   createClockAlarm(input: CreateClockAlarmInput!): ClockAlarmResult!
   toggleClockAlarm(input: ToggleClockAlarmInput!): ClockAlarmResult!
-  updateClockAlarm(input: UpdateClockAlarmInput!): ClockAlarmResult!   # macOS 26+
-  deleteClockAlarm(input: DeleteClockAlarmInput!): ClockAlarmResult!   # macOS 26+
+  updateClockAlarm(input: UpdateClockAlarmInput!): ClockAlarmResult!
+  deleteClockAlarm(input: DeleteClockAlarmInput!): ClockAlarmResult!
 
   # Notes
   createNote(input: CreateNoteInput!): Note!
@@ -403,10 +403,6 @@ notifications = true
 # Override auto-probed ~/Library/Mail/V1x root when needed.
 mail_root = ""
 
-[clock_alarms]
-# Names of the user-installed bridge shortcuts.
-shortcut_prefix = "apple-gateway"
-
 [notifications]
 # Override the helper app path (default: resolved next to the binary,
 # then standard install locations).
@@ -448,8 +444,7 @@ The supported env override names are derived directly from the TOML schema:
 `APPLE_GATEWAY_DOMAINS_NOTES`,
 `APPLE_GATEWAY_DOMAINS_MAIL`,
 `APPLE_GATEWAY_DOMAINS_NOTIFICATIONS`,
-`APPLE_GATEWAY_MAIL_MAIL_ROOT`,
-`APPLE_GATEWAY_CLOCK_ALARMS_SHORTCUT_PREFIX`, and
+`APPLE_GATEWAY_MAIL_MAIL_ROOT`, and
 `APPLE_GATEWAY_NOTIFICATIONS_HELPER_APP_PATH`.
 
 Path-valued fields are expanded after file/env precedence is resolved:
@@ -460,7 +455,7 @@ home directory. The selected config file path from `--config` or
 
 Validation rules are deliberately local to configuration loading in
 TASK-002. They do not probe TCC permissions, check whether apps are
-installed, create cache directories, run shortcuts, or validate GraphQL
+installed, create cache directories, operate application UI, or validate GraphQL
 runtime behavior. Required numeric limits must be positive and
 `limits.default_page_size` must not exceed `limits.max_page_size`.
 `storage.cache_dir` must resolve to a non-empty path. Optional override
@@ -582,8 +577,6 @@ input after command routing has selected a JSON-producing command.
 | `CALENDAR_READ_ONLY` | Target calendar disallows modifications |
 | `NOTE_NOT_FOUND` / `NOTE_LOCKED` / `NOTE_FOLDER_NOT_FOUND` | Notes lookups |
 | `MAILBOX_NOT_FOUND` / `MESSAGE_NOT_FOUND` / `MAIL_STORE_NOT_FOUND` | Mail lookups |
-| `SHORTCUT_NOT_INSTALLED` | Clock bridge shortcut missing |
-| `SHORTCUT_ACTION_UNSUPPORTED` | Clock action needs newer macOS |
 | `NOTIFIER_HELPER_MISSING` | Helper .app not found/launchable |
 | `NOTIFICATION_DB_UNAVAILABLE` | usernoted DB missing or unreadable |
 | `APPLE_EVENT_TIMEOUT` | -1712 or timeout after retries |
@@ -602,7 +595,7 @@ input after command routing has selected a JSON-producing command.
 | 3 | Config error |
 | 4 | Permission error (TCC / FDA / Automation) |
 | 5 | GraphQL execution error |
-| 6 | Platform/provider error (Apple Events, SQLite, shortcuts, helper) |
+| 6 | Platform/provider error (Apple Events, SQLite, UI automation, helper) |
 
 ### Error-Code Exit Mapping
 
@@ -630,8 +623,6 @@ Every primary error code maps to one process exit code:
 | `MAILBOX_NOT_FOUND` | 5 |
 | `MESSAGE_NOT_FOUND` | 5 |
 | `MAIL_STORE_NOT_FOUND` | 5 |
-| `SHORTCUT_NOT_INSTALLED` | 6 |
-| `SHORTCUT_ACTION_UNSUPPORTED` | 6 |
 | `NOTIFIER_HELPER_MISSING` | 6 |
 | `NOTIFICATION_DB_UNAVAILABLE` | 6 |
 | `APPLE_EVENT_TIMEOUT` | 6 |

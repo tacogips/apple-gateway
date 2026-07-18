@@ -7,7 +7,6 @@ public struct AppleGatewayConfig: Codable, Equatable, Sendable {
   public var limits: Limits
   public var domains: Domains
   public var mail: Mail
-  public var clockAlarms: ClockAlarms
   public var notifications: Notifications
 
   public init(
@@ -15,14 +14,12 @@ public struct AppleGatewayConfig: Codable, Equatable, Sendable {
     limits: Limits = .defaultValue,
     domains: Domains = .defaultValue,
     mail: Mail = .defaultValue,
-    clockAlarms: ClockAlarms = .defaultValue,
     notifications: Notifications = .defaultValue
   ) {
     self.storage = storage
     self.limits = limits
     self.domains = domains
     self.mail = mail
-    self.clockAlarms = clockAlarms
     self.notifications = notifications
   }
 
@@ -33,7 +30,6 @@ public struct AppleGatewayConfig: Codable, Equatable, Sendable {
     case limits
     case domains
     case mail
-    case clockAlarms = "clock_alarms"
     case notifications
   }
 }
@@ -145,20 +141,6 @@ public extension AppleGatewayConfig {
 
     enum CodingKeys: String, CodingKey {
       case mailRoot = "mail_root"
-    }
-  }
-
-  struct ClockAlarms: Codable, Equatable, Sendable {
-    public var shortcutPrefix: String
-
-    public init(shortcutPrefix: String) {
-      self.shortcutPrefix = shortcutPrefix
-    }
-
-    public static let defaultValue = ClockAlarms(shortcutPrefix: "apple-gateway")
-
-    enum CodingKeys: String, CodingKey {
-      case shortcutPrefix = "shortcut_prefix"
     }
   }
 

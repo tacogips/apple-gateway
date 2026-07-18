@@ -88,7 +88,7 @@ payload, such as usage errors or unexpected process failures.
 `AppleGatewayCore`. It exercises the same command-line frame used by the
 production executables with in-memory fake providers/materializers injected
 through core seams. The smoke executable must not add hidden production CLI
-test-mode flags and must not use live TCC prompts, Apple Events, Shortcuts,
+test-mode flags and must not use live TCC prompts, Apple Events, UI automation,
 Mail stores, notification databases, signing, notarization, or release
 workflows.
 
@@ -162,26 +162,26 @@ with execution behavior).
 
 ```bash
 apple-gateway permissions status [--json]
-apple-gateway permissions request --domain calendar|reminders|notes|notifications
+apple-gateway permissions request --domain calendar|reminders|notes|notifications|clock-alarms
 ```
 
-`status` never triggers TCC prompts. `request` deliberately does. Full
-Disk Access and the Shortcuts bridge cannot be requested programmatically;
-`status` prints manual instructions for them (see
-`design-permissions.md`).
+`status` never triggers TCC prompts. `request` deliberately does. Full Disk
+Access cannot be requested programmatically; `status` prints manual
+instructions for it (see `design-permissions.md`).
 
 `status --json` returns the same permission-state fields exposed by
 GraphQL `PermissionsStatus`: `calendars`, `reminders`, `notesAutomation`,
 `mailFullDiskAccess`, `notificationsHelper`,
-`notificationDbFullDiskAccess`, and `shortcutsClockBridge`. States use the
+`notificationDbFullDiskAccess`, and `clockAutomation`. States use the
 `PermissionState` vocabulary from `design-apple-gateway.md`. The JSON form
 may include per-field diagnostic details, but the state fields remain stable
 for clients.
 
 `request --domain calendar` must trigger only the EventKit calendar request
 path. The other prompt-capable request domains are isolated the same way:
-reminders uses EventKit reminders, notes uses Notes automation, and
-notifications uses an already installed and configured notifier helper. If
+reminders uses EventKit reminders, notes uses Notes automation, clock-alarms
+uses Accessibility plus System Events automation, and notifications uses an
+already installed and configured notifier helper. If
 the helper is not configured or cannot be resolved, the notifications request
 reports an unavailable `UNKNOWN` diagnostic; TASK-005 does not create,
 install, sign, package, or launch `AppleGatewayNotifier.app`. Non-requestable
@@ -264,16 +264,15 @@ validation material, which can invalidate old download keys. Both modes
 leave the cache root directory itself in place and report a JSON envelope
 with counts of removed files/directories.
 
-## Alarm Bridge Setup
+## Clock Alarm Automation Setup
 
-Clock-alarm mutations require the bridge shortcuts to be installed once:
+Clock-alarm operations require Accessibility and Automation permissions for
+the responsible terminal or installed executable:
 
 ```bash
-open packaging/shortcuts/apple-gateway-get-alarms.shortcut   # after export
-scripts/live-clock-alarms-check.sh                           # list-only readiness
-apple-gateway permissions status    # reports shortcutsClockBridge
+apple-gateway permissions request --domain clock-alarms
+scripts/live-clock-alarms-check.sh
+apple-gateway permissions status    # reports clockAutomation
 ```
 
-See `design-alarms.md`, `packaging/shortcuts/README.md`, and
-`packaging/shortcuts/SOURCE.md`. If the exported `.shortcut` files are not
-present yet, create them in Shortcuts.app from the source build sheet first.
+See `design-alarms.md` for the self-contained Clock.app accessibility adapter.

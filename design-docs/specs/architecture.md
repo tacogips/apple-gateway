@@ -65,7 +65,7 @@ Sources/AppleGatewayCore/
   Domains/
     CalendarKitAdapter/   EventKit events, calendars, EKAlarm
     RemindersAdapter/     EventKit reminders, EKAlarm
-    ClockAlarmsAdapter/   `shortcuts run` bridge to Clock app
+    ClockAlarmsAdapter/   JXA accessibility automation for Clock.app
     NotesAdapter/         Apple Events (JXA) to Notes.app
     MailAdapter/          Envelope Index SQLite + .emlx parsing
     NotificationsAdapter/ notifier helper driver + usernoted DB reader
@@ -106,4 +106,3 @@ Foundation, CryptoKit for FileStore download-key MACs, EventKit,
 - Signed and notarized Cask DMGs under `dist/homebrew-cask/`
 - Both install the two CLIs and `libexec/AppleGatewayNotifier.app`; the
   cask variant ships Developer ID signed binaries (stable TCC identity)
-- `packaging/shortcuts/` ships the Clock-alarm bridge `.shortcut` files

@@ -185,7 +185,7 @@ private struct MailGraphQLPermissionsProvider: PermissionsStatusProviding {
       mailFullDiskAccess: PermissionFieldStatus(state: .granted),
       notificationsHelper: PermissionFieldStatus(state: .unknown),
       notificationDbFullDiskAccess: PermissionFieldStatus(state: .unknown),
-      shortcutsClockBridge: PermissionFieldStatus(state: .unknown)
+      clockAutomation: PermissionFieldStatus(state: .unknown)
     )
   }
 }

@@ -24,8 +24,6 @@ import Testing
     .mailboxNotFound: 5,
     .messageNotFound: 5,
     .mailStoreNotFound: 5,
-    .shortcutNotInstalled: 6,
-    .shortcutActionUnsupported: 6,
     .notifierHelperMissing: 6,
     .notificationDBUnavailable: 6,
     .appleEventTimeout: 6,
