@@ -326,6 +326,40 @@ import Testing
   }
 }
 
+@Test func detachedMasterIdExternalIdentityGroupsRidOccurrencesAsOneSeries() {
+  let status = EventOccurrenceSeriesClassifier.status(
+    identities: [
+      selectorIdentity(
+        eventIdentifiers: ["calendar-uid:series"],
+        calendarItemIdentifiers: ["master-calendar-item"]
+      ),
+      selectorIdentity(
+        eventIdentifiers: ["calendar-uid:series/RID=807279718"],
+        calendarItemIdentifiers: ["detached-calendar-item"]
+      )
+    ]
+  )
+
+  #expect(status == .unique)
+}
+
+@Test func detachedMasterIdExternalIdentityRejectsDistinctSeries() {
+  let status = EventOccurrenceSeriesClassifier.status(
+    identities: [
+      selectorIdentity(
+        eventIdentifiers: ["calendar-uid:series-a"],
+        calendarItemIdentifiers: ["calendar-item-a"]
+      ),
+      selectorIdentity(
+        eventIdentifiers: ["calendar-uid:series-b"],
+        calendarItemIdentifiers: ["calendar-item-b"]
+      )
+    ]
+  )
+
+  #expect(status == .ambiguous)
+}
+
 @Test func detachedMasterIdResolverStopsAtCandidateLimit() throws {
   let occurrenceDate = try selectorDate("2026-07-10T09:00:00Z")
   let narrowWindow = EventOccurrenceSearchWindowPlanner.narrowWindow(around: occurrenceDate)

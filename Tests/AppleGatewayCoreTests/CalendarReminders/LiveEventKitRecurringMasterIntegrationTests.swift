@@ -56,6 +56,37 @@ func liveEventKitRecurringMasterScratchCalendarRoundTrip() throws {
     )
   )
   let masterId = created.id
+  var recurrenceCalendar = Calendar(identifier: .gregorian)
+  recurrenceCalendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+  let firstWeekday = recurrenceCalendar.component(.weekday, from: startDate)
+  let secondWeekday = firstWeekday == 7 ? 1 : firstWeekday + 1
+  let weeklyEndDate = startDate.addingTimeInterval(28 * day)
+  let weekly = try service.createEvent(
+    CreateEventInput(
+      calendarId: scratchCalendar.id,
+      title: "Weekly recurrence persistence integration",
+      startDate: startDate.addingTimeInterval(1_800),
+      endDate: startDate.addingTimeInterval(5_400),
+      timeZone: "UTC",
+      recurrenceRules: [
+        RecurrenceRule(
+          frequency: .weekly,
+          interval: 1,
+          daysOfWeek: [firstWeekday, secondWeekday],
+          endDate: weeklyEndDate
+        )
+      ]
+    )
+  )
+  let persistedWeekly = try #require(
+    try adapter.event(eventId: weekly.id, occurrenceDate: nil)
+  )
+  let persistedWeeklyRule = try #require(persistedWeekly.recurrenceRules.first)
+  #expect(persistedWeeklyRule.frequency == .weekly)
+  #expect(persistedWeeklyRule.interval == 1)
+  #expect(Set(persistedWeeklyRule.daysOfWeek) == [firstWeekday, secondWeekday])
+  #expect(persistedWeeklyRule.endDate == weeklyEndDate)
+
   let deletedOccurrenceDate = startDate.addingTimeInterval(day)
   let detachedOccurrenceDate = startDate.addingTimeInterval(2 * day)
   let retainedOccurrenceDate = startDate.addingTimeInterval(3 * day)

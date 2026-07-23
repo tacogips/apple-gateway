@@ -97,6 +97,72 @@ enum EventOccurrenceExternalIdentityStatus: Equatable, Sendable {
   case unavailable
 }
 
+enum EventOccurrenceSeriesClassifier {
+  // EventKit can return a master and its detached /RID= occurrences for one
+  // external identifier. Merge connected, normalized local identities before
+  // deciding whether that external identifier refers to more than one series.
+  static func status(
+    identities: [EventOccurrenceTargetIdentity]
+  ) -> EventOccurrenceExternalIdentityStatus {
+    guard !identities.isEmpty else {
+      return .unavailable
+    }
+
+    var series: [EventOccurrenceTargetIdentity] = []
+    for identity in identities.map(normalizedLocalIdentity) {
+      guard !identity.eventIdentifiers.isEmpty || !identity.calendarItemIdentifiers.isEmpty else {
+        return .ambiguous
+      }
+
+      var mergedIdentity = identity
+      while let matchingIndex = series.firstIndex(where: {
+        sharesLocalIdentity($0, mergedIdentity)
+      }) {
+        mergedIdentity = merge(series.remove(at: matchingIndex), mergedIdentity)
+      }
+      series.append(mergedIdentity)
+    }
+    return series.count == 1 ? .unique : .ambiguous
+  }
+
+  private static func normalizedLocalIdentity(
+    _ identity: EventOccurrenceTargetIdentity
+  ) -> EventOccurrenceTargetIdentity {
+    EventOccurrenceTargetIdentity(
+      eventIdentifiers: Set(
+        identity.eventIdentifiers.map(EventOccurrenceTargetSelector.normalizedSeriesIdentifier)
+      ),
+      calendarItemIdentifiers: Set(
+        identity.calendarItemIdentifiers.map(
+          EventOccurrenceTargetSelector.normalizedSeriesIdentifier
+        )
+      ),
+      externalIdentifiers: []
+    )
+  }
+
+  private static func sharesLocalIdentity(
+    _ lhs: EventOccurrenceTargetIdentity,
+    _ rhs: EventOccurrenceTargetIdentity
+  ) -> Bool {
+    !lhs.eventIdentifiers.isDisjoint(with: rhs.eventIdentifiers)
+      || !lhs.calendarItemIdentifiers.isDisjoint(with: rhs.calendarItemIdentifiers)
+  }
+
+  private static func merge(
+    _ lhs: EventOccurrenceTargetIdentity,
+    _ rhs: EventOccurrenceTargetIdentity
+  ) -> EventOccurrenceTargetIdentity {
+    EventOccurrenceTargetIdentity(
+      eventIdentifiers: lhs.eventIdentifiers.union(rhs.eventIdentifiers),
+      calendarItemIdentifiers: lhs.calendarItemIdentifiers.union(
+        rhs.calendarItemIdentifiers
+      ),
+      externalIdentifiers: []
+    )
+  }
+}
+
 struct EventOccurrenceSearchPolicy: Equatable, Sendable {
   let maximumWindowCount: Int
   let maximumCandidateCount: Int
@@ -515,11 +581,6 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
     }
   }
 
-  private struct EventOccurrenceLocalSeriesIdentity: Hashable {
-    let eventIdentifier: String
-    let calendarItemIdentifier: String
-  }
-
   private func externalIdentityStatus(
     acceptedIdentity: EventOccurrenceTargetIdentity,
     calendar: EKCalendar
@@ -527,7 +588,7 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
     guard !acceptedIdentity.externalIdentifiers.isEmpty else {
       return .unavailable
     }
-    let matchingSeries = Set<EventOccurrenceLocalSeriesIdentity>(
+    let matchingIdentities: [EventOccurrenceTargetIdentity] =
       acceptedIdentity.externalIdentifiers.flatMap { externalIdentifier in
         store.calendarItems(withExternalIdentifier: externalIdentifier).compactMap { item in
           guard
@@ -536,21 +597,12 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
           else {
             return nil
           }
-          return EventOccurrenceLocalSeriesIdentity(
-            eventIdentifier: event.eventIdentifier,
-            calendarItemIdentifier: event.calendarItemIdentifier
-          )
+          return eventIdentity(event)
         }
       }
+    return EventOccurrenceSeriesClassifier.status(
+      identities: matchingIdentities
     )
-    switch matchingSeries.count {
-    case 1:
-      return .unique
-    case 2...:
-      return .ambiguous
-    default:
-      return .unavailable
-    }
   }
 
   private func occurrenceCandidates(
