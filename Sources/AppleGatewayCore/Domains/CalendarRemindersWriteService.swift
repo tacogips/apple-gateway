@@ -57,6 +57,12 @@ public struct CalendarWriteService: Sendable {
   }
 
   public func updateEvent(_ input: UpdateEventInput) throws -> CalendarEvent {
+    if input.recurrenceRules != nil, input.span == .thisEvent, input.occurrenceDate != nil {
+      throw AppleGatewayError(
+        code: .invalidArgument,
+        message: "Recurrence rules cannot be changed for a single occurrence; use span FUTURE_EVENTS"
+      )
+    }
     let current = try existingEvent(id: input.eventId, occurrenceDate: input.occurrenceDate)
     let targetCalendarId = input.calendarId ?? current.calendarId
     let targetCalendar = try calendar(id: targetCalendarId, entityType: .event)
@@ -64,9 +70,11 @@ public struct CalendarWriteService: Sendable {
     let updated = apply(input, to: current, targetCalendarId: targetCalendarId)
     return try calendarWriter.updateEvent(
       CalendarEventSaveRequest(
+        eventId: input.eventId,
         event: updated,
         span: input.span,
-        occurrenceDate: input.occurrenceDate
+        occurrenceDate: input.occurrenceDate,
+        updatesRecurrenceRules: input.recurrenceRules != nil
       )
     )
   }

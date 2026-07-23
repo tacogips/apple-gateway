@@ -1,6 +1,218 @@
 import EventKit
 import Foundation
 
+struct EventOccurrenceTargetIdentity: Equatable, Sendable {
+  let eventIdentifiers: Set<String>
+  let calendarItemIdentifiers: Set<String>
+  let externalIdentifiers: Set<String>
+}
+
+struct EventOccurrenceTargetCandidate: Equatable, Sendable {
+  let identity: EventOccurrenceTargetIdentity
+  let calendarId: String
+  let occurrenceDate: Date?
+}
+
+enum EventOccurrenceIdentityMatch: Equatable, Sendable {
+  case local
+  case external
+}
+
+enum EventOccurrenceTargetSelection: Equatable, Sendable {
+  case selected(index: Int, match: EventOccurrenceIdentityMatch)
+  case notFound
+  case ambiguous
+}
+
+enum EventOccurrenceTargetSelector {
+  // EventKit derives detached-occurrence identifiers by appending "/RID=<n>"
+  // to the master's identifier, so series membership must compare the
+  // RID-stripped form on both sides.
+  static func normalizedSeriesIdentifier(_ identifier: String) -> String {
+    guard let ridRange = identifier.range(of: "/RID=") else {
+      return identifier
+    }
+    return String(identifier[..<ridRange.lowerBound])
+  }
+
+  private static func sharesSeriesIdentity(_ lhs: Set<String>, _ rhs: Set<String>) -> Bool {
+    guard !lhs.isEmpty, !rhs.isEmpty else {
+      return false
+    }
+    return !Set(lhs.map(normalizedSeriesIdentifier))
+      .isDisjoint(with: Set(rhs.map(normalizedSeriesIdentifier)))
+  }
+
+  static func select(
+    acceptedIdentity: EventOccurrenceTargetIdentity,
+    calendarId: String,
+    occurrenceDate: Date,
+    candidates: [EventOccurrenceTargetCandidate]
+  ) -> EventOccurrenceTargetSelection {
+    let eligibleCandidates = candidates.enumerated().filter { _, candidate in
+      candidate.calendarId == calendarId
+        && candidate.occurrenceDate == occurrenceDate
+    }
+    let localMatches = eligibleCandidates.filter { _, candidate in
+      sharesSeriesIdentity(
+        candidate.identity.eventIdentifiers,
+        acceptedIdentity.eventIdentifiers
+      )
+        || sharesSeriesIdentity(
+          candidate.identity.calendarItemIdentifiers,
+          acceptedIdentity.calendarItemIdentifiers
+        )
+    }
+    if localMatches.count > 1 {
+      return .ambiguous
+    }
+    if let localMatch = localMatches.first {
+      return .selected(index: localMatch.offset, match: .local)
+    }
+
+    let externalMatches = eligibleCandidates.filter { _, candidate in
+      sharesSeriesIdentity(
+        candidate.identity.externalIdentifiers,
+        acceptedIdentity.externalIdentifiers
+      )
+    }
+    if externalMatches.count > 1 {
+      return .ambiguous
+    }
+    if let externalMatch = externalMatches.first {
+      return .selected(index: externalMatch.offset, match: .external)
+    }
+    return .notFound
+  }
+}
+
+struct EventOccurrenceSearchWindow: Equatable, Sendable {
+  let startDate: Date
+  let endDate: Date
+}
+
+enum EventOccurrenceExternalIdentityStatus: Equatable, Sendable {
+  case unique
+  case ambiguous
+  case unavailable
+}
+
+struct EventOccurrenceSearchPolicy: Equatable, Sendable {
+  let maximumWindowCount: Int
+  let maximumCandidateCount: Int
+
+  static let defaultValue = EventOccurrenceSearchPolicy(
+    maximumWindowCount: 49,
+    maximumCandidateCount: 10_000
+  )
+}
+
+struct EventOccurrenceSearchCandidate<Value> {
+  let target: EventOccurrenceTargetCandidate
+  let value: Value
+}
+
+enum EventOccurrenceResolution<Value> {
+  case selected(Value)
+  case notFound
+  case ambiguous
+  case resourceLimitExceeded
+  case cancelled
+}
+
+extension EventOccurrenceResolution: Sendable where Value: Sendable {}
+
+enum EventOccurrenceResolver {
+  static func resolve<Value>(
+    acceptedIdentity: EventOccurrenceTargetIdentity,
+    calendarId: String,
+    occurrenceDate: Date,
+    externalIdentityStatus: EventOccurrenceExternalIdentityStatus,
+    windows: [EventOccurrenceSearchWindow],
+    policy: EventOccurrenceSearchPolicy = .defaultValue,
+    candidatesInWindow: (EventOccurrenceSearchWindow) -> [EventOccurrenceSearchCandidate<Value>]
+  ) -> EventOccurrenceResolution<Value> {
+    var candidateCount = 0
+    for (windowIndex, window) in windows.enumerated() {
+      if Task.isCancelled {
+        return .cancelled
+      }
+      guard windowIndex < policy.maximumWindowCount else {
+        return .resourceLimitExceeded
+      }
+      let candidates = candidatesInWindow(window)
+      candidateCount += candidates.count
+      guard candidateCount <= policy.maximumCandidateCount else {
+        return .resourceLimitExceeded
+      }
+
+      switch EventOccurrenceTargetSelector.select(
+        acceptedIdentity: acceptedIdentity,
+        calendarId: calendarId,
+        occurrenceDate: occurrenceDate,
+        candidates: candidates.map(\.target)
+      ) {
+      case let .selected(index, .local):
+        return .selected(candidates[index].value)
+      case let .selected(index, .external):
+        switch externalIdentityStatus {
+        case .unique:
+          return .selected(candidates[index].value)
+        case .ambiguous:
+          return .ambiguous
+        case .unavailable:
+          return .notFound
+        }
+      case .ambiguous:
+        return .ambiguous
+      case .notFound:
+        continue
+      }
+    }
+    return .notFound
+  }
+}
+
+enum EventOccurrenceSearchWindowPlanner {
+  static func narrowWindow(around occurrenceDate: Date) -> EventOccurrenceSearchWindow {
+    EventOccurrenceSearchWindow(
+      startDate: occurrenceDate.addingTimeInterval(-86_400),
+      endDate: occurrenceDate.addingTimeInterval(86_400)
+    )
+  }
+
+  static func fallbackWindows(around occurrenceDate: Date) -> [EventOccurrenceSearchWindow] {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+    let lowerBound = calendar.date(byAdding: .year, value: -2, to: occurrenceDate)
+      ?? occurrenceDate.addingTimeInterval(-63_072_000)
+    let upperBound = calendar.date(byAdding: .year, value: 2, to: occurrenceDate)
+      ?? occurrenceDate.addingTimeInterval(63_072_000)
+    let narrowWindow = narrowWindow(around: occurrenceDate)
+    var lowerCursor = narrowWindow.startDate
+    var upperCursor = narrowWindow.endDate
+    var windows: [EventOccurrenceSearchWindow] = []
+
+    while lowerCursor > lowerBound || upperCursor < upperBound {
+      if lowerCursor > lowerBound {
+        let previousMonth = calendar.date(byAdding: .month, value: -1, to: lowerCursor)
+          ?? lowerCursor.addingTimeInterval(-2_678_400)
+        let startDate = max(lowerBound, previousMonth)
+        windows.append(EventOccurrenceSearchWindow(startDate: startDate, endDate: lowerCursor))
+        lowerCursor = startDate
+      }
+      if upperCursor < upperBound {
+        let nextMonth = calendar.date(byAdding: .month, value: 1, to: upperCursor)
+          ?? upperCursor.addingTimeInterval(2_678_400)
+        let endDate = min(upperBound, nextMonth)
+        windows.append(EventOccurrenceSearchWindow(startDate: upperCursor, endDate: endDate))
+        upperCursor = endDate
+      }
+    }
+    return windows
+  }
+}
+
 public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, CalendarWriting,
   RemindersProviding, RemindersWriting, @unchecked Sendable {
   private let store: EKEventStore
@@ -41,11 +253,8 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
   public func event(eventId: String, occurrenceDate: Date?) throws -> CalendarEvent? {
     try lock.withLock {
       try session.ensureReadAccess(for: .calendar)
-      if let occurrenceDate {
-        return try eventOccurrence(eventId: eventId, occurrenceDate: occurrenceDate)
-          .map(EventKitCalendarReminderMapper.calendarEvent)
-      }
-      return store.event(withIdentifier: eventId).map(EventKitCalendarReminderMapper.calendarEvent)
+      return try resolveEvent(eventId: eventId, occurrenceDate: occurrenceDate)
+        .map(EventKitCalendarReminderMapper.calendarEvent)
     }
   }
 
@@ -86,9 +295,14 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
   public func updateEvent(_ request: CalendarEventSaveRequest) throws -> CalendarEvent {
     try lock.withLock {
       try session.ensureReadAccess(for: .calendar)
-      let ekEvent = try existingEvent(id: request.event.id, occurrenceDate: request.occurrenceDate)
+      let ekEvent = try existingEvent(id: request.eventId, occurrenceDate: request.occurrenceDate)
       let calendar = try eventCalendar(id: request.event.calendarId)
-      try EventKitCalendarReminderMapper.apply(request.event, to: ekEvent, calendar: calendar)
+      try EventKitCalendarReminderMapper.apply(
+        request.event,
+        to: ekEvent,
+        calendar: calendar,
+        includeRecurrenceRules: request.updatesRecurrenceRules
+      )
       try store.save(
         ekEvent,
         span: EventKitCalendarReminderMapper.ekSpan(request.span),
@@ -251,22 +465,136 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
   }
 
   private func existingEvent(id: String, occurrenceDate: Date?) throws -> EKEvent {
-    if let occurrenceDate, let event = try eventOccurrence(eventId: id, occurrenceDate: occurrenceDate) {
-      return event
-    }
-    if let event = store.event(withIdentifier: id) {
+    if let event = try resolveEvent(eventId: id, occurrenceDate: occurrenceDate) {
       return event
     }
     throw AppleGatewayError(code: .eventNotFound, message: "Event not found", details: ["eventId": id])
   }
 
-  private func eventOccurrence(eventId: String, occurrenceDate: Date) throws -> EKEvent? {
-    let startDate = occurrenceDate.addingTimeInterval(-86_400)
-    let endDate = occurrenceDate.addingTimeInterval(86_400)
-    let predicate = store.predicateForEvents(withStart: startDate, end: endDate, calendars: nil)
-    return store.events(matching: predicate).first { event in
-      event.eventIdentifier == eventId && event.occurrenceDate == occurrenceDate
+  private func resolveEvent(eventId: String, occurrenceDate: Date?) throws -> EKEvent? {
+    guard let resolved = store.event(withIdentifier: eventId) else {
+      return nil
     }
+    guard let occurrenceDate else {
+      return resolved
+    }
+
+    let acceptedIdentity = eventIdentity(resolved, including: eventId)
+    let windows = [EventOccurrenceSearchWindowPlanner.narrowWindow(around: occurrenceDate)]
+      + EventOccurrenceSearchWindowPlanner.fallbackWindows(around: occurrenceDate)
+    let resolution = EventOccurrenceResolver.resolve(
+      acceptedIdentity: acceptedIdentity,
+      calendarId: resolved.calendar.calendarIdentifier,
+      occurrenceDate: occurrenceDate,
+      externalIdentityStatus: externalIdentityStatus(
+        acceptedIdentity: acceptedIdentity,
+        calendar: resolved.calendar
+      ),
+      windows: windows,
+      candidatesInWindow: { window in
+        self.occurrenceCandidates(calendar: resolved.calendar, window: window)
+      }
+    )
+    switch resolution {
+    case let .selected(event):
+      return event
+    case .notFound, .ambiguous:
+      return nil
+    case .cancelled:
+      throw CancellationError()
+    case .resourceLimitExceeded:
+      throw AppleGatewayError(
+        code: .unexpectedError,
+        message: "Event occurrence lookup exceeded safe search limits",
+        details: [
+          "eventId": eventId,
+          "maximumWindowCount": String(EventOccurrenceSearchPolicy.defaultValue.maximumWindowCount),
+          "maximumCandidateCount": String(EventOccurrenceSearchPolicy.defaultValue.maximumCandidateCount)
+        ]
+      )
+    }
+  }
+
+  private struct EventOccurrenceLocalSeriesIdentity: Hashable {
+    let eventIdentifier: String
+    let calendarItemIdentifier: String
+  }
+
+  private func externalIdentityStatus(
+    acceptedIdentity: EventOccurrenceTargetIdentity,
+    calendar: EKCalendar
+  ) -> EventOccurrenceExternalIdentityStatus {
+    guard !acceptedIdentity.externalIdentifiers.isEmpty else {
+      return .unavailable
+    }
+    let matchingSeries = Set<EventOccurrenceLocalSeriesIdentity>(
+      acceptedIdentity.externalIdentifiers.flatMap { externalIdentifier in
+        store.calendarItems(withExternalIdentifier: externalIdentifier).compactMap { item in
+          guard
+            let event = item as? EKEvent,
+            event.calendar.calendarIdentifier == calendar.calendarIdentifier
+          else {
+            return nil
+          }
+          return EventOccurrenceLocalSeriesIdentity(
+            eventIdentifier: event.eventIdentifier,
+            calendarItemIdentifier: event.calendarItemIdentifier
+          )
+        }
+      }
+    )
+    switch matchingSeries.count {
+    case 1:
+      return .unique
+    case 2...:
+      return .ambiguous
+    default:
+      return .unavailable
+    }
+  }
+
+  private func occurrenceCandidates(
+    calendar: EKCalendar,
+    window: EventOccurrenceSearchWindow
+  ) -> [EventOccurrenceSearchCandidate<EKEvent>] {
+    let predicate = store.predicateForEvents(
+      withStart: window.startDate,
+      end: window.endDate,
+      calendars: [calendar]
+    )
+    return store.events(matching: predicate).map { event in
+      EventOccurrenceSearchCandidate(
+        target: EventOccurrenceTargetCandidate(
+          identity: eventIdentity(event),
+          calendarId: event.calendar.calendarIdentifier,
+          occurrenceDate: event.occurrenceDate
+        ),
+        value: event
+      )
+    }
+  }
+
+  private func eventIdentity(
+    _ event: EKEvent,
+    including fallbackEventIdentifier: String? = nil
+  ) -> EventOccurrenceTargetIdentity {
+    EventOccurrenceTargetIdentity(
+      eventIdentifiers: nonEmptyIdentitySet([
+        fallbackEventIdentifier,
+        event.eventIdentifier
+      ]),
+      calendarItemIdentifiers: nonEmptyIdentitySet([event.calendarItemIdentifier]),
+      externalIdentifiers: nonEmptyIdentitySet([event.calendarItemExternalIdentifier])
+    )
+  }
+
+  private func nonEmptyIdentitySet(_ identities: [String?]) -> Set<String> {
+    Set(identities.compactMap { identity in
+      guard let identity, !identity.isEmpty else {
+        return nil
+      }
+      return identity
+    })
   }
 
   private func existingReminder(id: String) throws -> EKReminder {
