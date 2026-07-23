@@ -68,7 +68,12 @@ enum EventKitCalendarReminderMapper {
     )
   }
 
-  static func apply(_ event: CalendarEvent, to ekEvent: EKEvent, calendar: EKCalendar) throws {
+  static func apply(
+    _ event: CalendarEvent,
+    to ekEvent: EKEvent,
+    calendar: EKCalendar,
+    includeRecurrenceRules: Bool = true
+  ) throws {
     ekEvent.calendar = calendar
     ekEvent.title = event.title
     ekEvent.notes = event.notes
@@ -81,7 +86,9 @@ enum EventKitCalendarReminderMapper {
       ekEvent.availability = ekEventAvailability(event.availability)
     }
     ekEvent.alarms = try event.alarms.map(makeAlarm)
-    ekEvent.recurrenceRules = try event.recurrenceRules.map(makeRecurrenceRule)
+    if includeRecurrenceRules {
+      ekEvent.recurrenceRules = try event.recurrenceRules.map(makeRecurrenceRule)
+    }
     ekEvent.isAllDay = event.isAllDay
   }
 
@@ -134,12 +141,12 @@ enum EventKitCalendarReminderMapper {
     return EKRecurrenceRule(
       recurrenceWith: ekRecurrenceFrequency(rule.frequency),
       interval: rule.interval,
-      daysOfTheWeek: rule.daysOfWeek.map(makeDayOfWeek),
-      daysOfTheMonth: rule.daysOfMonth.map(NSNumber.init(value:)),
-      monthsOfTheYear: rule.monthsOfYear.map(NSNumber.init(value:)),
-      weeksOfTheYear: rule.weeksOfYear.map(NSNumber.init(value:)),
-      daysOfTheYear: rule.daysOfYear.map(NSNumber.init(value:)),
-      setPositions: rule.setPositions.map(NSNumber.init(value:)),
+      daysOfTheWeek: try nilIfEmpty(rule.daysOfWeek.map(makeDayOfWeek)),
+      daysOfTheMonth: nilIfEmpty(rule.daysOfMonth.map(NSNumber.init(value:))),
+      monthsOfTheYear: nilIfEmpty(rule.monthsOfYear.map(NSNumber.init(value:))),
+      weeksOfTheYear: nilIfEmpty(rule.weeksOfYear.map(NSNumber.init(value:))),
+      daysOfTheYear: nilIfEmpty(rule.daysOfYear.map(NSNumber.init(value:))),
+      setPositions: nilIfEmpty(rule.setPositions.map(NSNumber.init(value:))),
       end: end
     )
   }
@@ -247,8 +254,19 @@ enum EventKitCalendarReminderMapper {
     )
   }
 
-  private static func makeDayOfWeek(_ value: Int) -> EKRecurrenceDayOfWeek {
-    EKRecurrenceDayOfWeek(EKWeekday(rawValue: value) ?? .sunday)
+  private static func makeDayOfWeek(_ value: Int) throws -> EKRecurrenceDayOfWeek {
+    guard (1...7).contains(value), let weekday = EKWeekday(rawValue: value) else {
+      throw AppleGatewayError(
+        code: .invalidArgument,
+        message: "Recurrence weekday must be between 1 and 7",
+        details: ["dayOfWeek": String(value)]
+      )
+    }
+    return EKRecurrenceDayOfWeek(weekday)
+  }
+
+  private static func nilIfEmpty<Element>(_ values: [Element]) -> [Element]? {
+    values.isEmpty ? nil : values
   }
 
   private static func recurrenceEnd(endDate: Date?, occurrenceCount: Int?) throws -> EKRecurrenceEnd? {

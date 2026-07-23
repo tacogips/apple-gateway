@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 struct GraphQLVariableResolver {
@@ -175,8 +176,8 @@ extension GraphQLValue {
     switch object {
     case is NSNull:
       return .null
-    case let value as Bool:
-      return .bool(value)
+    case let value as NSNumber where CFGetTypeID(value) == CFBooleanGetTypeID():
+      return .bool(value.boolValue)
     case let value as Int:
       return .int(value)
     case let value as Double:

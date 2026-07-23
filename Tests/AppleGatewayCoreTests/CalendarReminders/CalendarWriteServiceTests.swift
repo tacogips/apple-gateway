@@ -123,6 +123,137 @@ import Testing
   #expect(calendarWriter.deletedEvents.last?.occurrenceDate == occurrence)
 }
 
+// Exact regression test name is part of the issue #2 verification contract.
+// swiftlint:disable:next inclusive_language
+@Test func detachedMasterIdUpdateAndDeletePreserveSpan() throws {
+  let seriesId = "master-event-id"
+  let occurrence = try date("2026-07-10T09:00:00Z")
+  let detached = event(
+    id: "detached-event-id",
+    calendarId: "work",
+    title: "Detached",
+    startDate: occurrence,
+    recurrenceRules: [RecurrenceRule(frequency: .weekly)],
+    occurrenceDate: occurrence,
+    isDetached: true
+  )
+  let calendarProvider = WriteCalendarProvider(
+    calendars: [calendar(id: "work", entityType: .event, allowsModifications: true)],
+    eventResolver: { eventId, occurrenceDate in
+      eventId == seriesId && occurrenceDate == occurrence ? detached : nil
+    }
+  )
+  let calendarWriter = WriteCalendarWriter()
+  let service = writeService(calendarProvider: calendarProvider, calendarWriter: calendarWriter)
+
+  _ = try service.updateEvent(
+    UpdateEventInput(
+      eventId: seriesId,
+      occurrenceDate: occurrence,
+      span: .thisEvent,
+      title: "Updated detached occurrence"
+    )
+  )
+  _ = try service.deleteEvent(
+    eventId: seriesId,
+    span: .thisEvent,
+    occurrenceDate: occurrence
+  )
+  _ = try service.deleteEvent(
+    eventId: seriesId,
+    span: .futureEvents,
+    occurrenceDate: occurrence
+  )
+
+  #expect(calendarProvider.eventRequests.count == 3)
+  #expect(calendarProvider.eventRequests.allSatisfy {
+    $0.eventId == seriesId && $0.occurrenceDate == occurrence
+  })
+  #expect(calendarWriter.updatedEvents.last?.eventId == seriesId)
+  #expect(calendarWriter.updatedEvents.last?.event.id == "detached-event-id")
+  #expect(calendarWriter.updatedEvents.last?.span == .thisEvent)
+  #expect(calendarWriter.updatedEvents.last?.occurrenceDate == occurrence)
+  #expect(calendarWriter.deletedEvents.map(\.eventId) == [seriesId, seriesId])
+  #expect(calendarWriter.deletedEvents.map(\.span) == [.thisEvent, .futureEvents])
+  #expect(calendarWriter.deletedEvents.allSatisfy { $0.occurrenceDate == occurrence })
+
+  let missingProvider = WriteCalendarProvider(
+    calendars: [calendar(id: "work", entityType: .event, allowsModifications: true)],
+    eventResolver: { _, _ in nil }
+  )
+  let missingWriter = WriteCalendarWriter()
+  let missingService = writeService(
+    calendarProvider: missingProvider,
+    calendarWriter: missingWriter
+  )
+  do {
+    _ = try missingService.deleteEvent(
+      eventId: seriesId,
+      span: .thisEvent,
+      occurrenceDate: occurrence
+    )
+    Issue.record("Expected dated detached-occurrence miss")
+  } catch let error as AppleGatewayError {
+    #expect(error.code == .eventNotFound)
+  }
+  #expect(missingWriter.deletedEvents.isEmpty)
+}
+
+// Exact regression test name is part of the issue #2 verification contract.
+// swiftlint:disable:next inclusive_language
+@Test func detachedMasterIdOccurrenceUpdateDoesNotRewriteSeriesRules() throws {
+  let seriesId = "master-event-id"
+  let occurrence = try date("2026-07-10T09:00:00Z")
+  let seriesEvent = event(
+    id: seriesId,
+    calendarId: "work",
+    title: "Series",
+    startDate: occurrence,
+    recurrenceRules: [RecurrenceRule(frequency: .weekly)]
+  )
+  let calendarProvider = WriteCalendarProvider(
+    calendars: [calendar(id: "work", entityType: .event, allowsModifications: true)],
+    eventResolver: { eventId, _ in
+      eventId == seriesId ? seriesEvent : nil
+    }
+  )
+  let calendarWriter = WriteCalendarWriter()
+  let service = writeService(calendarProvider: calendarProvider, calendarWriter: calendarWriter)
+
+  _ = try service.updateEvent(
+    UpdateEventInput(
+      eventId: seriesId,
+      occurrenceDate: occurrence,
+      span: .thisEvent,
+      title: "Detach without touching series rules"
+    )
+  )
+  #expect(calendarWriter.updatedEvents.last?.updatesRecurrenceRules == false)
+
+  _ = try service.updateEvent(
+    UpdateEventInput(
+      eventId: seriesId,
+      span: .futureEvents,
+      recurrenceRules: [RecurrenceRule(frequency: .monthly)]
+    )
+  )
+  #expect(calendarWriter.updatedEvents.last?.updatesRecurrenceRules == true)
+
+  do {
+    _ = try service.updateEvent(
+      UpdateEventInput(
+        eventId: seriesId,
+        occurrenceDate: occurrence,
+        span: .thisEvent,
+        recurrenceRules: [RecurrenceRule(frequency: .monthly)]
+      )
+    )
+    Issue.record("Expected single-occurrence recurrence-rule updates to be rejected")
+  } catch let error as AppleGatewayError {
+    #expect(error.code == .invalidArgument)
+  }
+}
+
 @Test func updateReminderWithOmittedFieldsLeavesExistingValuesUnchanged() throws {
   let remindersProvider = WriteRemindersProvider(
     lists: [calendar(id: "list", entityType: .reminder, allowsModifications: true)],
@@ -205,10 +336,17 @@ import Testing
 private final class WriteCalendarProvider: CalendarProviding, @unchecked Sendable {
   var calendarsValue: [GatewayCalendar]
   var eventsValue: [CalendarEvent]
+  private(set) var eventRequests: [WriteEventLookupRequest] = []
+  private let eventResolver: ((String, Date?) -> CalendarEvent?)?
 
-  init(calendars: [GatewayCalendar] = [], events: [CalendarEvent] = []) {
+  init(
+    calendars: [GatewayCalendar] = [],
+    events: [CalendarEvent] = [],
+    eventResolver: ((String, Date?) -> CalendarEvent?)? = nil
+  ) {
     calendarsValue = calendars
     eventsValue = events
+    self.eventResolver = eventResolver
   }
 
   func calendars(entityType: CalendarEntityType?) throws -> [GatewayCalendar] {
@@ -220,8 +358,17 @@ private final class WriteCalendarProvider: CalendarProviding, @unchecked Sendabl
   }
 
   func event(eventId: String, occurrenceDate: Date?) throws -> CalendarEvent? {
-    eventsValue.first { $0.id == eventId }
+    eventRequests.append(WriteEventLookupRequest(eventId: eventId, occurrenceDate: occurrenceDate))
+    if let eventResolver {
+      return eventResolver(eventId, occurrenceDate)
+    }
+    return eventsValue.first { $0.id == eventId }
   }
+}
+
+private struct WriteEventLookupRequest {
+  let eventId: String
+  let occurrenceDate: Date?
 }
 
 private final class WriteCalendarWriter: CalendarWriting, @unchecked Sendable {
@@ -350,7 +497,9 @@ private func event(
   notes: String? = nil,
   startDate: Date,
   alarms: [Alarm] = [],
-  recurrenceRules: [RecurrenceRule] = []
+  recurrenceRules: [RecurrenceRule] = [],
+  occurrenceDate: Date? = nil,
+  isDetached: Bool = false
 ) -> CalendarEvent {
   CalendarEvent(
     id: id,
@@ -361,7 +510,9 @@ private func event(
     endDate: startDate.addingTimeInterval(3600),
     alarms: alarms,
     recurrenceRules: recurrenceRules,
-    isRecurring: !recurrenceRules.isEmpty
+    isRecurring: !recurrenceRules.isEmpty,
+    occurrenceDate: occurrenceDate,
+    isDetached: isDetached
   )
 }
 

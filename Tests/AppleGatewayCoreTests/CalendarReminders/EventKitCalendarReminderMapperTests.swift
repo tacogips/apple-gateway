@@ -163,6 +163,48 @@ import Testing
   #expect(mapped.occurrenceCount == nil)
 }
 
+@Test func weeklyRecurrenceRuleMappingUsesNilForUnusedComponents() throws {
+  let endDate = try date("2026-12-31T00:00:00Z")
+  let rule = RecurrenceRule(
+    frequency: .weekly,
+    interval: 1,
+    daysOfWeek: [3, 4],
+    endDate: endDate
+  )
+
+  let ekRule = try EventKitCalendarReminderMapper.makeRecurrenceRule(rule)
+  let roundTrip = EventKitCalendarReminderMapper.recurrenceRule(ekRule)
+  let emptyRule = try EventKitCalendarReminderMapper.makeRecurrenceRule(
+    RecurrenceRule(frequency: .daily)
+  )
+
+  #expect(ekRule.frequency == .weekly)
+  #expect(ekRule.interval == 1)
+  #expect(ekRule.daysOfTheWeek?.map { Int($0.dayOfTheWeek.rawValue) } == [3, 4])
+  #expect(ekRule.daysOfTheMonth == nil)
+  #expect(ekRule.monthsOfTheYear == nil)
+  #expect(ekRule.weeksOfTheYear == nil)
+  #expect(ekRule.daysOfTheYear == nil)
+  #expect(ekRule.setPositions == nil)
+  #expect(ekRule.recurrenceEnd?.endDate == endDate)
+  #expect(emptyRule.daysOfTheWeek == nil)
+  #expect(roundTrip == rule)
+}
+
+@Test func recurrenceRuleMappingRejectsInvalidWeekdays() throws {
+  for value in [0, 8] {
+    do {
+      _ = try EventKitCalendarReminderMapper.makeRecurrenceRule(
+        RecurrenceRule(frequency: .weekly, daysOfWeek: [value])
+      )
+      Issue.record("Expected invalid weekday rejection for \(value)")
+    } catch let error as AppleGatewayError {
+      #expect(error.code == .invalidArgument)
+      #expect(error.details?["dayOfWeek"] == String(value))
+    }
+  }
+}
+
 @Test func recurrenceRuleMappingRejectsInvalidEndSemantics() throws {
   do {
     _ = try EventKitCalendarReminderMapper.makeRecurrenceRule(

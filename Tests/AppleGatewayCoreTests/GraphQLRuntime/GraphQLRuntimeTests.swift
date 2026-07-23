@@ -95,6 +95,167 @@ import Testing
   #expect(coerced["state"] == .enumCase("ALLOWED"))
 }
 
+@Test func jsonObjectConversionDistinguishesBooleansFromZeroAndOne() throws {
+  let data = Data(#"{"enabled":true,"disabled":false,"zero":0,"one":1}"#.utf8)
+  let jsonObject = try #require(
+    JSONSerialization.jsonObject(with: data) as? [String: Any]
+  )
+  let converted = try jsonObject.mapValues(GraphQLValue.fromJSONObject)
+
+  #expect(converted["enabled"] == .bool(true))
+  #expect(converted["disabled"] == .bool(false))
+  #expect(converted["zero"] == .int(0))
+  #expect(converted["one"] == .int(1))
+
+  let document = try parseGraphQL(
+    """
+    query($enabled: Boolean!, $disabled: Boolean!, $zero: Int!, $one: Int!) {
+      classify(enabled: $enabled, disabled: $disabled, zero: $zero, one: $one)
+    }
+    """
+  )
+  let schema = makeScalarClassificationSchema()
+  try GraphQLValidator(schema: schema).validate(document)
+  let coerced = try GraphQLVariableResolver(schema: schema).coerceJSONVariables(
+    converted,
+    definitions: document.operation.variableDefinitions
+  )
+
+  #expect(coerced == converted)
+}
+
+@Test func createEventRecurrenceVariablesMatchInlineLiteral() throws {
+  let variableDocument = try parseGraphQL(
+    """
+    mutation($input: CreateEventInput!) {
+      createEvent(input: $input) { id }
+    }
+    """
+  )
+  let inlineDocument = try parseGraphQL(
+    """
+    mutation {
+      createEvent(input: {
+        title: "Planning"
+        startDate: "2026-07-03T09:00:00Z"
+        endDate: "2026-07-03T10:00:00Z"
+        recurrenceRules: [{
+          frequency: WEEKLY
+          interval: 1
+          daysOfWeek: [3, 4]
+          endDate: "2026-12-31T00:00:00Z"
+        }]
+      }) { id }
+    }
+    """
+  )
+  let schema = GraphQLSchemaRegistry.bootstrap(role: .full)
+  try GraphQLValidator(schema: schema).validate(variableDocument)
+  try GraphQLValidator(schema: schema).validate(inlineDocument)
+  let resolver = GraphQLVariableResolver(schema: schema)
+  let jsonData = Data(
+    """
+    {
+      "input": {
+        "title": "Planning",
+        "startDate": "2026-07-03T09:00:00Z",
+        "endDate": "2026-07-03T10:00:00Z",
+        "recurrenceRules": [{
+          "frequency": "WEEKLY",
+          "interval": 1,
+          "daysOfWeek": [3, 4],
+          "endDate": "2026-12-31T00:00:00Z"
+        }]
+      }
+    }
+    """.utf8
+  )
+  let jsonVariables = try #require(
+    JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
+  )
+  let variables = try jsonVariables.mapValues(GraphQLValue.fromJSONObject)
+  let coercedVariables = try resolver.coerceJSONVariables(
+    variables,
+    definitions: variableDocument.operation.variableDefinitions
+  )
+  let definition = try #require(schema.field(named: "createEvent", on: "Mutation"))
+  let variableField = try #require(variableDocument.operation.selectionSet.first)
+  let inlineField = try #require(inlineDocument.operation.selectionSet.first)
+  let variableArguments = try resolver.resolveArguments(
+    field: variableField,
+    definition: definition,
+    variables: coercedVariables,
+    variableDefinitions: variableDocument.operation.variableDefinitions
+  )
+  let inlineArguments = try resolver.resolveArguments(
+    field: inlineField,
+    definition: definition,
+    variables: [:],
+    variableDefinitions: inlineDocument.operation.variableDefinitions
+  )
+  #expect(variableArguments["input"] == inlineArguments["input"])
+
+  let variableFake = try GraphQLCalendarReminderFake()
+  let inlineFake = try GraphQLCalendarReminderFake()
+  let variableEnvelope = try executeGraphQL(
+    """
+    mutation($input: CreateEventInput!) {
+      createEvent(input: $input) { id }
+    }
+    """,
+    variables: variables,
+    calendarReadService: CalendarReadService(
+      calendarProvider: variableFake,
+      remindersProvider: variableFake
+    ),
+    calendarWriteService: CalendarWriteService(
+      calendarProvider: variableFake,
+      calendarWriter: variableFake,
+      remindersProvider: variableFake,
+      remindersWriter: variableFake
+    )
+  )
+  let inlineEnvelope = try executeGraphQL(
+    """
+    mutation {
+      createEvent(input: {
+        title: "Planning"
+        startDate: "2026-07-03T09:00:00Z"
+        endDate: "2026-07-03T10:00:00Z"
+        recurrenceRules: [{
+          frequency: WEEKLY
+          interval: 1
+          daysOfWeek: [3, 4]
+          endDate: "2026-12-31T00:00:00Z"
+        }]
+      }) { id }
+    }
+    """,
+    calendarReadService: CalendarReadService(
+      calendarProvider: inlineFake,
+      remindersProvider: inlineFake
+    ),
+    calendarWriteService: CalendarWriteService(
+      calendarProvider: inlineFake,
+      calendarWriter: inlineFake,
+      remindersProvider: inlineFake,
+      remindersWriter: inlineFake
+    )
+  )
+  #expect(variableEnvelope.errors.isEmpty)
+  #expect(inlineEnvelope.errors.isEmpty)
+  let variableRecurrence = try #require(variableFake.lastCreatedEvent?.recurrenceRules)
+  let inlineRecurrence = try #require(inlineFake.lastCreatedEvent?.recurrenceRules)
+  let rule = try #require(variableRecurrence.first)
+  let expectedEndDate = try EventKitDateTime.parse("2026-12-31T00:00:00Z")
+
+  #expect(variableRecurrence == inlineRecurrence)
+  #expect(rule.frequency == .weekly)
+  #expect(rule.interval == 1)
+  #expect(rule.daysOfWeek == [3, 4])
+  #expect(rule.endDate == expectedEndDate)
+}
+
 @Test func parserRejectsFragmentsDirectivesAndMultipleOperations() throws {
   for query in [
     "{ permissions { ...Fields } }",
@@ -418,6 +579,42 @@ private func makeTestSchema() -> GraphQLSchemaRegistry {
   )
 }
 
+private func makeScalarClassificationSchema() -> GraphQLSchemaRegistry {
+  GraphQLSchemaRegistry(
+    modules: [
+      GraphQLSchemaModule(
+        types: [
+          GraphQLNamedTypeDefinition(name: "Boolean", kind: .scalar),
+          GraphQLNamedTypeDefinition(name: "Int", kind: .scalar)
+        ],
+        queryFields: [
+          GraphQLFieldDefinition(
+            name: "classify",
+            type: .named("Boolean"),
+            arguments: [
+              GraphQLArgumentDefinition(
+                name: "enabled",
+                type: .nonNull(.named("Boolean")),
+                defaultValue: nil
+              ),
+              GraphQLArgumentDefinition(
+                name: "disabled",
+                type: .nonNull(.named("Boolean")),
+                defaultValue: nil
+              ),
+              GraphQLArgumentDefinition(name: "zero", type: .nonNull(.named("Int")), defaultValue: nil),
+              GraphQLArgumentDefinition(name: "one", type: .nonNull(.named("Int")), defaultValue: nil)
+            ],
+            resolver: nil
+          )
+        ],
+        mutationFields: []
+      )
+    ],
+    role: .full
+  )
+}
+
 private func parseGraphQL(_ query: String) throws -> GraphQLDocument {
   var lexer = GraphQLLexer(query)
   var parser = GraphQLParser(tokens: try lexer.lex())
@@ -426,6 +623,7 @@ private func parseGraphQL(_ query: String) throws -> GraphQLDocument {
 
 private func executeGraphQL(
   _ query: String,
+  variables: [String: GraphQLValue] = [:],
   role: AppleGatewayRole = .full,
   permissionsProvider: any PermissionsStatusProviding = GraphQLTestPermissionsProvider(),
   calendarReadService: CalendarReadService = CalendarReminderServiceFactory.unavailableReadService(),
@@ -433,7 +631,7 @@ private func executeGraphQL(
 ) throws -> DecodedEnvelope {
   let data = GraphQLRuntime.execute(
     query: query,
-    variables: [:],
+    variables: variables,
     role: role,
     permissionsProvider: permissionsProvider,
     calendarReadService: calendarReadService,
@@ -493,6 +691,7 @@ private final class GraphQLCalendarReminderFake: CalendarProviding, CalendarWrit
   private var eventsStore: [CalendarEvent]
   private var remindersStore: [Reminder]
   var lastEventSaveRequest: CalendarEventSaveRequest?
+  var lastCreatedEvent: CalendarEvent?
 
   init() throws {
     let startDate = try EventKitDateTime.parse("2026-07-01T09:00:00Z")
@@ -573,6 +772,7 @@ private final class GraphQLCalendarReminderFake: CalendarProviding, CalendarWrit
   }
 
   func createEvent(_ event: CalendarEvent) throws -> CalendarEvent {
+    lastCreatedEvent = event
     var created = event
     created.id = "event-\(eventsStore.count + 1)"
     eventsStore.append(created)

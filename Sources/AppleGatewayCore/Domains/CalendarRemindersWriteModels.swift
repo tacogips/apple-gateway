@@ -133,14 +133,26 @@ public struct UpdateEventInput: Sendable {
 }
 
 public struct CalendarEventSaveRequest: Equatable, Sendable {
+  public var eventId: String
   public var event: CalendarEvent
   public var span: RecurrenceSpan
   public var occurrenceDate: Date?
+  // Writing recurrence rules while saving a single occurrence corrupts the
+  // EventKit master series, so rules are only written when explicitly updated.
+  public var updatesRecurrenceRules: Bool
 
-  public init(event: CalendarEvent, span: RecurrenceSpan, occurrenceDate: Date?) {
+  public init(
+    eventId: String? = nil,
+    event: CalendarEvent,
+    span: RecurrenceSpan,
+    occurrenceDate: Date?,
+    updatesRecurrenceRules: Bool = true
+  ) {
+    self.eventId = eventId ?? event.id
     self.event = event
     self.span = span
     self.occurrenceDate = occurrenceDate
+    self.updatesRecurrenceRules = updatesRecurrenceRules
   }
 }
 
