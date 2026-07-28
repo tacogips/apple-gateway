@@ -5,6 +5,7 @@ public struct LivePhoneCallsAdapter: PhoneCallsProviding {
   private let controller: any PhoneCallUIControlling
   private let audioController: any PhoneAudioControlling
   private let listeningController: any PhoneCallListeningControlling
+  private let audioConfiguration: PhoneCallAudioConfiguration
 
   init(
     config: AppleGatewayConfig,
@@ -13,24 +14,29 @@ public struct LivePhoneCallsAdapter: PhoneCallsProviding {
     audioController: (any PhoneAudioControlling)? = nil,
     listeningController: (any PhoneCallListeningControlling)? = nil
   ) {
+    let audioConfiguration = PhoneCallAudioConfiguration(config: config)
     self.contactResolver = contactResolver
     self.controller = controller
-    self.audioController = audioController ?? LivePhoneAudioController(config: config)
-    self.listeningController = listeningController ?? LivePhoneCallListeningController(config: config)
+    self.audioConfiguration = audioConfiguration
+    self.audioController = audioController ?? LivePhoneAudioController(configuration: audioConfiguration)
+    self.listeningController = listeningController
+      ?? LivePhoneCallListeningController(configuration: audioConfiguration)
   }
 
   public init(config: AppleGatewayConfig) {
     self.init(
       config: config,
       contactResolver: LivePhoneContactResolver(),
-      controller: LivePhoneCallUIController(),
-      audioController: LivePhoneAudioController(config: config),
-      listeningController: LivePhoneCallListeningController(config: config)
+      controller: LivePhoneCallUIController()
     )
   }
 
   public func phoneCallStatus() throws -> PhoneCallStatus {
     try controller.status()
+  }
+
+  public func phoneCallAudioConfiguration() throws -> PhoneCallAudioConfiguration {
+    audioConfiguration
   }
 
   public func placePhoneCall(_ input: PlacePhoneCallInput) throws -> PhoneCallActionResult {

@@ -2,6 +2,7 @@ import Foundation
 
 public protocol PhoneCallsProviding: Sendable {
   func phoneCallStatus() throws -> PhoneCallStatus
+  func phoneCallAudioConfiguration() throws -> PhoneCallAudioConfiguration
   func placePhoneCall(_ input: PlacePhoneCallInput) throws -> PhoneCallActionResult
   func answerPhoneCall() throws -> PhoneCallActionResult
   func declinePhoneCall() throws -> PhoneCallActionResult
@@ -26,6 +27,10 @@ public enum PhoneCallsServiceFactory {
 
 private struct UnavailablePhoneCallsService: PhoneCallsProviding {
   func phoneCallStatus() throws -> PhoneCallStatus {
+    throw unavailable()
+  }
+
+  func phoneCallAudioConfiguration() throws -> PhoneCallAudioConfiguration {
     throw unavailable()
   }
 

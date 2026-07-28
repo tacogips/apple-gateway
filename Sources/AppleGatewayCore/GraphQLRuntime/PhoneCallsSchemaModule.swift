@@ -35,6 +35,11 @@ private enum PhoneCallsSchema {
         field("deviceName", string()),
         field("warning", string())
       ]),
+      object("PhoneCallAudioConfiguration", fields: [
+        field("playbackDeviceUID", string()),
+        field("captureDeviceUID", string()),
+        field("cacheDirectory", nonNull(string()))
+      ]),
       object("PhoneCallListeningStatus", fields: [
         field("success", nonNull(named("Boolean"))),
         field("isListening", nonNull(named("Boolean"))),
@@ -72,6 +77,16 @@ private enum PhoneCallsSchema {
         arguments: [],
         resolver: { _, context in
           phoneCallStatusValue(try context.phoneCallsService.phoneCallStatus())
+        }
+      ),
+      GraphQLFieldDefinition(
+        name: "phoneCallAudioConfiguration",
+        type: nonNull(named("PhoneCallAudioConfiguration")),
+        arguments: [],
+        resolver: { _, context in
+          phoneCallAudioConfigurationValue(
+            try context.phoneCallsService.phoneCallAudioConfiguration()
+          )
         }
       ),
       GraphQLFieldDefinition(
@@ -329,6 +344,16 @@ private func phoneCallAudioResultValue(_ result: PhoneCallAudioResult) -> GraphQ
     "filePath": result.filePath.map(GraphQLValue.string) ?? .null,
     "deviceName": result.deviceName.map(GraphQLValue.string) ?? .null,
     "warning": result.warning.map(GraphQLValue.string) ?? .null
+  ])
+}
+
+private func phoneCallAudioConfigurationValue(
+  _ configuration: PhoneCallAudioConfiguration
+) -> GraphQLValue {
+  .object([
+    "playbackDeviceUID": configuration.playbackDeviceUID.map(GraphQLValue.string) ?? .null,
+    "captureDeviceUID": configuration.captureDeviceUID.map(GraphQLValue.string) ?? .null,
+    "cacheDirectory": .string(configuration.cacheDirectory.path)
   ])
 }
 

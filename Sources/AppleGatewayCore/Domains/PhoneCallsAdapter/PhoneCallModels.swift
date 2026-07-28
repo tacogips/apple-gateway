@@ -85,6 +85,28 @@ public struct PlayPhoneCallAudioInput: Codable, Equatable, Sendable {
   }
 }
 
+public struct PhoneCallAudioConfiguration: Codable, Equatable, Sendable {
+  public let playbackDeviceUID: String?
+  public let captureDeviceUID: String?
+  public let cacheDirectory: URL
+
+  public init(
+    playbackDeviceUID: String?,
+    captureDeviceUID: String?,
+    cacheDirectory: URL
+  ) {
+    self.playbackDeviceUID = playbackDeviceUID
+    self.captureDeviceUID = captureDeviceUID
+    self.cacheDirectory = cacheDirectory
+  }
+
+  init(config: AppleGatewayConfig) {
+    playbackDeviceUID = config.phoneCalls.virtualAudioDeviceUID.nonEmptyPhoneCallValue
+    captureDeviceUID = config.phoneCalls.captureAudioDeviceUID.nonEmptyPhoneCallValue
+    cacheDirectory = URL(fileURLWithPath: config.storage.cacheDir, isDirectory: true)
+  }
+}
+
 public struct PhoneCallAudioResult: Codable, Equatable, Sendable {
   public var success: Bool
   public var isPlaying: Bool
@@ -104,6 +126,13 @@ public struct PhoneCallAudioResult: Codable, Equatable, Sendable {
     self.filePath = filePath
     self.deviceName = deviceName
     self.warning = warning
+  }
+}
+
+private extension String {
+  var nonEmptyPhoneCallValue: String? {
+    let value = trimmingCharacters(in: .whitespacesAndNewlines)
+    return value.isEmpty ? nil : value
   }
 }
 

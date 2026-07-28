@@ -7,6 +7,7 @@ import Testing
   let readerSDL = GraphQLRuntime.schema(role: .reader)
 
   #expect(fullSDL.contains("phoneCallStatus: PhoneCallStatus!"))
+  #expect(fullSDL.contains("phoneCallAudioConfiguration: PhoneCallAudioConfiguration!"))
   #expect(fullSDL.contains("placePhoneCall(input: PlacePhoneCallInput!): PhoneCallActionResult!"))
   #expect(fullSDL.contains("answerPhoneCall: PhoneCallActionResult!"))
   #expect(fullSDL.contains("declinePhoneCall: PhoneCallActionResult!"))
@@ -18,11 +19,32 @@ import Testing
   #expect(fullSDL.contains("startPhoneCallListening(input: StartPhoneCallListeningInput!): PhoneCallListeningStatus!"))
   #expect(fullSDL.contains("stopPhoneCallListening: PhoneCallListeningStatus!"))
   #expect(readerSDL.contains("phoneCallStatus: PhoneCallStatus!"))
+  #expect(readerSDL.contains("phoneCallAudioConfiguration: PhoneCallAudioConfiguration!"))
   #expect(!readerSDL.contains("placePhoneCall"))
   #expect(!readerSDL.contains("answerPhoneCall"))
   #expect(!readerSDL.contains("playAudioToPhoneCall"))
   #expect(readerSDL.contains("phoneCallAudioInputEvents"))
   #expect(!readerSDL.contains("startPhoneCallListening"))
+}
+
+@Test func phoneCallGraphQLReturnsReadOnlyAudioConfiguration() throws {
+  let fake = FakePhoneCallsService()
+  fake.audioConfiguration = PhoneCallAudioConfiguration(
+    playbackDeviceUID: "playback-device",
+    captureDeviceUID: "capture-device",
+    cacheDirectory: URL(fileURLWithPath: "/tmp/apple-gateway", isDirectory: true)
+  )
+
+  let json = try executePhoneGraphQL(
+    "{ phoneCallAudioConfiguration { playbackDeviceUID captureDeviceUID cacheDirectory } }",
+    service: fake
+  )
+  let data = try #require(json["data"] as? [String: Any])
+  let configuration = try #require(data["phoneCallAudioConfiguration"] as? [String: Any])
+
+  #expect(configuration["playbackDeviceUID"] as? String == "playback-device")
+  #expect(configuration["captureDeviceUID"] as? String == "capture-device")
+  #expect(configuration["cacheDirectory"] as? String == "/tmp/apple-gateway")
 }
 
 @Test func phoneCallGraphQLDelegatesListeningAndAudioInputEvents() throws {
@@ -162,6 +184,11 @@ private func executePhoneGraphQL(
 
 private final class FakePhoneCallsService: PhoneCallsProviding, @unchecked Sendable {
   var statusValue = PhoneCallStatus(state: .idle)
+  var audioConfiguration = PhoneCallAudioConfiguration(
+    playbackDeviceUID: nil,
+    captureDeviceUID: nil,
+    cacheDirectory: URL(fileURLWithPath: "/tmp", isDirectory: true)
+  )
   private(set) var placeInputs: [PlacePhoneCallInput] = []
   private(set) var actions: [PhoneCallControlAction] = []
   private(set) var audioPaths: [String] = []
@@ -172,6 +199,10 @@ private final class FakePhoneCallsService: PhoneCallsProviding, @unchecked Senda
 
   func phoneCallStatus() throws -> PhoneCallStatus {
     statusValue
+  }
+
+  func phoneCallAudioConfiguration() throws -> PhoneCallAudioConfiguration {
+    audioConfiguration
   }
 
   func placePhoneCall(_ input: PlacePhoneCallInput) throws -> PhoneCallActionResult {

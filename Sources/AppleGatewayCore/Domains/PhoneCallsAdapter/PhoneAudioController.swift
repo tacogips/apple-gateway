@@ -10,14 +10,14 @@ protocol PhoneAudioControlling: Sendable {
 }
 
 struct LivePhoneAudioController: PhoneAudioControlling {
-  private let config: AppleGatewayConfig
+  private let configuration: PhoneCallAudioConfiguration
   private let executablePath: String
 
   init(
-    config: AppleGatewayConfig,
+    configuration: PhoneCallAudioConfiguration,
     executablePath: String? = Bundle.main.executableURL?.path
   ) {
-    self.config = config
+    self.configuration = configuration
     self.executablePath = executablePath ?? ""
   }
 
@@ -45,7 +45,7 @@ struct LivePhoneAudioController: PhoneAudioControlling {
     try removeState()
 
     let device = try CoreAudioDeviceManager.resolveVirtualDevice(
-      configuredUID: config.phoneCalls.virtualAudioDeviceUID
+      configuredUID: configuration.playbackDeviceUID ?? ""
     )
     let previousInput = try CoreAudioDeviceManager.defaultInputDevice()
     try CoreAudioDeviceManager.setDefaultInputDevice(device.id)
@@ -121,7 +121,7 @@ struct LivePhoneAudioController: PhoneAudioControlling {
   }
 
   private var stateFileURL: URL {
-    URL(fileURLWithPath: config.storage.cacheDir, isDirectory: true)
+    configuration.cacheDirectory
       .appendingPathComponent("phone-audio", isDirectory: true)
       .appendingPathComponent("session.json")
   }

@@ -12,14 +12,14 @@ protocol PhoneCallListeningControlling: Sendable {
 }
 
 struct LivePhoneCallListeningController: PhoneCallListeningControlling {
-  private let config: AppleGatewayConfig
+  private let configuration: PhoneCallAudioConfiguration
   private let executablePath: String
 
   init(
-    config: AppleGatewayConfig,
+    configuration: PhoneCallAudioConfiguration,
     executablePath: String? = Bundle.main.executableURL?.path
   ) {
-    self.config = config
+    self.configuration = configuration
     self.executablePath = executablePath ?? ""
   }
 
@@ -58,7 +58,7 @@ struct LivePhoneCallListeningController: PhoneCallListeningControlling {
         message: "Could not resolve the phone-listener executable"
       )
     }
-    guard !config.phoneCalls.captureAudioDeviceUID.isEmpty else {
+    guard let captureDeviceUID = configuration.captureDeviceUID else {
       throw AppleGatewayError(
         code: .invalidArgument,
         message: "phone_calls.capture_audio_device_uid is required for phone-call listening"
@@ -72,7 +72,7 @@ struct LivePhoneCallListeningController: PhoneCallListeningControlling {
     }
 
     let device = try CoreAudioDeviceManager.resolveDevice(
-      uid: config.phoneCalls.captureAudioDeviceUID
+      uid: captureDeviceUID
     )
     try prepareSessionDirectory()
     let state = PhoneCallListenerSessionState(
@@ -149,7 +149,7 @@ struct LivePhoneCallListeningController: PhoneCallListeningControlling {
   }
 
   private var sessionDirectoryURL: URL {
-    URL(fileURLWithPath: config.storage.cacheDir, isDirectory: true)
+    configuration.cacheDirectory
       .appendingPathComponent("phone-listener", isDirectory: true)
   }
 
@@ -166,7 +166,7 @@ struct LivePhoneCallListeningController: PhoneCallListeningControlling {
   }
 
   private var playerStateFileURL: URL {
-    URL(fileURLWithPath: config.storage.cacheDir, isDirectory: true)
+    configuration.cacheDirectory
       .appendingPathComponent("phone-audio", isDirectory: true)
       .appendingPathComponent("session.json")
   }

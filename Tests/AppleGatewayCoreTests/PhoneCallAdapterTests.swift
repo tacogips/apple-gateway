@@ -121,6 +121,24 @@ import Testing
   #expect(!stopped.isPlaying)
 }
 
+@Test func phoneCallAdapterExposesResolvedAudioConfiguration() throws {
+  var config = AppleGatewayConfig.defaultValue
+  config.phoneCalls.virtualAudioDeviceUID = " playback-device "
+  config.phoneCalls.captureAudioDeviceUID = "capture-device"
+  config.storage.cacheDir = "/tmp/apple-gateway"
+  let adapter = LivePhoneCallsAdapter(
+    config: config,
+    contactResolver: StubPhoneContactResolver(),
+    controller: RecordingPhoneCallController()
+  )
+
+  let configuration = try adapter.phoneCallAudioConfiguration()
+
+  #expect(configuration.playbackDeviceUID == "playback-device")
+  #expect(configuration.captureDeviceUID == "capture-device")
+  #expect(configuration.cacheDirectory.path == "/tmp/apple-gateway")
+}
+
 @Test func phoneCallAdapterDelegatesListeningAndAudioInputEvents() throws {
   let listening = RecordingPhoneCallListeningController()
   listening.events = [
