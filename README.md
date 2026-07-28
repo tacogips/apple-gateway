@@ -106,6 +106,7 @@ Request prompt-capable permissions:
 apple-gateway permissions request --domain calendar
 apple-gateway permissions request --domain reminders
 apple-gateway permissions request --domain notes
+apple-gateway permissions request --domain mail
 apple-gateway permissions request --domain notifications
 ```
 
@@ -116,6 +117,15 @@ diagnostics:
 
 ```text
 x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles
+```
+
+Mail queries remain read-only at the local database layer. The full
+`apple-gateway` executable can mark messages read or flagged, move them, and
+delete them through Mail.app automation; `apple-gateway-reader` exposes no
+mutations. Inspect the exact mutation names and inputs with:
+
+```bash
+apple-gateway schema print
 ```
 
 Notifications are posted through `AppleGatewayNotifier.app`, installed under

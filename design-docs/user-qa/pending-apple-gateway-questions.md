@@ -33,14 +33,12 @@ best-effort, config-gated implementation be added later?
 Proposed default: keep it out; document `dismissAllGatewayNotifications`
 as the supported scope.
 
-## Question 4: Mail live actions (mark read, move)
+## Resolved Question 4: Mail live actions
 
-Requirements say retrieval only. If light mutations are ever wanted, the
-only mechanism is AppleScript to Mail.app (slow, Tahoe-fragile). Confirm
-retrieval-only is the long-term scope?
-
-Proposed default: retrieval-only permanently; mutations would be a new
-design document.
+Lightweight mutations are supported by the full `apple-gateway` executable
+through Mail.app automation: read state, flagged state, move, and delete.
+The local Mail store remains read-only, and `apple-gateway-reader` remains
+query-only. See `design-docs/specs/design-apple-mail-updates.md`.
 
 ## Question 5: GraphQL server mode
 

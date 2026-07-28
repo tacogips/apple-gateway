@@ -306,6 +306,7 @@ import Testing
         calendars
         reminders
         notesAutomation
+        mailAutomation
         mailFullDiskAccess
         notificationsHelper
         notificationDbFullDiskAccess
@@ -320,6 +321,7 @@ import Testing
   #expect(permissions["calendars"] as? String == "GRANTED")
   #expect(permissions["reminders"] as? String == "DENIED")
   #expect(permissions["notesAutomation"] as? String == "NOT_DETERMINED")
+  #expect(permissions["mailAutomation"] as? String == "GRANTED")
   #expect(permissions["mailFullDiskAccess"] as? String == "UNKNOWN")
   #expect(permissions["notificationsHelper"] as? String == "UNKNOWN")
   #expect(permissions["notificationDbFullDiskAccess"] as? String == "UNKNOWN")
@@ -678,6 +680,7 @@ private struct FullGraphQLPermissionsProvider: PermissionsStatusProviding {
       calendars: PermissionFieldStatus(state: .granted),
       reminders: PermissionFieldStatus(state: .denied),
       notesAutomation: PermissionFieldStatus(state: .notDetermined),
+      mailAutomation: PermissionFieldStatus(state: .granted),
       mailFullDiskAccess: PermissionFieldStatus(state: .unknown),
       notificationsHelper: PermissionFieldStatus(state: .unknown),
       notificationDbFullDiskAccess: PermissionFieldStatus(state: .unknown),

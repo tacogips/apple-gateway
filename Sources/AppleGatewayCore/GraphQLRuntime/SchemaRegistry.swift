@@ -53,6 +53,7 @@ struct GraphQLExecutionContext {
   var notesReadService: NotesReadService
   var notesWriteService: NotesWriteService
   var mailReadService: MailReadService
+  var mailWriteService: MailWriteService
   var notificationsService: any NotificationsProviding
   var clockAlarmsService: any ClockAlarmsProviding
 }
@@ -139,6 +140,7 @@ extension GraphQLSchemaModule {
         GraphQLFieldDefinition(name: "calendars", type: .nonNull(.named("PermissionState")), arguments: []),
         GraphQLFieldDefinition(name: "reminders", type: .nonNull(.named("PermissionState")), arguments: []),
         GraphQLFieldDefinition(name: "notesAutomation", type: .nonNull(.named("PermissionState")), arguments: []),
+        GraphQLFieldDefinition(name: "mailAutomation", type: .nonNull(.named("PermissionState")), arguments: []),
         GraphQLFieldDefinition(name: "mailFullDiskAccess", type: .nonNull(.named("PermissionState")), arguments: []),
         GraphQLFieldDefinition(name: "notificationsHelper", type: .nonNull(.named("PermissionState")), arguments: []),
         GraphQLFieldDefinition(

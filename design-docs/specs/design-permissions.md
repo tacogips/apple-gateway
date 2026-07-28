@@ -87,6 +87,8 @@ embedded plist section. The same check should be applied to
   `.fullAccess`, `.writeOnly`, `.denied`, `.notDetermined`.
 - Notes automation: `AEDeterminePermissionToAutomateTarget` with
   `askUserIfNeeded=false` against `com.apple.Notes`.
+- Mail automation: `AEDeterminePermissionToAutomateTarget` with
+  `askUserIfNeeded=false` against `com.apple.mail`.
 - Full Disk Access: attempt to `open(2)` a known TCC-protected probe file
   read-only (the resolved Mail `Envelope Index` and the usernoted db path);
   `EPERM` implies FDA missing.
@@ -101,8 +103,8 @@ Exposed three ways with one implementation:
 
 ```bash
 apple-gateway permissions status            # human-readable table + JSON with --json
-apple-gateway permissions request --domain calendar|reminders|notes|notifications|clock-alarms
-apple-gateway graphql --query '{ permissions { calendars mailFullDiskAccess } }'
+apple-gateway permissions request --domain calendar|reminders|notes|mail|notifications|clock-alarms
+apple-gateway graphql --query '{ permissions { calendars mailAutomation mailFullDiskAccess } }'
 ```
 
 `permissions request` is the only code path that intentionally triggers
@@ -159,6 +161,7 @@ names and state vocabulary as `PermissionsStatus`:
 - `calendars`
 - `reminders`
 - `notesAutomation`
+- `mailAutomation`
 - `mailFullDiskAccess`
 - `notificationsHelper`
 - `notificationDbFullDiskAccess`

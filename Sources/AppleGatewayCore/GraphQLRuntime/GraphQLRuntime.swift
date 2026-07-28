@@ -12,6 +12,7 @@ enum GraphQLRuntime {
     notesReadService: NotesReadService = NotesServiceFactory.unavailableReadService(),
     notesWriteService: NotesWriteService = NotesServiceFactory.unavailableWriteService(),
     mailReadService: MailReadService = MailServiceFactory.unavailableReadService(),
+    mailWriteService: MailWriteService = MailServiceFactory.unavailableWriteService(),
     notificationsService: any NotificationsProviding = NotificationsServiceFactory.unavailableService(),
     clockAlarmsService: any ClockAlarmsProviding = ClockAlarmsServiceFactory.unavailableService(),
     schema: GraphQLSchemaRegistry? = nil,
@@ -28,6 +29,7 @@ enum GraphQLRuntime {
       notesReadService: notesReadService,
       notesWriteService: notesWriteService,
       mailReadService: mailReadService,
+      mailWriteService: mailWriteService,
       notificationsService: notificationsService,
       clockAlarmsService: clockAlarmsService,
       schema: schema,
@@ -46,6 +48,7 @@ enum GraphQLRuntime {
     notesReadService: NotesReadService = NotesServiceFactory.unavailableReadService(),
     notesWriteService: NotesWriteService = NotesServiceFactory.unavailableWriteService(),
     mailReadService: MailReadService = MailServiceFactory.unavailableReadService(),
+    mailWriteService: MailWriteService = MailServiceFactory.unavailableWriteService(),
     notificationsService: any NotificationsProviding = NotificationsServiceFactory.unavailableService(),
     clockAlarmsService: any ClockAlarmsProviding = ClockAlarmsServiceFactory.unavailableService(),
     schema suppliedSchema: GraphQLSchemaRegistry? = nil,
@@ -68,6 +71,7 @@ enum GraphQLRuntime {
           notesReadService: notesReadService,
           notesWriteService: notesWriteService,
           mailReadService: mailReadService,
+          mailWriteService: mailWriteService,
           notificationsService: notificationsService,
           clockAlarmsService: clockAlarmsService
         )

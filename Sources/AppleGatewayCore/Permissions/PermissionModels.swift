@@ -22,6 +22,7 @@ public enum PermissionStatusField: String, CaseIterable, Codable, Sendable {
   case calendars
   case reminders
   case notesAutomation
+  case mailAutomation
   case mailFullDiskAccess
   case notificationsHelper
   case notificationDbFullDiskAccess
@@ -42,6 +43,7 @@ public struct PermissionsStatus: Codable, Equatable, Sendable {
   public var calendars: PermissionFieldStatus
   public var reminders: PermissionFieldStatus
   public var notesAutomation: PermissionFieldStatus
+  public var mailAutomation: PermissionFieldStatus
   public var mailFullDiskAccess: PermissionFieldStatus
   public var notificationsHelper: PermissionFieldStatus
   public var notificationDbFullDiskAccess: PermissionFieldStatus
@@ -51,6 +53,7 @@ public struct PermissionsStatus: Codable, Equatable, Sendable {
     calendars: PermissionFieldStatus,
     reminders: PermissionFieldStatus,
     notesAutomation: PermissionFieldStatus,
+    mailAutomation: PermissionFieldStatus = PermissionFieldStatus(state: .unknown),
     mailFullDiskAccess: PermissionFieldStatus,
     notificationsHelper: PermissionFieldStatus,
     notificationDbFullDiskAccess: PermissionFieldStatus,
@@ -59,6 +62,7 @@ public struct PermissionsStatus: Codable, Equatable, Sendable {
     self.calendars = calendars
     self.reminders = reminders
     self.notesAutomation = notesAutomation
+    self.mailAutomation = mailAutomation
     self.mailFullDiskAccess = mailFullDiskAccess
     self.notificationsHelper = notificationsHelper
     self.notificationDbFullDiskAccess = notificationDbFullDiskAccess
@@ -73,6 +77,8 @@ public struct PermissionsStatus: Codable, Equatable, Sendable {
       return reminders
     case .notesAutomation:
       return notesAutomation
+    case .mailAutomation:
+      return mailAutomation
     case .mailFullDiskAccess:
       return mailFullDiskAccess
     case .notificationsHelper:
@@ -103,6 +109,7 @@ public struct PermissionsStatusJSON: Encodable, Sendable {
   public var calendars: PermissionState
   public var reminders: PermissionState
   public var notesAutomation: PermissionState
+  public var mailAutomation: PermissionState
   public var mailFullDiskAccess: PermissionState
   public var notificationsHelper: PermissionState
   public var notificationDbFullDiskAccess: PermissionState
@@ -113,6 +120,7 @@ public struct PermissionsStatusJSON: Encodable, Sendable {
     calendars = status.calendars.state
     reminders = status.reminders.state
     notesAutomation = status.notesAutomation.state
+    mailAutomation = status.mailAutomation.state
     mailFullDiskAccess = status.mailFullDiskAccess.state
     notificationsHelper = status.notificationsHelper.state
     notificationDbFullDiskAccess = status.notificationDbFullDiskAccess.state
@@ -133,13 +141,14 @@ public enum PermissionRequestDomain: String, CaseIterable, Sendable {
   case calendar
   case reminders
   case notes
+  case mail
   case notifications
   case clockAlarms = "clock-alarms"
 
   public init(commandValue: String) throws {
     guard let domain = PermissionRequestDomain(rawValue: commandValue) else {
       throw AppleGatewayCommand.Error.invalidUsage(
-        "Domain must be calendar, reminders, notes, notifications, or clock-alarms"
+        "Domain must be calendar, reminders, notes, mail, notifications, or clock-alarms"
       )
     }
     self = domain

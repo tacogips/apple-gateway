@@ -7,15 +7,18 @@ Draft
 ## Scope
 
 Read-only retrieval of Apple Mail (Mail.app) data: accounts, mailboxes,
-message listing/search, headers, bodies, raw source, and attachments.
-No sending, moving, flagging, or deletion — outbound and mutating mail is
-mail-gateway's territory and a hard non-goal here.
+message listing/search, headers, bodies, raw source, and attachments. The
+retrieval adapter never writes Mail's local store. Lightweight state changes
+are specified separately in `design-apple-mail-updates.md`; sending and draft
+creation remain out of scope.
 
 ## Mechanism
 
 Direct read-only parsing of Mail's local store. AppleScript to Mail.app is
-rejected as the primary path: ~1000x slower, requires Mail running, and is
-affected by the Tahoe -1712 regression (research reference, section 4).
+rejected as the primary retrieval path: ~1000x slower, requires Mail running,
+and is affected by the Tahoe -1712 regression (research reference, section
+4). The separate update path uses Mail.app automation because the local store
+must never be mutated directly.
 
 Two sources, both under the Mail root:
 
@@ -268,9 +271,8 @@ fields fail with `INVALID_ARGUMENT`.
 
 ### TASK-004 GraphQL Registration and Smoke Contract
 
-TASK-004 makes the existing TASK-001 through TASK-003 Mail adapter work
-visible through the GraphQL runtime and CLI without adding any Mail write
-surface. The Mail schema module registers the types above and exactly these
+TASK-004 originally made the TASK-001 through TASK-003 retrieval adapter
+visible through the GraphQL runtime and CLI. It registered exactly these
 root Query fields:
 
 ```graphql
@@ -282,11 +284,11 @@ type Query {
 }
 ```
 
-The module's `mutationFields` collection is always empty. This is true for
-both full and reader schema construction: full mode may expose mutations
-from other domains, but it must not expose any Mail mutation field. Reader
-mode continues to reject every mutation operation at the GraphQL operation
-boundary with `WRITE_DISABLED_IN_READER`.
+At TASK-004 completion the module's `mutationFields` collection was empty.
+The later update surface in `design-apple-mail-updates.md` adds mutations to
+full schema construction only. Reader mode continues to reject every
+mutation operation at the GraphQL operation boundary with
+`WRITE_DISABLED_IN_READER`.
 
 Resolvers must be thin adapters over the Mail query/materialization services:
 
@@ -313,11 +315,10 @@ through the registered Mail materializer and preserves Phase 0 validation:
 forged keys, unknown domain/kind pairs, unsafe filenames, and output escape
 attempts fail before writing outside the output root.
 
-GraphQL schema print expectations are updated as part of TASK-004. Full and
-reader SDL must both include the four Mail Query fields and Mail object,
-enum, input, and connection types. Full SDL may include `type Mutation`
-for other domains, but no line in that type may reference a Mail mutation;
-reader SDL omits `type Mutation` entirely.
+Full and reader SDL both include the four Mail Query fields and Mail object,
+enum, input, and connection types. The current full SDL also includes the
+mutations specified in `design-apple-mail-updates.md`; reader SDL omits
+`type Mutation` entirely.
 
 Smoke coverage must exercise both fake-backed runtime wiring and fixture DB
 behavior:
@@ -329,9 +330,8 @@ behavior:
 - Fixture-DB GraphQL tests prove the registered resolvers preserve TASK-002
   account, mailbox, filter, pagination, and single-message behavior against
   synthetic Envelope Index data.
-- Schema tests assert the Mail module exposes no mutation fields and that
-  reader-mode mutation rejection remains owned by the runtime, not by Mail
-  resolver code.
+- Schema tests assert that Mail mutation fields appear only in full mode and
+  that reader-mode mutation rejection remains owned by the runtime.
 
 The manual checklist status for a real Mail store is logged in
 `impl-plans/active/phase-3-apple-mail.md`. The checklist records whether the
@@ -370,10 +370,10 @@ same FDA gate.
   where `Envelope Index-wal` or `Envelope Index-shm` exists.
 - emlx/partial-emlx parsers tested against synthetic fixtures including
   multibyte subjects, nested multipart, and missing trailers.
-- TASK-004 tests assert the Mail schema module is Query-only, the runtime
-  schema includes `mailAccounts`, `mailboxes`, `mailMessages`, and
-  `mailMessage`, no full-mode Mail mutation exists, and reader mode still
-  rejects mutation operations before resolver dispatch.
+- TASK-004 retrieval tests assert that the runtime schema includes
+  `mailAccounts`, `mailboxes`, `mailMessages`, and `mailMessage`. Current
+  schema tests additionally cover full-mode Mail mutations while reader mode
+  still rejects mutation operations before resolver dispatch.
 - TASK-004 smoke tests run Mail GraphQL flows over fake services and fixture
   databases, update SDL/schema-print expectations, and cover Mail file
   download/materialization through the Phase 0 file-store command path.

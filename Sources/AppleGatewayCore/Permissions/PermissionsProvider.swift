@@ -13,6 +13,7 @@ public protocol PermissionStatusProbe: Sendable {
   func calendarStatus() -> PermissionFieldStatus
   func remindersStatus() -> PermissionFieldStatus
   func notesAutomationStatus() -> PermissionFieldStatus
+  func mailAutomationStatus() -> PermissionFieldStatus
   func mailFullDiskAccessStatus(config: AppleGatewayConfig) -> PermissionFieldStatus
   func notificationDbFullDiskAccessStatus() -> PermissionFieldStatus
   func notificationsHelperStatus(config: AppleGatewayConfig) -> PermissionFieldStatus
@@ -23,6 +24,7 @@ public protocol PermissionRequestProvider: Sendable {
   func requestCalendar(config: AppleGatewayConfig) -> PermissionFieldStatus
   func requestReminders(config: AppleGatewayConfig) -> PermissionFieldStatus
   func requestNotes(config: AppleGatewayConfig) -> PermissionFieldStatus
+  func requestMail(config: AppleGatewayConfig) -> PermissionFieldStatus
   func requestNotifications(config: AppleGatewayConfig) -> PermissionFieldStatus
   func requestClockAutomation(config: AppleGatewayConfig) -> PermissionFieldStatus
 }
@@ -54,6 +56,7 @@ public struct PermissionsService<Probe: PermissionStatusProbe, Requester: Permis
       calendars: domains.calendar ? probe.calendarStatus() : disabled("calendar"),
       reminders: domains.reminders ? probe.remindersStatus() : disabled("reminders"),
       notesAutomation: domains.notes ? probe.notesAutomationStatus() : disabled("notes"),
+      mailAutomation: domains.mail ? probe.mailAutomationStatus() : disabled("mail"),
       mailFullDiskAccess: domains.mail ? probe.mailFullDiskAccessStatus(config: config) : disabled("mail"),
       notificationsHelper: domains.notifications ? probe.notificationsHelperStatus(config: config) : disabled("notifications"),
       notificationDbFullDiskAccess: domains.notifications ? probe.notificationDbFullDiskAccessStatus() : disabled("notifications"),
@@ -70,6 +73,8 @@ public struct PermissionsService<Probe: PermissionStatusProbe, Requester: Permis
       status = config.domains.reminders ? requester.requestReminders(config: config) : disabled("reminders")
     case .notes:
       status = config.domains.notes ? requester.requestNotes(config: config) : disabled("notes")
+    case .mail:
+      status = config.domains.mail ? requester.requestMail(config: config) : disabled("mail")
     case .notifications:
       status = config.domains.notifications ? requester.requestNotifications(config: config) : disabled("notifications")
     case .clockAlarms:
@@ -116,6 +121,10 @@ public struct LivePermissionProbe: PermissionStatusProbe {
 
   public func notesAutomationStatus() -> PermissionFieldStatus {
     notesAutomationStatus(askUserIfNeeded: false)
+  }
+
+  public func mailAutomationStatus() -> PermissionFieldStatus {
+    mailAutomationStatus(askUserIfNeeded: false)
   }
 
   public func mailFullDiskAccessStatus(config: AppleGatewayConfig) -> PermissionFieldStatus {
@@ -239,6 +248,10 @@ public struct LivePermissionRequester: PermissionRequestProvider {
     probe.notesAutomationStatus(askUserIfNeeded: true)
   }
 
+  public func requestMail(config: AppleGatewayConfig) -> PermissionFieldStatus {
+    probe.mailAutomationStatus(askUserIfNeeded: true)
+  }
+
   public func requestNotifications(config: AppleGatewayConfig) -> PermissionFieldStatus {
     probe.helperStatus(config: config)
   }
@@ -289,6 +302,14 @@ private extension LivePermissionProbe {
     automationStatus(
       bundleID: "com.apple.Notes",
       targetName: "Notes",
+      askUserIfNeeded: askUserIfNeeded
+    )
+  }
+
+  func mailAutomationStatus(askUserIfNeeded: Bool) -> PermissionFieldStatus {
+    automationStatus(
+      bundleID: "com.apple.mail",
+      targetName: "Mail",
       askUserIfNeeded: askUserIfNeeded
     )
   }
