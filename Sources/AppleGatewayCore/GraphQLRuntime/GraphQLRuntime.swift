@@ -15,6 +15,7 @@ enum GraphQLRuntime {
     mailWriteService: MailWriteService = MailServiceFactory.unavailableWriteService(),
     notificationsService: any NotificationsProviding = NotificationsServiceFactory.unavailableService(),
     clockAlarmsService: any ClockAlarmsProviding = ClockAlarmsServiceFactory.unavailableService(),
+    phoneCallsService: any PhoneCallsProviding = PhoneCallsServiceFactory.unavailableService(),
     schema: GraphQLSchemaRegistry? = nil,
     pretty: Bool = false
   ) -> Data {
@@ -32,6 +33,7 @@ enum GraphQLRuntime {
       mailWriteService: mailWriteService,
       notificationsService: notificationsService,
       clockAlarmsService: clockAlarmsService,
+      phoneCallsService: phoneCallsService,
       schema: schema,
       pretty: pretty
     ).data
@@ -51,6 +53,7 @@ enum GraphQLRuntime {
     mailWriteService: MailWriteService = MailServiceFactory.unavailableWriteService(),
     notificationsService: any NotificationsProviding = NotificationsServiceFactory.unavailableService(),
     clockAlarmsService: any ClockAlarmsProviding = ClockAlarmsServiceFactory.unavailableService(),
+    phoneCallsService: any PhoneCallsProviding = PhoneCallsServiceFactory.unavailableService(),
     schema suppliedSchema: GraphQLSchemaRegistry? = nil,
     pretty: Bool = false
   ) -> AppleGatewayJSONResponse {
@@ -73,7 +76,8 @@ enum GraphQLRuntime {
           mailReadService: mailReadService,
           mailWriteService: mailWriteService,
           notificationsService: notificationsService,
-          clockAlarmsService: clockAlarmsService
+          clockAlarmsService: clockAlarmsService,
+          phoneCallsService: phoneCallsService
         )
       ).execute(document: document, variables: variables)
       return encode(data: Optional(result.data), errors: result.errors, pretty: pretty)

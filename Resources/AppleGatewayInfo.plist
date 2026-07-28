@@ -11,6 +11,8 @@
   <string>0.1.0</string>
   <key>NSAppleEventsUsageDescription</key>
   <string>apple-gateway needs Apple Events access to read and automate supported local Apple applications on your behalf.</string>
+  <key>NSContactsUsageDescription</key>
+  <string>apple-gateway needs Contacts access to place calls to contacts you identify by name.</string>
   <key>NSCalendarsFullAccessUsageDescription</key>
   <string>apple-gateway needs full calendar access to read and manage calendar data requested through the gateway.</string>
   <key>NSCalendarsUsageDescription</key>

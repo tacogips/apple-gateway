@@ -1,7 +1,8 @@
 # apple-gateway
 
 macOS CLI and GraphQL bridge for Apple apps, including Calendar, Reminders,
-Notes, Mail, notifications, and Clock alarms.
+Notes, Mail, notifications, Clock alarms, and iPhone cellular calls routed
+through Phone or FaceTime.
 
 ## Development
 
@@ -108,6 +109,7 @@ apple-gateway permissions request --domain reminders
 apple-gateway permissions request --domain notes
 apple-gateway permissions request --domain mail
 apple-gateway permissions request --domain notifications
+apple-gateway permissions request --domain phone-calls
 ```
 
 Full Disk Access is manual. Enable the responsible terminal app, or the signed
@@ -149,6 +151,103 @@ delete flow with an automatically cleaned-up scratch alarm:
 scripts/live-clock-alarms-check.sh
 scripts/live-clock-alarms-check.sh --execute
 ```
+
+Phone calls use Apple's existing iPhone Cellular Calls setup. Outgoing calls
+are handed to Phone/FaceTime with a `tel:` URL; macOS may still show a
+confirmation. Calling by saved contact name uses Contacts, while answering,
+declining, and ending use explicitly best-effort Accessibility automation:
+
+```bash
+apple-gateway graphql --query 'mutation {
+  placePhoneCall(input: {
+    contactName: "Example Person"
+    phoneLabel: "mobile"
+    autoConfirm: true
+  }) {
+    success state targetName warning
+  }
+}'
+
+apple-gateway graphql --query 'mutation {
+  answerPhoneCall { success state application warning }
+}'
+```
+
+Audio files can be routed into an active call through a user-installed virtual
+audio device such as BlackHole 2ch. Phone or FaceTime must be configured to use
+the system microphone:
+
+```bash
+# Darwin only; BlackHole 2ch is the recommended default.
+nix run .#install-virtual-audio-driver -- blackhole-2ch
+```
+
+The allowlisted Homebrew casks are `blackhole-2ch`, `blackhole-16ch`,
+`blackhole-64ch`, `vb-cable`, and `loopback`. For example:
+
+```bash
+nix run .#install-virtual-audio-driver -- vb-cable
+nix run .#install-virtual-audio-driver -- loopback
+```
+
+`nix run .#install-blackhole` remains a compatibility shortcut for BlackHole
+2ch. Entering `nix develop` only checks for a compatible driver and prints the
+generic command when one is missing; it never installs or modifies host audio
+drivers automatically.
+
+```toml
+[phone_calls]
+# Optional when exactly one BlackHole/Loopback/VB-Cable device is installed.
+virtual_audio_device_uid = "BlackHole2ch_UID"
+# Required for caller-audio capture. Route Phone/FaceTime output into this device.
+capture_audio_device_uid = "LoopbackCapture_UID"
+```
+
+```bash
+apple-gateway graphql --query 'mutation {
+  playAudioToPhoneCall(input: { filePath: "/absolute/path/prompt.wav" }) {
+    success isPlaying filePath deviceName warning
+  }
+}'
+
+apple-gateway graphql --query 'mutation {
+  stopPhoneCallAudio { success isPlaying }
+}'
+```
+
+Caller audio can be captured as provider-neutral WAV events in five-second
+windows. The listener performs local voice activity detection. When caller
+speech starts while gateway audio is playing, it stops that playback
+immediately; the completed window then appears in `phoneCallAudioInputEvents`:
+Notify callers and obtain any consent required for call recording or
+transcription in the relevant jurisdiction.
+
+```bash
+apple-gateway graphql --query 'mutation {
+  startPhoneCallListening(input: { chunkDurationSeconds: 5 }) {
+    success isListening deviceName warning
+  }
+}'
+
+apple-gateway graphql --query '{
+  phoneCallAudioInputEvents(afterSequence: 0) {
+    sequence filePath createdAt durationSeconds interruptedPlayback
+  }
+}'
+```
+
+apple-gateway does not transcribe audio or call an LLM. Riela, Codex, or another
+consumer owns polling, STT, reasoning, and TTS. A standalone integration sample
+is available at `scripts/sample-phone-call-codex-bridge.sh`; it uses OpenAI STT
+and TTS plus `codex exec` without introducing those dependencies into the
+gateway:
+
+```bash
+OPENAI_API_KEY=... scripts/sample-phone-call-codex-bridge.sh
+```
+
+See `design-docs/specs/design-phone-calls.md` for setup, reliability limits,
+raw-number use, status checks, and the Codex integration boundary.
 
 ```bash
 apple-gateway permissions status --json

@@ -8,19 +8,22 @@ public struct AppleGatewayConfig: Codable, Equatable, Sendable {
   public var domains: Domains
   public var mail: Mail
   public var notifications: Notifications
+  public var phoneCalls: PhoneCalls
 
   public init(
     storage: Storage = .defaultValue,
     limits: Limits = .defaultValue,
     domains: Domains = .defaultValue,
     mail: Mail = .defaultValue,
-    notifications: Notifications = .defaultValue
+    notifications: Notifications = .defaultValue,
+    phoneCalls: PhoneCalls = .defaultValue
   ) {
     self.storage = storage
     self.limits = limits
     self.domains = domains
     self.mail = mail
     self.notifications = notifications
+    self.phoneCalls = phoneCalls
   }
 
   public static let defaultValue = AppleGatewayConfig()
@@ -31,6 +34,7 @@ public struct AppleGatewayConfig: Codable, Equatable, Sendable {
     case domains
     case mail
     case notifications
+    case phoneCalls = "phone_calls"
   }
 }
 
@@ -94,6 +98,7 @@ public extension AppleGatewayConfig {
     public var notes: Bool
     public var mail: Bool
     public var notifications: Bool
+    public var phoneCalls: Bool
 
     public init(
       calendar: Bool,
@@ -101,7 +106,8 @@ public extension AppleGatewayConfig {
       clockAlarms: Bool,
       notes: Bool,
       mail: Bool,
-      notifications: Bool
+      notifications: Bool,
+      phoneCalls: Bool = true
     ) {
       self.calendar = calendar
       self.reminders = reminders
@@ -109,6 +115,7 @@ public extension AppleGatewayConfig {
       self.notes = notes
       self.mail = mail
       self.notifications = notifications
+      self.phoneCalls = phoneCalls
     }
 
     public static let defaultValue = Domains(
@@ -117,7 +124,8 @@ public extension AppleGatewayConfig {
       clockAlarms: true,
       notes: true,
       mail: true,
-      notifications: true
+      notifications: true,
+      phoneCalls: true
     )
 
     enum CodingKeys: String, CodingKey {
@@ -127,6 +135,7 @@ public extension AppleGatewayConfig {
       case notes
       case mail
       case notifications
+      case phoneCalls = "phone_calls"
     }
   }
 
@@ -155,6 +164,26 @@ public extension AppleGatewayConfig {
 
     enum CodingKeys: String, CodingKey {
       case helperAppPath = "helper_app_path"
+    }
+  }
+
+  struct PhoneCalls: Codable, Equatable, Sendable {
+    public var virtualAudioDeviceUID: String
+    public var captureAudioDeviceUID: String
+
+    public init(
+      virtualAudioDeviceUID: String,
+      captureAudioDeviceUID: String = ""
+    ) {
+      self.virtualAudioDeviceUID = virtualAudioDeviceUID
+      self.captureAudioDeviceUID = captureAudioDeviceUID
+    }
+
+    public static let defaultValue = PhoneCalls(virtualAudioDeviceUID: "")
+
+    enum CodingKeys: String, CodingKey {
+      case virtualAudioDeviceUID = "virtual_audio_device_uid"
+      case captureAudioDeviceUID = "capture_audio_device_uid"
     }
   }
 }

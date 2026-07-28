@@ -399,6 +399,7 @@ clock_alarms = true
 notes = true
 mail = true
 notifications = true
+phone_calls = true
 
 [mail]
 # Override auto-probed ~/Library/Mail/V1x root when needed.
@@ -408,6 +409,10 @@ mail_root = ""
 # Override the helper app path (default: resolved next to the binary,
 # then standard install locations).
 helper_app_path = ""
+
+[phone_calls]
+# Optional exact Core Audio UID for file playback into calls.
+virtual_audio_device_uid = ""
 ```
 
 Env overrides use the `APPLE_GATEWAY_<SECTION>_<KEY>` pattern

@@ -20,7 +20,8 @@ enum ConfigSchema {
     "limits",
     "domains",
     "mail",
-    "notifications"
+    "notifications",
+    "phone_calls"
   ]
 
   static let keysBySection: [String: Set<String>] = [
@@ -38,10 +39,15 @@ enum ConfigSchema {
       "clock_alarms",
       "notes",
       "mail",
-      "notifications"
+      "notifications",
+      "phone_calls"
     ],
     "mail": ["mail_root"],
-    "notifications": ["helper_app_path"]
+    "notifications": ["helper_app_path"],
+    "phone_calls": [
+      "virtual_audio_device_uid",
+      "capture_audio_device_uid"
+    ]
   ]
 
   static let envOverrides: [String: (section: String, key: String)] = [
@@ -57,8 +63,11 @@ enum ConfigSchema {
     "APPLE_GATEWAY_DOMAINS_NOTES": ("domains", "notes"),
     "APPLE_GATEWAY_DOMAINS_MAIL": ("domains", "mail"),
     "APPLE_GATEWAY_DOMAINS_NOTIFICATIONS": ("domains", "notifications"),
+    "APPLE_GATEWAY_DOMAINS_PHONE_CALLS": ("domains", "phone_calls"),
     "APPLE_GATEWAY_MAIL_MAIL_ROOT": ("mail", "mail_root"),
-    "APPLE_GATEWAY_NOTIFICATIONS_HELPER_APP_PATH": ("notifications", "helper_app_path")
+    "APPLE_GATEWAY_NOTIFICATIONS_HELPER_APP_PATH": ("notifications", "helper_app_path"),
+    "APPLE_GATEWAY_PHONE_CALLS_VIRTUAL_AUDIO_DEVICE_UID": ("phone_calls", "virtual_audio_device_uid"),
+    "APPLE_GATEWAY_PHONE_CALLS_CAPTURE_AUDIO_DEVICE_UID": ("phone_calls", "capture_audio_device_uid")
   ]
 
   static let envSectionPrefixes = [
@@ -66,7 +75,8 @@ enum ConfigSchema {
     "APPLE_GATEWAY_LIMITS_",
     "APPLE_GATEWAY_DOMAINS_",
     "APPLE_GATEWAY_MAIL_",
-    "APPLE_GATEWAY_NOTIFICATIONS_"
+    "APPLE_GATEWAY_NOTIFICATIONS_",
+    "APPLE_GATEWAY_PHONE_CALLS_"
   ]
 
   static func isKnown(section: String, key: String) -> Bool {
@@ -77,7 +87,9 @@ enum ConfigSchema {
     switch (section, key) {
     case ("storage", "cache_dir"),
          ("mail", "mail_root"),
-         ("notifications", "helper_app_path"):
+         ("notifications", "helper_app_path"),
+         ("phone_calls", "virtual_audio_device_uid"),
+         ("phone_calls", "capture_audio_device_uid"):
       .string
     case ("limits", _):
       .integer

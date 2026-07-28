@@ -56,6 +56,7 @@ struct GraphQLExecutionContext {
   var mailWriteService: MailWriteService
   var notificationsService: any NotificationsProviding
   var clockAlarmsService: any ClockAlarmsProviding
+  var phoneCallsService: any PhoneCallsProviding
 }
 
 struct GraphQLSchemaRegistry {
@@ -85,7 +86,7 @@ struct GraphQLSchemaRegistry {
 
   static func bootstrap(role: AppleGatewayRole) -> GraphQLSchemaRegistry {
     GraphQLSchemaRegistry(
-      modules: [.permissions, .calendarReminders, .notes, .mail, .notifications, .clockAlarms],
+      modules: [.permissions, .calendarReminders, .notes, .mail, .notifications, .clockAlarms, .phoneCalls],
       role: role
     )
   }
@@ -148,7 +149,9 @@ extension GraphQLSchemaModule {
           type: .nonNull(.named("PermissionState")),
           arguments: []
         ),
-        GraphQLFieldDefinition(name: "clockAutomation", type: .nonNull(.named("PermissionState")), arguments: [])
+        GraphQLFieldDefinition(name: "clockAutomation", type: .nonNull(.named("PermissionState")), arguments: []),
+        GraphQLFieldDefinition(name: "phoneContacts", type: .nonNull(.named("PermissionState")), arguments: []),
+        GraphQLFieldDefinition(name: "phoneAutomation", type: .nonNull(.named("PermissionState")), arguments: [])
       ])
     )
 

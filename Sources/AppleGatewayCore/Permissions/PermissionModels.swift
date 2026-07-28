@@ -27,6 +27,8 @@ public enum PermissionStatusField: String, CaseIterable, Codable, Sendable {
   case notificationsHelper
   case notificationDbFullDiskAccess
   case clockAutomation
+  case phoneContacts
+  case phoneAutomation
 }
 
 public struct PermissionFieldStatus: Codable, Equatable, Sendable {
@@ -48,6 +50,8 @@ public struct PermissionsStatus: Codable, Equatable, Sendable {
   public var notificationsHelper: PermissionFieldStatus
   public var notificationDbFullDiskAccess: PermissionFieldStatus
   public var clockAutomation: PermissionFieldStatus
+  public var phoneContacts: PermissionFieldStatus
+  public var phoneAutomation: PermissionFieldStatus
 
   public init(
     calendars: PermissionFieldStatus,
@@ -57,7 +61,9 @@ public struct PermissionsStatus: Codable, Equatable, Sendable {
     mailFullDiskAccess: PermissionFieldStatus,
     notificationsHelper: PermissionFieldStatus,
     notificationDbFullDiskAccess: PermissionFieldStatus,
-    clockAutomation: PermissionFieldStatus
+    clockAutomation: PermissionFieldStatus,
+    phoneContacts: PermissionFieldStatus = PermissionFieldStatus(state: .unknown),
+    phoneAutomation: PermissionFieldStatus = PermissionFieldStatus(state: .unknown)
   ) {
     self.calendars = calendars
     self.reminders = reminders
@@ -67,6 +73,8 @@ public struct PermissionsStatus: Codable, Equatable, Sendable {
     self.notificationsHelper = notificationsHelper
     self.notificationDbFullDiskAccess = notificationDbFullDiskAccess
     self.clockAutomation = clockAutomation
+    self.phoneContacts = phoneContacts
+    self.phoneAutomation = phoneAutomation
   }
 
   public subscript(field: PermissionStatusField) -> PermissionFieldStatus {
@@ -87,6 +95,10 @@ public struct PermissionsStatus: Codable, Equatable, Sendable {
       return notificationDbFullDiskAccess
     case .clockAutomation:
       return clockAutomation
+    case .phoneContacts:
+      return phoneContacts
+    case .phoneAutomation:
+      return phoneAutomation
     }
   }
 
@@ -114,6 +126,8 @@ public struct PermissionsStatusJSON: Encodable, Sendable {
   public var notificationsHelper: PermissionState
   public var notificationDbFullDiskAccess: PermissionState
   public var clockAutomation: PermissionState
+  public var phoneContacts: PermissionState
+  public var phoneAutomation: PermissionState
   public var details: [String: [String: String]]
 
   init(status: PermissionsStatus) {
@@ -125,6 +139,8 @@ public struct PermissionsStatusJSON: Encodable, Sendable {
     notificationsHelper = status.notificationsHelper.state
     notificationDbFullDiskAccess = status.notificationDbFullDiskAccess.state
     clockAutomation = status.clockAutomation.state
+    phoneContacts = status.phoneContacts.state
+    phoneAutomation = status.phoneAutomation.state
     details = Dictionary(
       uniqueKeysWithValues: PermissionStatusField.allCases.compactMap { field in
         let fieldDetails = status[field].details
@@ -144,11 +160,12 @@ public enum PermissionRequestDomain: String, CaseIterable, Sendable {
   case mail
   case notifications
   case clockAlarms = "clock-alarms"
+  case phoneCalls = "phone-calls"
 
   public init(commandValue: String) throws {
     guard let domain = PermissionRequestDomain(rawValue: commandValue) else {
       throw AppleGatewayCommand.Error.invalidUsage(
-        "Domain must be calendar, reminders, notes, mail, notifications, or clock-alarms"
+        "Domain must be calendar, reminders, notes, mail, notifications, clock-alarms, or phone-calls"
       )
     }
     self = domain
