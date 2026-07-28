@@ -9,6 +9,10 @@ import ApplicationServices
 import EventKit
 #endif
 
+#if canImport(Contacts)
+import Contacts
+#endif
+
 public protocol PermissionStatusProbe: Sendable {
   func calendarStatus() -> PermissionFieldStatus
   func remindersStatus() -> PermissionFieldStatus
@@ -18,6 +22,8 @@ public protocol PermissionStatusProbe: Sendable {
   func notificationDbFullDiskAccessStatus() -> PermissionFieldStatus
   func notificationsHelperStatus(config: AppleGatewayConfig) -> PermissionFieldStatus
   func clockAutomationStatus(config: AppleGatewayConfig) -> PermissionFieldStatus
+  func phoneContactsStatus(config: AppleGatewayConfig) -> PermissionFieldStatus
+  func phoneAutomationStatus(config: AppleGatewayConfig) -> PermissionFieldStatus
 }
 
 public protocol PermissionRequestProvider: Sendable {
@@ -27,6 +33,23 @@ public protocol PermissionRequestProvider: Sendable {
   func requestMail(config: AppleGatewayConfig) -> PermissionFieldStatus
   func requestNotifications(config: AppleGatewayConfig) -> PermissionFieldStatus
   func requestClockAutomation(config: AppleGatewayConfig) -> PermissionFieldStatus
+  func requestPhoneCalls(config: AppleGatewayConfig) -> PermissionFieldStatus
+}
+
+public extension PermissionStatusProbe {
+  func phoneContactsStatus(config _: AppleGatewayConfig) -> PermissionFieldStatus {
+    PermissionFieldStatus(state: .unknown)
+  }
+
+  func phoneAutomationStatus(config _: AppleGatewayConfig) -> PermissionFieldStatus {
+    PermissionFieldStatus(state: .unknown)
+  }
+}
+
+public extension PermissionRequestProvider {
+  func requestPhoneCalls(config _: AppleGatewayConfig) -> PermissionFieldStatus {
+    PermissionFieldStatus(state: .unknown)
+  }
 }
 
 public protocol ResponsibleProcessDetecting: Sendable {
@@ -60,7 +83,9 @@ public struct PermissionsService<Probe: PermissionStatusProbe, Requester: Permis
       mailFullDiskAccess: domains.mail ? probe.mailFullDiskAccessStatus(config: config) : disabled("mail"),
       notificationsHelper: domains.notifications ? probe.notificationsHelperStatus(config: config) : disabled("notifications"),
       notificationDbFullDiskAccess: domains.notifications ? probe.notificationDbFullDiskAccessStatus() : disabled("notifications"),
-      clockAutomation: domains.clockAlarms ? probe.clockAutomationStatus(config: config) : disabled("clock_alarms")
+      clockAutomation: domains.clockAlarms ? probe.clockAutomationStatus(config: config) : disabled("clock_alarms"),
+      phoneContacts: domains.phoneCalls ? probe.phoneContactsStatus(config: config) : disabled("phone_calls"),
+      phoneAutomation: domains.phoneCalls ? probe.phoneAutomationStatus(config: config) : disabled("phone_calls")
     )
   }
 
@@ -79,6 +104,8 @@ public struct PermissionsService<Probe: PermissionStatusProbe, Requester: Permis
       status = config.domains.notifications ? requester.requestNotifications(config: config) : disabled("notifications")
     case .clockAlarms:
       status = config.domains.clockAlarms ? requester.requestClockAutomation(config: config) : disabled("clock_alarms")
+    case .phoneCalls:
+      status = config.domains.phoneCalls ? requester.requestPhoneCalls(config: config) : disabled("phone_calls")
     }
     return PermissionRequestResult(domain: domain, status: status)
   }
@@ -151,6 +178,14 @@ public struct LivePermissionProbe: PermissionStatusProbe {
 
   public func clockAutomationStatus(config _: AppleGatewayConfig) -> PermissionFieldStatus {
     clockAutomationStatus(askUserIfNeeded: false)
+  }
+
+  public func phoneContactsStatus(config _: AppleGatewayConfig) -> PermissionFieldStatus {
+    contactsStatus()
+  }
+
+  public func phoneAutomationStatus(config _: AppleGatewayConfig) -> PermissionFieldStatus {
+    accessibilityStatus(askUserIfNeeded: false, targetName: "Phone and FaceTime")
   }
 
   fileprivate func helperStatus(config: AppleGatewayConfig) -> PermissionFieldStatus {
@@ -260,6 +295,44 @@ public struct LivePermissionRequester: PermissionRequestProvider {
     probe.clockAutomationStatus(askUserIfNeeded: true)
   }
 
+  public func requestPhoneCalls(config _: AppleGatewayConfig) -> PermissionFieldStatus {
+    let contacts = requestContacts()
+    let accessibility = probe.accessibilityStatus(askUserIfNeeded: true, targetName: "Phone and FaceTime")
+    if contacts.state == .denied || accessibility.state == .denied {
+      return PermissionFieldStatus(
+        state: .denied,
+        details: ["contacts": contacts.state.rawValue, "accessibility": accessibility.state.rawValue]
+      )
+    }
+    if contacts.state == .granted && accessibility.state == .granted {
+      return PermissionFieldStatus(state: .granted)
+    }
+    return PermissionFieldStatus(
+      state: .unknown,
+      details: ["contacts": contacts.state.rawValue, "accessibility": accessibility.state.rawValue]
+    )
+  }
+
+  private func requestContacts() -> PermissionFieldStatus {
+    #if canImport(Contacts)
+    let store = CNContactStore()
+    let semaphore = DispatchSemaphore(value: 0)
+    let result = ContactRequestResultBox()
+    store.requestAccess(for: .contacts) { granted, error in
+      result.set(granted: granted, errorDescription: error.map { String(describing: $0) })
+      semaphore.signal()
+    }
+    semaphore.wait()
+    let value = result.value()
+    return PermissionFieldStatus(
+      state: value.granted ? .granted : .denied,
+      details: value.errorDescription.map { ["reason": $0] } ?? [:]
+    )
+    #else
+    return PermissionFieldStatus(state: .unknown, details: ["reason": "Contacts is unavailable"])
+    #endif
+  }
+
   private func requestEventKit(entity: EKEntityType) -> PermissionFieldStatus {
     #if canImport(EventKit)
     let store = EKEventStore()
@@ -315,6 +388,18 @@ private extension LivePermissionProbe {
   }
 
   func clockAutomationStatus(askUserIfNeeded: Bool) -> PermissionFieldStatus {
+    let accessibility = accessibilityStatus(askUserIfNeeded: askUserIfNeeded, targetName: "Clock")
+    guard accessibility.state == .granted else {
+      return accessibility
+    }
+    return automationStatus(
+      bundleID: "com.apple.systemevents",
+      targetName: "System Events",
+      askUserIfNeeded: askUserIfNeeded
+    )
+  }
+
+  func accessibilityStatus(askUserIfNeeded: Bool, targetName: String) -> PermissionFieldStatus {
     #if canImport(ApplicationServices)
     let accessibilityOptions = [
       "AXTrustedCheckOptionPrompt": askUserIfNeeded
@@ -323,21 +408,34 @@ private extension LivePermissionProbe {
       return PermissionFieldStatus(
         state: askUserIfNeeded ? .denied : .notDetermined,
         details: [
-          "reason": "Accessibility access is required to automate Clock",
-          "target": "Clock"
+          "reason": "Accessibility access is required to automate \(targetName)",
+          "target": targetName
         ]
       )
     }
-    return automationStatus(
-      bundleID: "com.apple.systemevents",
-      targetName: "System Events",
-      askUserIfNeeded: askUserIfNeeded
-    )
+    return PermissionFieldStatus(state: .granted)
     #else
     return PermissionFieldStatus(
       state: .unknown,
       details: ["reason": "ApplicationServices is unavailable"]
     )
+    #endif
+  }
+
+  func contactsStatus() -> PermissionFieldStatus {
+    #if canImport(Contacts)
+    switch CNContactStore.authorizationStatus(for: .contacts) {
+    case .authorized, .limited:
+      PermissionFieldStatus(state: .granted)
+    case .denied, .restricted:
+      PermissionFieldStatus(state: .denied)
+    case .notDetermined:
+      PermissionFieldStatus(state: .notDetermined)
+    @unknown default:
+      PermissionFieldStatus(state: .unknown)
+    }
+    #else
+    PermissionFieldStatus(state: .unknown, details: ["reason": "Contacts is unavailable"])
     #endif
   }
 
@@ -387,6 +485,25 @@ private extension LivePermissionProbe {
 }
 
 private final class EventKitRequestResultBox: @unchecked Sendable {
+  private let lock = NSLock()
+  private var granted = false
+  private var errorDescription: String?
+
+  func set(granted: Bool, errorDescription: String?) {
+    lock.lock()
+    self.granted = granted
+    self.errorDescription = errorDescription
+    lock.unlock()
+  }
+
+  func value() -> (granted: Bool, errorDescription: String?) {
+    lock.lock()
+    defer { lock.unlock() }
+    return (granted, errorDescription)
+  }
+}
+
+private final class ContactRequestResultBox: @unchecked Sendable {
   private let lock = NSLock()
   private var granted = false
   private var errorDescription: String?

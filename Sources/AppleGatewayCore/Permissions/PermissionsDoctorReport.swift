@@ -23,6 +23,12 @@ public struct PermissionsDoctorReport: Sendable {
       if field == .clockAutomation {
         line += " (System Settings > Privacy & Security > Accessibility and Automation)"
       }
+      if field == .phoneContacts {
+        line += " (System Settings > Privacy & Security > Contacts)"
+      }
+      if field == .phoneAutomation {
+        line += " (System Settings > Privacy & Security > Accessibility)"
+      }
       return line
     }.joined(separator: "\n")
   }
@@ -82,6 +88,8 @@ private extension PermissionRequestDomain {
       return "Notifications"
     case .clockAlarms:
       return "Clock automation"
+    case .phoneCalls:
+      return "Phone calls"
     }
   }
 
@@ -99,6 +107,8 @@ private extension PermissionRequestDomain {
       return "System Settings > Notifications"
     case .clockAlarms:
       return "System Settings > Privacy & Security > Accessibility and Automation"
+    case .phoneCalls:
+      return "System Settings > Privacy & Security > Contacts and Accessibility"
     }
   }
 
@@ -118,6 +128,8 @@ private extension PermissionRequestDomain {
       return nil
     case .clockAlarms:
       return "tccutil reset AppleEvents"
+    case .phoneCalls:
+      return "tccutil reset AddressBook; tccutil reset Accessibility"
     }
   }
 }

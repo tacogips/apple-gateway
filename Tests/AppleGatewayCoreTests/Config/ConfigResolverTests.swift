@@ -86,6 +86,42 @@ import Testing
   #expect(xdgResolved.config.mail.mailRoot == "\(root.home)/Library/Mail")
 }
 
+@Test func phoneCallsDomainCanBeDisabledByFileAndOverriddenByEnvironment() throws {
+  let root = try TemporaryConfigDirectory()
+  let path = try root.write(
+    "phone-calls.toml",
+    """
+    [domains]
+    phone_calls = false
+
+    [phone_calls]
+    virtual_audio_device_uid = "BlackHole2ch_UID"
+    capture_audio_device_uid = "LoopbackAudio_UID"
+    """
+  )
+
+  let fileResolved = try AppleGatewayConfigResolver().resolve(
+    cliConfigPath: path,
+    environment: ["HOME": root.home]
+  )
+  let environmentResolved = try AppleGatewayConfigResolver().resolve(
+    cliConfigPath: path,
+    environment: [
+      "HOME": root.home,
+      "APPLE_GATEWAY_DOMAINS_PHONE_CALLS": "true",
+      "APPLE_GATEWAY_PHONE_CALLS_VIRTUAL_AUDIO_DEVICE_UID": "CustomVirtualDevice",
+      "APPLE_GATEWAY_PHONE_CALLS_CAPTURE_AUDIO_DEVICE_UID": "CustomCaptureDevice"
+    ]
+  )
+
+  #expect(fileResolved.config.domains.phoneCalls == false)
+  #expect(fileResolved.config.phoneCalls.virtualAudioDeviceUID == "BlackHole2ch_UID")
+  #expect(fileResolved.config.phoneCalls.captureAudioDeviceUID == "LoopbackAudio_UID")
+  #expect(environmentResolved.config.domains.phoneCalls)
+  #expect(environmentResolved.config.phoneCalls.virtualAudioDeviceUID == "CustomVirtualDevice")
+  #expect(environmentResolved.config.phoneCalls.captureAudioDeviceUID == "CustomCaptureDevice")
+}
+
 @Test func parserRejectsUnknownKeysWithLocation() throws {
   let root = try TemporaryConfigDirectory()
   let path = try root.write(

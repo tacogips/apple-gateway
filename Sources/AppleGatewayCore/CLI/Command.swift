@@ -25,6 +25,7 @@ public struct AppleGatewayCommand: Sendable {
   private let mailWriteService: MailWriteService?
   private let notificationsService: (any NotificationsProviding)?
   private let clockAlarmsService: (any ClockAlarmsProviding)?
+  private let phoneCallsService: (any PhoneCallsProviding)?
 
   public init(
     arguments: [String],
@@ -40,7 +41,8 @@ public struct AppleGatewayCommand: Sendable {
     mailReadService: MailReadService? = nil,
     mailWriteService: MailWriteService? = nil,
     notificationsService: (any NotificationsProviding)? = nil,
-    clockAlarmsService: (any ClockAlarmsProviding)? = nil
+    clockAlarmsService: (any ClockAlarmsProviding)? = nil,
+    phoneCallsService: (any PhoneCallsProviding)? = nil
   ) {
     let liveServices = calendarReadService == nil || calendarWriteService == nil
       ? CalendarReminderServiceFactory.liveServices()
@@ -65,6 +67,7 @@ public struct AppleGatewayCommand: Sendable {
     self.mailWriteService = mailWriteService
     self.notificationsService = notificationsService
     self.clockAlarmsService = clockAlarmsService
+    self.phoneCallsService = phoneCallsService
   }
 
   public func run() throws -> String {
@@ -133,7 +136,7 @@ public struct AppleGatewayCommand: Sendable {
            \(executableName) graphql --query <query> | --query-file <path>
                          [--variables <json> | --variables-file <path>] [--pretty]
            \(executableName) permissions status [--json]
-           \(executableName) permissions request --domain calendar|reminders|notes|mail|notifications|clock-alarms
+           \(executableName) permissions request --domain calendar|reminders|notes|mail|notifications|clock-alarms|phone-calls
            \(executableName) file download --key <key> [--key <key> ...] [--output-dir <dir>]
            \(executableName) cache prune [--all]
            \(executableName) schema print [--role full|reader]
@@ -326,6 +329,7 @@ public struct AppleGatewayCommand: Sendable {
       mailWriteService: mailWriteService ?? MailServiceFactory.liveWriteService(config: config),
       notificationsService: notificationsService ?? NotificationsServiceFactory.liveService(config: config),
       clockAlarmsService: clockAlarmsService ?? ClockAlarmsServiceFactory.liveService(config: config),
+      phoneCallsService: phoneCallsService ?? PhoneCallsServiceFactory.liveService(config: config),
       pretty: options.pretty
     )
     return AppleGatewayCommandResult(
@@ -643,7 +647,7 @@ public struct AppleGatewayCommand: Sendable {
     }
     guard let domain else {
       throw Error.invalidUsage(
-        "Usage: apple-gateway permissions request --domain calendar|reminders|notes|mail|notifications|clock-alarms"
+        "Usage: apple-gateway permissions request --domain calendar|reminders|notes|mail|notifications|clock-alarms|phone-calls"
       )
     }
     return domain
@@ -747,6 +751,7 @@ public enum AppleGatewayCommandLine {
     mailWriteService: MailWriteService? = nil,
     notificationsService: (any NotificationsProviding)? = nil,
     clockAlarmsService: (any ClockAlarmsProviding)? = nil,
+    phoneCallsService: (any PhoneCallsProviding)? = nil,
     standardOutput: FileHandle = .standardOutput,
     standardError: FileHandle = .standardError
   ) -> Int32 {
@@ -764,7 +769,8 @@ public enum AppleGatewayCommandLine {
       mailReadService: mailReadService,
       mailWriteService: mailWriteService,
       notificationsService: notificationsService,
-      clockAlarmsService: clockAlarmsService
+      clockAlarmsService: clockAlarmsService,
+      phoneCallsService: phoneCallsService
     )
 
     do {

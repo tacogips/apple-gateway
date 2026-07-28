@@ -142,10 +142,16 @@ public struct AppleGatewayConfigResolver {
       config.domains.mail = value
     case ("domains", "notifications", .boolean(let value)):
       config.domains.notifications = value
+    case ("domains", "phone_calls", .boolean(let value)):
+      config.domains.phoneCalls = value
     case ("mail", "mail_root", .string(let value)):
       config.mail.mailRoot = value
     case ("notifications", "helper_app_path", .string(let value)):
       config.notifications.helperAppPath = value
+    case ("phone_calls", "virtual_audio_device_uid", .string(let value)):
+      config.phoneCalls.virtualAudioDeviceUID = value
+    case ("phone_calls", "capture_audio_device_uid", .string(let value)):
+      config.phoneCalls.captureAudioDeviceUID = value
     default:
       let expected = ConfigSchema.expectedType(section: section, key: key)?.description ?? "known schema value"
       throw AppleGatewayConfigError.validation(message: typeMessage(expected))

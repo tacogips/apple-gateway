@@ -7,6 +7,7 @@ import Testing
   #expect(try PermissionRequestDomain(commandValue: "mail") == .mail)
   #expect(try PermissionRequestDomain(commandValue: "notifications") == .notifications)
   #expect(try PermissionRequestDomain(commandValue: "clock-alarms") == .clockAlarms)
+  #expect(try PermissionRequestDomain(commandValue: "phone-calls") == .phoneCalls)
 
   #expect(throws: AppleGatewayCommand.Error.self) {
     _ = try PermissionRequestDomain(commandValue: "unknown")
@@ -86,6 +87,17 @@ import Testing
   #expect(result.domain == .clockAlarms)
   #expect(result.status.state == .granted)
   #expect(requester.requestedDomains == [.clockAlarms])
+}
+
+@Test func requestPathCallsPhonePermissionsProvider() {
+  let requester = CountingPermissionRequester()
+  let service = PermissionsService(probe: CountingPermissionProbe(), requester: requester)
+
+  let result = service.request(domain: .phoneCalls, config: .defaultValue)
+
+  #expect(result.domain == .phoneCalls)
+  #expect(result.status.state == .granted)
+  #expect(requester.requestedDomains == [.phoneCalls])
 }
 
 @Test func requestPathCallsMailAutomationProvider() {
@@ -192,6 +204,11 @@ private final class CountingPermissionRequester: PermissionRequestProvider, @unc
 
   func requestClockAutomation(config: AppleGatewayConfig) -> PermissionFieldStatus {
     requestedDomains.append(.clockAlarms)
+    return PermissionFieldStatus(state: .granted)
+  }
+
+  func requestPhoneCalls(config: AppleGatewayConfig) -> PermissionFieldStatus {
+    requestedDomains.append(.phoneCalls)
     return PermissionFieldStatus(state: .granted)
   }
 }
