@@ -16,7 +16,8 @@ the Envelope Index, and body/attachment materialization from
 - [x] `Domains/MailAdapter/` with SQLite C-shim wrapper, snapshot-copy
       access, mail-root probing, emlx and partial-emlx parsers, MIME walk
 - [x] Schema module: mailAccounts, mailboxes, mailMessages, mailMessage
-      (Query only; this domain defines no mutations)
+      (the Phase 3 retrieval deliverable was Query-only; later update work is
+      tracked in `impl-plans/completed/apple-mail-updates.md`)
 - [x] Mail file kinds wired into the Phase 0 file store (BODY_TEXT,
       BODY_HTML, RAW_SOURCE, ATTACHMENT)
 - [x] Synthetic fixture databases and emlx fixtures in Mail-focused tests

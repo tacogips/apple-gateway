@@ -2,11 +2,16 @@ import Foundation
 import Testing
 @testable import AppleGatewayCore
 
-@Test func mailSchemaPrintsQueryOnlyFields() {
+@Test func mailSchemaSeparatesReaderQueriesFromFullModeMutations() {
   let readerSchema = GraphQLRuntime.schema(role: .reader)
   let fullSchema = GraphQLRuntime.schema(role: .full)
 
-  #expect(GraphQLSchemaModule.mail.mutationFields.isEmpty)
+  #expect(GraphQLSchemaModule.mail.mutationFields.map(\.name) == [
+    "setMailMessageRead",
+    "setMailMessageFlagged",
+    "moveMailMessage",
+    "deleteMailMessage"
+  ])
   #expect(readerSchema.contains("  mailAccounts: [MailAccount!]!"))
   #expect(readerSchema.contains("  mailboxes(accountId: ID): [Mailbox!]!"))
   #expect(readerSchema.contains("  mailMessages(input: MailSearchInput!): MailMessageConnection!"))
@@ -16,9 +21,10 @@ import Testing
 
   #expect(fullSchema.contains("type Mutation {"))
   #expect(fullSchema.contains("  mailAccounts: [MailAccount!]!"))
-  #expect(!fullSchema.contains("createMail"))
-  #expect(!fullSchema.contains("updateMail"))
-  #expect(!fullSchema.contains("deleteMail"))
+  #expect(fullSchema.contains("  setMailMessageRead(messageId: ID!, isRead: Boolean!): MailUpdateResult!"))
+  #expect(fullSchema.contains("  setMailMessageFlagged(messageId: ID!, isFlagged: Boolean!): MailUpdateResult!"))
+  #expect(fullSchema.contains("  moveMailMessage(messageId: ID!, mailboxId: ID!): MailMoveResult!"))
+  #expect(fullSchema.contains("  deleteMailMessage(messageId: ID!): DeleteResult!"))
 }
 
 @Test func mailReadSchemaUsesInjectedFakeService() throws {
@@ -138,17 +144,46 @@ import Testing
   #expect(envelope.errors.first?.code == "WRITE_DISABLED_IN_READER")
 }
 
+@Test func fullModeDispatchesMailMutationsToInjectedWriter() throws {
+  let provider = GraphQLMailFake()
+  let writer = GraphQLMailWriterFake()
+  let writeService = MailWriteService(provider: provider, writer: writer)
+  let envelope = try mailExecuteGraphQL(
+    """
+    mutation {
+      read: setMailMessageRead(messageId: "message-1", isRead: true) { success messageId }
+      flag: setMailMessageFlagged(messageId: "message-1", isFlagged: false) { success messageId }
+      moved: moveMailMessage(messageId: "message-1", mailboxId: "mailbox-1") {
+        success messageId mailboxId
+      }
+    }
+    """,
+    mailReadService: MailReadService(provider: provider),
+    mailWriteService: writeService
+  )
+
+  #expect(envelope.errors.isEmpty)
+  #expect((envelope.data?["read"] as? [String: Any])?["success"] as? Bool == true)
+  #expect((envelope.data?["flag"] as? [String: Any])?["messageId"] as? String == "message-1")
+  #expect((envelope.data?["moved"] as? [String: Any])?["mailboxId"] as? String == "mailbox-1")
+  #expect(writer.readValues == [true])
+  #expect(writer.flaggedValues == [false])
+  #expect(writer.moveDestinations == ["mailbox-1"])
+}
+
 private func mailExecuteGraphQL(
   _ query: String,
   role: AppleGatewayRole = .full,
-  mailReadService: MailReadService
+  mailReadService: MailReadService,
+  mailWriteService: MailWriteService = MailServiceFactory.unavailableWriteService()
 ) throws -> MailDecodedEnvelope {
   let data = GraphQLRuntime.execute(
     query: query,
     variables: [:],
     role: role,
     permissionsProvider: MailGraphQLPermissionsProvider(),
-    mailReadService: mailReadService
+    mailReadService: mailReadService,
+    mailWriteService: mailWriteService
   )
   let object = try JSONSerialization.jsonObject(with: data)
   let dictionary = try #require(object as? [String: Any])
@@ -267,4 +302,24 @@ private final class GraphQLMailFake: MailProviding, @unchecked Sendable {
       )
     )
   }
+}
+
+private final class GraphQLMailWriterFake: MailWriting, @unchecked Sendable {
+  var readValues: [Bool] = []
+  var flaggedValues: [Bool] = []
+  var moveDestinations: [String] = []
+
+  func setRead(target: MailMessageTarget, isRead: Bool) throws {
+    readValues.append(isRead)
+  }
+
+  func setFlagged(target: MailMessageTarget, isFlagged: Bool) throws {
+    flaggedValues.append(isFlagged)
+  }
+
+  func move(target: MailMessageTarget, destination: MailboxTarget) throws {
+    moveDestinations.append(destination.mailboxId)
+  }
+
+  func delete(target: MailMessageTarget) throws {}
 }

@@ -17,6 +17,9 @@ public struct PermissionsDoctorReport: Sendable {
       if field == .mailFullDiskAccess || field == .notificationDbFullDiskAccess {
         line += " (System Settings > Privacy & Security > Full Disk Access)"
       }
+      if field == .mailAutomation {
+        line += " (System Settings > Privacy & Security > Automation)"
+      }
       if field == .clockAutomation {
         line += " (System Settings > Privacy & Security > Accessibility and Automation)"
       }
@@ -73,6 +76,8 @@ private extension PermissionRequestDomain {
       return "Reminders"
     case .notes:
       return "Notes"
+    case .mail:
+      return "Mail"
     case .notifications:
       return "Notifications"
     case .clockAlarms:
@@ -87,6 +92,8 @@ private extension PermissionRequestDomain {
     case .reminders:
       return "System Settings > Privacy & Security > Reminders"
     case .notes:
+      return "System Settings > Privacy & Security > Automation"
+    case .mail:
       return "System Settings > Privacy & Security > Automation"
     case .notifications:
       return "System Settings > Notifications"
@@ -105,7 +112,7 @@ private extension PermissionRequestDomain {
       return "tccutil reset Calendar"
     case .reminders:
       return "tccutil reset Reminders"
-    case .notes:
+    case .notes, .mail:
       return "tccutil reset AppleEvents"
     case .notifications:
       return nil

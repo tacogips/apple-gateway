@@ -166,7 +166,7 @@ with execution behavior).
 
 ```bash
 apple-gateway permissions status [--json]
-apple-gateway permissions request --domain calendar|reminders|notes|notifications|clock-alarms
+apple-gateway permissions request --domain calendar|reminders|notes|mail|notifications|clock-alarms
 ```
 
 `status` never triggers TCC prompts. `request` deliberately does. Full Disk
@@ -175,7 +175,7 @@ instructions for it (see `design-permissions.md`).
 
 `status --json` returns the same permission-state fields exposed by
 GraphQL `PermissionsStatus`: `calendars`, `reminders`, `notesAutomation`,
-`mailFullDiskAccess`, `notificationsHelper`,
+`mailAutomation`, `mailFullDiskAccess`, `notificationsHelper`,
 `notificationDbFullDiskAccess`, and `clockAutomation`. States use the
 `PermissionState` vocabulary from `design-apple-gateway.md`. The JSON form
 may include per-field diagnostic details, but the state fields remain stable
@@ -184,15 +184,16 @@ for clients.
 `request --domain calendar` must trigger only the EventKit calendar request
 path. The other prompt-capable request domains are isolated the same way:
 reminders uses EventKit reminders, notes uses Notes automation, clock-alarms
-uses Accessibility plus System Events automation, and notifications uses an
-already installed and configured notifier helper. If
+uses Accessibility plus System Events automation, mail uses Mail.app
+automation, and notifications uses an already installed and configured
+notifier helper. If
 the helper is not configured or cannot be resolved, the notifications request
 reports an unavailable `UNKNOWN` diagnostic; TASK-005 does not create,
 install, sign, package, or launch `AppleGatewayNotifier.app`. Non-requestable
 domains continue to be reported by `status` with manual remediation text.
 
 Permission-domain discovery uses the same complete value list everywhere:
-`calendar|reminders|notes|notifications|clock-alarms`. Both top-level `--help`
+`calendar|reminders|notes|mail|notifications|clock-alarms`. Both top-level `--help`
 and the usage diagnostic produced when `permissions request` omits `--domain`
 must include that list. Regression tests cover both surfaces so a supported
 request domain cannot remain callable while disappearing from CLI guidance.

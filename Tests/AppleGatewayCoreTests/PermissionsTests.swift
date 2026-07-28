@@ -2,16 +2,14 @@ import Foundation
 import Testing
 @testable import AppleGatewayCore
 
-@Test func permissionRequestDomainParsingRejectsNonRequestableDomains() throws {
+@Test func permissionRequestDomainParsingIncludesMailAutomation() throws {
   #expect(try PermissionRequestDomain(commandValue: "calendar") == .calendar)
+  #expect(try PermissionRequestDomain(commandValue: "mail") == .mail)
   #expect(try PermissionRequestDomain(commandValue: "notifications") == .notifications)
   #expect(try PermissionRequestDomain(commandValue: "clock-alarms") == .clockAlarms)
 
-  do {
-    _ = try PermissionRequestDomain(commandValue: "mail")
-    Issue.record("Expected mail to be rejected as non-requestable")
-  } catch AppleGatewayCommand.Error.invalidUsage(let message) {
-    #expect(message.contains("calendar, reminders, notes, notifications, or clock-alarms"))
+  #expect(throws: AppleGatewayCommand.Error.self) {
+    _ = try PermissionRequestDomain(commandValue: "unknown")
   }
 }
 
@@ -37,8 +35,10 @@ import Testing
   let status = service.status(config: config)
 
   #expect(status.calendars.state == .notRequired)
+  #expect(status.mailAutomation.state == .notRequired)
   #expect(status.mailFullDiskAccess.state == .notRequired)
   #expect(probe.calendarStatusCalls == 0)
+  #expect(probe.mailAutomationStatusCalls == 0)
   #expect(probe.mailStatusCalls == 0)
 }
 
@@ -88,6 +88,17 @@ import Testing
   #expect(requester.requestedDomains == [.clockAlarms])
 }
 
+@Test func requestPathCallsMailAutomationProvider() {
+  let requester = CountingPermissionRequester()
+  let service = PermissionsService(probe: CountingPermissionProbe(), requester: requester)
+
+  let result = service.request(domain: .mail, config: .defaultValue)
+
+  #expect(result.domain == .mail)
+  #expect(result.status.state == .granted)
+  #expect(requester.requestedDomains == [.mail])
+}
+
 @Test func permissionFailureFormatterMatchesContractOrdering() {
   let message = PermissionFailureFormatter().message(
     domainName: "Calendar",
@@ -112,6 +123,7 @@ import Testing
 
 private final class CountingPermissionProbe: PermissionStatusProbe, @unchecked Sendable {
   private(set) var calendarStatusCalls = 0
+  private(set) var mailAutomationStatusCalls = 0
   private(set) var mailStatusCalls = 0
 
   func calendarStatus() -> PermissionFieldStatus {
@@ -125,6 +137,11 @@ private final class CountingPermissionProbe: PermissionStatusProbe, @unchecked S
 
   func notesAutomationStatus() -> PermissionFieldStatus {
     PermissionFieldStatus(state: .unknown)
+  }
+
+  func mailAutomationStatus() -> PermissionFieldStatus {
+    mailAutomationStatusCalls += 1
+    return PermissionFieldStatus(state: .granted)
   }
 
   func mailFullDiskAccessStatus(config: AppleGatewayConfig) -> PermissionFieldStatus {
@@ -160,6 +177,11 @@ private final class CountingPermissionRequester: PermissionRequestProvider, @unc
 
   func requestNotes(config: AppleGatewayConfig) -> PermissionFieldStatus {
     requestedDomains.append(.notes)
+    return PermissionFieldStatus(state: .granted)
+  }
+
+  func requestMail(config: AppleGatewayConfig) -> PermissionFieldStatus {
+    requestedDomains.append(.mail)
     return PermissionFieldStatus(state: .granted)
   }
 

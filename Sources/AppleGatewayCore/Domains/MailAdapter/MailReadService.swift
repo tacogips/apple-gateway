@@ -25,12 +25,39 @@ public struct MailReadService: Sendable {
 }
 
 public enum MailServiceFactory {
+  public static func liveServices(config: AppleGatewayConfig = .defaultValue) -> MailServices {
+    let provider = LiveMailEnvelopeIndexProvider(config: config)
+    return MailServices(
+      readService: MailReadService(provider: provider),
+      writeService: MailWriteService(provider: provider, writer: LiveMailAppleEventWriter())
+    )
+  }
+
   public static func liveReadService(config: AppleGatewayConfig = .defaultValue) -> MailReadService {
-    MailReadService(provider: LiveMailEnvelopeIndexProvider(config: config))
+    liveServices(config: config).readService
+  }
+
+  public static func liveWriteService(config: AppleGatewayConfig = .defaultValue) -> MailWriteService {
+    liveServices(config: config).writeService
   }
 
   public static func unavailableReadService() -> MailReadService {
     MailReadService(provider: UnavailableMailProvider())
+  }
+
+  public static func unavailableWriteService() -> MailWriteService {
+    let provider = UnavailableMailProvider()
+    return MailWriteService(provider: provider, writer: UnavailableMailWriter())
+  }
+}
+
+public struct MailServices: Sendable {
+  public var readService: MailReadService
+  public var writeService: MailWriteService
+
+  public init(readService: MailReadService, writeService: MailWriteService) {
+    self.readService = readService
+    self.writeService = writeService
   }
 }
 
@@ -58,7 +85,31 @@ public struct UnavailableMailProvider: MailProviding {
   }
 }
 
-private struct LiveMailEnvelopeIndexProvider: MailProviding {
+public struct UnavailableMailWriter: MailWriting {
+  public init() {}
+
+  public func setRead(target: MailMessageTarget, isRead: Bool) throws {
+    throw unavailable()
+  }
+
+  public func setFlagged(target: MailMessageTarget, isFlagged: Bool) throws {
+    throw unavailable()
+  }
+
+  public func move(target: MailMessageTarget, destination: MailboxTarget) throws {
+    throw unavailable()
+  }
+
+  public func delete(target: MailMessageTarget) throws {
+    throw unavailable()
+  }
+
+  private func unavailable() -> AppleGatewayError {
+    AppleGatewayError(code: .domainDisabled, message: "Mail writer is unavailable")
+  }
+}
+
+struct LiveMailEnvelopeIndexProvider: MailProviding {
   var config: AppleGatewayConfig
 
   func accounts() throws -> [MailAccount] {

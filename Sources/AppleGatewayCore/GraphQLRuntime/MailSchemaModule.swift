@@ -5,7 +5,7 @@ extension GraphQLSchemaModule {
     GraphQLSchemaModule(
       types: MailSchema.types,
       queryFields: MailSchema.queryFields,
-      mutationFields: []
+      mutationFields: MailSchema.mutationFields
     )
   }
 }
@@ -73,6 +73,15 @@ private enum MailSchema {
         field("pageInfo", nonNull(named("PageInfo"))),
         field("totalCount", intRequired())
       ]),
+      object("MailUpdateResult", fields: [
+        field("success", boolRequired()),
+        field("messageId", idRequired())
+      ]),
+      object("MailMoveResult", fields: [
+        field("success", boolRequired()),
+        field("messageId", idRequired()),
+        field("mailboxId", idRequired())
+      ]),
       input("MailSearchInput", fields: [
         inputField("accountId", id()),
         inputField("mailboxId", id()),
@@ -129,6 +138,63 @@ private enum MailSchema {
             messageId: arguments.mailRequired("messageId").mailStringValue()
           )
           return message.map(mailMessageValue) ?? .null
+        }
+      )
+    ]
+  }
+
+  static var mutationFields: [GraphQLFieldDefinition] {
+    [
+      GraphQLFieldDefinition(
+        name: "setMailMessageRead",
+        type: nonNull(named("MailUpdateResult")),
+        arguments: [
+          argument("messageId", idRequired()),
+          argument("isRead", boolRequired())
+        ],
+        resolver: { arguments, context in
+          mailUpdateResultValue(try context.mailWriteService.setMessageRead(
+            messageId: arguments.mailRequired("messageId").mailStringValue(),
+            isRead: arguments.mailRequired("isRead").mailBoolValue()
+          ))
+        }
+      ),
+      GraphQLFieldDefinition(
+        name: "setMailMessageFlagged",
+        type: nonNull(named("MailUpdateResult")),
+        arguments: [
+          argument("messageId", idRequired()),
+          argument("isFlagged", boolRequired())
+        ],
+        resolver: { arguments, context in
+          mailUpdateResultValue(try context.mailWriteService.setMessageFlagged(
+            messageId: arguments.mailRequired("messageId").mailStringValue(),
+            isFlagged: arguments.mailRequired("isFlagged").mailBoolValue()
+          ))
+        }
+      ),
+      GraphQLFieldDefinition(
+        name: "moveMailMessage",
+        type: nonNull(named("MailMoveResult")),
+        arguments: [
+          argument("messageId", idRequired()),
+          argument("mailboxId", idRequired())
+        ],
+        resolver: { arguments, context in
+          mailMoveResultValue(try context.mailWriteService.moveMessage(
+            messageId: arguments.mailRequired("messageId").mailStringValue(),
+            mailboxId: arguments.mailRequired("mailboxId").mailStringValue()
+          ))
+        }
+      ),
+      GraphQLFieldDefinition(
+        name: "deleteMailMessage",
+        type: nonNull(named("DeleteResult")),
+        arguments: [argument("messageId", idRequired())],
+        resolver: { arguments, context in
+          mailDeleteResultValue(try context.mailWriteService.deleteMessage(
+            messageId: arguments.mailRequired("messageId").mailStringValue()
+          ))
         }
       )
     ]
@@ -378,6 +444,25 @@ private func mailPageInfoValue(_ pageInfo: PageInfo) -> GraphQLValue {
     "hasNextPage": .bool(pageInfo.hasNextPage),
     "endCursor": pageInfo.endCursor.map(GraphQLValue.string) ?? .null
   ])
+}
+
+private func mailUpdateResultValue(_ result: MailUpdateResult) -> GraphQLValue {
+  .object([
+    "success": .bool(result.success),
+    "messageId": .string(result.messageId)
+  ])
+}
+
+private func mailMoveResultValue(_ result: MailMoveResult) -> GraphQLValue {
+  .object([
+    "success": .bool(result.success),
+    "messageId": .string(result.messageId),
+    "mailboxId": .string(result.mailboxId)
+  ])
+}
+
+private func mailDeleteResultValue(_ result: DeleteResult) -> GraphQLValue {
+  .object(["success": .bool(result.success)])
 }
 
 private let mailGraphQLTimeZone = TimeZone(secondsFromGMT: 0) ?? .current

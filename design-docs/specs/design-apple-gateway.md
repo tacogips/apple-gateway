@@ -190,6 +190,7 @@ type PermissionsStatus {
   calendars: PermissionState!
   reminders: PermissionState!
   notesAutomation: PermissionState!
+  mailAutomation: PermissionState!
   mailFullDiskAccess: PermissionState!
   notificationsHelper: PermissionState!
   notificationDbFullDiskAccess: PermissionState!

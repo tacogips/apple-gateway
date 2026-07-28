@@ -11,7 +11,7 @@ import Testing
   let command = AppleGatewayCommand(arguments: ["--help"])
   let output = try command.run()
   #expect(output.contains("Usage: apple-gateway"))
-  #expect(output.contains("calendar|reminders|notes|notifications|clock-alarms"))
+  #expect(output.contains("calendar|reminders|notes|mail|notifications|clock-alarms"))
 }
 
 @Test func commandWithoutArgumentsReportsUsage() throws {
@@ -33,7 +33,7 @@ import Testing
     _ = try command.run()
     Issue.record("Expected missing permission domain usage")
   } catch AppleGatewayCommand.Error.invalidUsage(let usage) {
-    #expect(usage.contains("calendar|reminders|notes|notifications|clock-alarms"))
+    #expect(usage.contains("calendar|reminders|notes|mail|notifications|clock-alarms"))
   }
 }
 
