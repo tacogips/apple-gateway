@@ -155,20 +155,47 @@ public struct LivePermissionProbe: PermissionStatusProbe {
   }
 
   public func mailFullDiskAccessStatus(config: AppleGatewayConfig) -> PermissionFieldStatus {
-    let configuredRoot = config.mail.mailRoot
-    let mailRoot = configuredRoot.isEmpty
-      ? NSHomeDirectory() + "/Library/Mail"
-      : configuredRoot
-    return readOnlyFileStatus(
-      path: mailRoot + "/Envelope Index",
-      unavailableReason: "Mail Full Disk Access probe file is unavailable"
-    )
+    do {
+      let paths = try MailRootResolver().resolve(config: config)
+      return readOnlyFileStatus(
+        path: paths.envelopeIndex.path,
+        unavailableReason: "Mail Full Disk Access probe file is unavailable"
+      )
+    } catch let error as AppleGatewayError {
+      return permissionStatus(for: error)
+    } catch {
+      return PermissionFieldStatus(
+        state: .unknown,
+        details: ["reason": String(describing: error)]
+      )
+    }
   }
 
   public func notificationDbFullDiskAccessStatus() -> PermissionFieldStatus {
-    readOnlyFileStatus(
-      path: NSHomeDirectory() + "/Library/Application Support/NotificationCenter",
-      unavailableReason: "Notification database probe path is unavailable"
+    let candidates = UsernotedDatabasePathResolver().candidatePaths()
+    var deniedPath: String?
+    for candidate in candidates {
+      switch LiveUsernotedDatabaseAccessChecker().accessStatus(path: candidate) {
+      case .readable:
+        return PermissionFieldStatus(state: .granted, details: ["path": candidate])
+      case .denied:
+        deniedPath = candidate
+      case .missing:
+        continue
+      }
+    }
+    if let deniedPath {
+      return PermissionFieldStatus(
+        state: .denied,
+        details: ["path": deniedPath, "reason": "Read-only open was denied"]
+      )
+    }
+    return PermissionFieldStatus(
+      state: .unknown,
+      details: [
+        "paths": candidates.joined(separator: ","),
+        "reason": "Notification database probe file is unavailable"
+      ]
     )
   }
 
@@ -246,6 +273,17 @@ public struct LivePermissionProbe: PermissionStatusProbe {
       state: .unknown,
       details: ["path": path, "reason": unavailableReason]
     )
+  }
+
+  private func permissionStatus(for error: AppleGatewayError) -> PermissionFieldStatus {
+    var details = error.details ?? [:]
+    details["reason"] = error.message
+    switch error.code {
+    case .fullDiskAccessRequired:
+      return PermissionFieldStatus(state: .denied, details: details)
+    default:
+      return PermissionFieldStatus(state: .unknown, details: details)
+    }
   }
 
   private func runProcess(executable: String, arguments: [String]) throws -> String {

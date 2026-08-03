@@ -21,10 +21,12 @@ recorded as an open question, not part of v1.
 
 Per-note property access costs one Apple Event round trip. All list/search
 metadata operations use bulk property fetch, JXA equivalent of
-`get {id, name, modification date} of every note`, chunked by
-`limits.apple_event_batch_size` (default 200), each chunk wrapped in an
-explicit timeout (`limits.apple_event_timeout_seconds`, default 30) with
-one retry on error -1712. Full bodies are never returned during list/search;
+`get {id, name, modification date} of every note`. Lightweight summaries are
+fetched in vectorized chunks bounded by `limits.apple_event_batch_size`, then
+expensive shared-state and attachment metadata is hydrated only for the
+paginated result notes using the same bound (default 200). Each request has an
+explicit timeout (`limits.apple_event_timeout_seconds`, default 30) with one
+retry on error -1712. Full bodies are never returned during list/search;
 only `note(noteId:)` in TASK-003 fetches a complete body, one note at a
 time. TASK-002 search may ask Notes.app to evaluate plaintext app-side and
 may return only bounded snippets for the current result page.
@@ -67,21 +69,26 @@ The Swift bridge validates that `argumentsJSON` is UTF-8 JSON before launch,
 passes it as an argv value after `-e <static template>`, and validates that
 successful stdout is JSON before returning bytes to the domain adapter. This
 keeps quote, backslash, newline, HTML, and script-like payloads as data
-rather than executable source.
+rather than executable source. Stdout and stderr use owner-only temporary
+capture files inside a mode-0700 directory so large valid JSON responses
+cannot deadlock on a full process pipe or disclose Notes metadata to another
+local user. The bridge removes the directory after every completed attempt.
 
 Chunking belongs to the adapter/bridge boundary, not to GraphQL resolvers.
-Read operations that can address many Notes objects split stable object ids
-or fetch windows by `limits.apple_event_batch_size` (default 200). Each
-chunk executes as an independent `runJXA` call with the same static template
-and a different JSON argument payload. A chunk failure fails the overall
-operation with the classified bridge error; later phases may add partial
-progress only if the GraphQL contract is extended to represent it.
+Read operations fetch stable id windows, lightweight summaries, and detail
+hydration chunks using `limits.apple_event_batch_size` (default 200). Bounded
+summary chunks prevent candidate-id JSON from exceeding the subprocess
+argument limit, while the bridge safely captures large JSON responses without
+pipe backpressure. A request failure fails the overall operation with the
+classified bridge error; later phases may add partial progress only if the
+GraphQL contract is extended to represent it.
 
 Timeout handling has two sources:
 
-- Local process timeout: the Swift bridge kills the `osascript` process after
-  `limits.apple_event_timeout_seconds` (default 30), classifies the result as
-  `.timeout`, and retries once.
+- Local process timeout: the Swift bridge terminates the `osascript` process
+  after `limits.apple_event_timeout_seconds` (default 30), waits only for a
+  bounded grace period, force-kills a process that does not exit, classifies
+  the result as `.timeout`, and retries once.
 - AppleEvent timeout regression: stderr containing `-1712` or equivalent
   timeout wording is classified as `.timeout` and retried once.
 
@@ -95,14 +102,16 @@ The bridge error taxonomy is the only boundary visible to domain adapters:
 | --- | --- | --- |
 | `.automationDenied` | TCC/Automation stderr, including `-1743` or not-authorized wording | Surface a permission error with guidance to grant Automation access. |
 | `.timeout` | Local timeout, `-1712`, or timeout wording on stderr | Retry once, then fail the operation. |
-| `.appUnavailable` | `osascript` launch failure, application-not-running, app-not-found, or `-600` style stderr | Surface application unavailable. |
+| `.appUnavailable` | `osascript` launch failure, application-not-running, app-not-found, connection-invalid (`-609`), or `-600` style stderr | Surface application unavailable. |
 | `.scriptFailure` | Nonzero exit not otherwise classified, empty/garbage successful stdout, or script-thrown JSON error | Surface an internal script failure without exposing untrusted payload as source. |
 
 Stub-osascript tests cover the boundary without requiring live Notes or TCC
-state: success JSON, local timeout retry, `-1712` retry-then-fail,
-permission-denied stderr, garbage stdout, and quote/backslash injection
-payloads. Live Notes verification remains permission-gated and belongs to
-the Phase 2 manual checklist after TASK-001 unit coverage passes.
+state: success JSON, local timeout retry, bounded force-kill when termination
+is ignored, `-1712` retry-then-fail, owner-only capture permissions and
+cleanup, permission-denied stderr, connection-invalid `-609` classification,
+garbage stdout, bounded summary arguments, and quote/backslash injection
+payloads. Live Notes verification remains permission-gated and belongs to the
+Phase 2 manual checklist after TASK-001 unit coverage passes.
 
 ### TASK-002 Read-Side Contract
 
@@ -118,7 +127,7 @@ The adapter uses only static JXA templates selected by Swift code:
 | `listAccounts` | Return account ids, names, and default-account marker. | No body access. |
 | `listFolders` | Return folder ids, account ids, parent ids when available, names, and note counts. | No body access. |
 | `listNoteMetadataWindow` | Return note ids and metadata from a folder/account window for listing. | No body access. |
-| `fetchNoteMetadataBatch` | Return metadata for a Swift-provided batch of note ids, capped by `apple_event_batch_size`. | No body access. |
+| `fetchNoteMetadataBatch` | Return lightweight summaries or detailed metadata for an id batch capped by `apple_event_batch_size`. | No body access. |
 | `searchNoteIdsByPlaintext` | Return note ids matching a query using a Notes.app `whose` predicate over plaintext. | App-side predicate only; no full body returned. |
 | `fetchSearchSnippetsBatch` | Return bounded snippets for the already-paginated search result ids. | Returns snippet text only, never full plaintext or HTML. |
 | `probeNoteVisibility` | Classify explicit note ids as visible, missing, or locked/inaccessible. | No full body returned. |
@@ -134,8 +143,10 @@ Read-side data flow:
    (`INVALID_ARGUMENT` for an unknown account id, `NOTE_FOLDER_NOT_FOUND`
    for an unknown folder id) before broad note enumeration.
 2. Enumerate candidate note ids from account/folder scope without fetching
-   bodies. Metadata is fetched with `fetchNoteMetadataBatch` in chunks no
-   larger than `limits.apple_event_batch_size`.
+   bodies. Lightweight sortable metadata is fetched in bounded vectorized
+   `fetchNoteMetadataBatch` chunks; expensive shared and attachment metadata
+   is hydrated only after pagination, in chunks no larger than
+   `limits.apple_event_batch_size`.
 3. Apply non-query metadata filters in Swift. Date filters compare
    normalized `DateTime` values with an inclusive lower bound for
    `modifiedAfter` and an exclusive upper bound for `modifiedBefore`.
@@ -245,6 +256,26 @@ permanent unshared state. The metadata payloads produced by
 same guarded JXA mapping rules so list, explicit metadata lookup, and body
 lookup cannot disagree about attachment metadata or sharing state.
 
+Detailed list hydration is a page-local enrichment step. Candidate discovery,
+account/folder/date/query filtering, deterministic sorting, cursor resolution,
+and page slicing use only lightweight metadata. After the page is fixed, the
+adapter requests shared state and attachment metadata only for those selected
+note ids. It must not bulk-read `shared` or `attachments` from every note in a
+folder or account before checking the selected-id set. Empty pages perform no
+detailed hydration, and page-local hydration remains bounded by
+`limits.apple_event_batch_size`.
+
+Hydration is isolated per selected note. Each note first attempts the preferred
+sharing property and attachment collection access, then uses the same guarded
+compatibility fallbacks defined below. An unavailable property, unsupported
+bulk accessor, malformed attachment, or other detail-only scripting failure for
+one note must not abort the list operation or discard details already obtained
+for another note. When sharing state cannot be observed, the note uses the
+documented `isShared: false` fallback; when its attachment collection cannot be
+enumerated, that note uses an empty attachment list. Failures in lightweight
+identity, scope, lock-state, or sortable metadata remain operation-level errors
+because those values are required to select and paginate the result correctly.
+
 For every visible note, the mapper enumerates `note.attachments()` without
 reading attachment contents. Each addressable attachment is returned as:
 
@@ -327,15 +358,19 @@ used, attachment content is never included in a JXA JSON payload, and an
 attachment export failure remains isolated from body retrieval.
 
 Automated coverage uses canned JXA JSON and fake export providers. It must
-cover non-empty attachment decoding, nullable content identifiers, filename
-fallbacks, shared true/false/fallback mapping, successful prepared export and
-download, `downloadKey: null` for unavailable export, malformed/empty ids,
-sentinel normalization, canonical containment and symlink rejection, cleanup
-of partial files, distinct missing-note/missing-attachment outcomes, explicit
-download error classification, and export-template JSON-argv injection
-resistance. A live Notes.app check with a scratch note and attachment is
-optional manual verification because TCC, Notes versions, and user data are
-not deterministic test dependencies.
+prove that detailed hydration addresses only the ids selected for the current
+page and is skipped for an empty page. It must also prove that a shared-state
+or attachment-access failure for one selected note uses the documented
+fallbacks without aborting or discarding other selected notes. Additional
+coverage includes non-empty attachment decoding, nullable content identifiers,
+filename fallbacks, shared true/false/fallback mapping, successful prepared
+export and download, `downloadKey: null` for unavailable export,
+malformed/empty ids, sentinel normalization, canonical containment and symlink
+rejection, cleanup of partial files, distinct missing-note/missing-attachment
+outcomes, explicit download error classification, and export-template
+JSON-argv injection resistance. A live Notes.app check with a scratch note and
+attachment is optional manual verification because TCC, Notes versions, and
+user data are not deterministic test dependencies.
 
 ### TASK-004 Write-Side Contract
 
@@ -475,10 +510,10 @@ scratch Notes folder. It must record:
    update, move, and delete flows against scratch data only.
 3. Reader-mode read query success and Notes mutation rejection through
    `apple-gateway-reader`.
-4. macOS 26 Tahoe timeout/chunking observation: list/search work must be
-   chunked by `limits.apple_event_batch_size`; an observed `-1712` or timeout
-   must retry once and then either recover or fail with the bridge timeout
-   classification instead of hanging indefinitely.
+4. macOS 26 Tahoe timeout/chunking observation: detail hydration and search
+   snippets must be chunked by `limits.apple_event_batch_size`; an observed
+   `-1712` or timeout must retry once and then either recover or fail with the
+   bridge timeout classification instead of hanging indefinitely.
 
 Verification for TASK-005 must explicitly include:
 

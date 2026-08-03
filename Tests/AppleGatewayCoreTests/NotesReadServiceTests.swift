@@ -46,35 +46,36 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
       const limit = input.limit || 200;
       const noteIds = [];
       let seen = 0;
-      let hasMore = false;
-      app.accounts().forEach(account => {
+      for (const account of app.accounts()) {
         const accountId = String(account.id());
         if (input.accountId && input.accountId !== accountId) {
-          return;
+          continue;
         }
-        account.folders().forEach(folder => {
+        for (const folder of account.folders()) {
           const folderId = String(folder.id());
           if (input.folderId && input.folderId !== folderId) {
-            return;
+            continue;
           }
-          folder.notes().forEach(note => {
-            if (note.passwordProtected && note.passwordProtected()) {
-              return;
+          const notes = folder.notes;
+          const folderNoteIds = notes.id();
+          const protectedValues = notes.passwordProtected();
+          for (let index = 0; index < folderNoteIds.length; index += 1) {
+            if (protectedValues[index]) {
+              continue;
             }
             if (seen < start) {
               seen += 1;
-              return;
+              continue;
             }
             if (noteIds.length >= limit) {
-              hasMore = true;
-              return;
+              return JSON.stringify({ noteIds: noteIds, hasMore: true });
             }
-            noteIds.push(String(note.id()));
+            noteIds.push(String(folderNoteIds[index]));
             seen += 1;
-          });
-        });
-      });
-      return JSON.stringify({ noteIds: noteIds, hasMore: hasMore });
+          }
+        }
+      }
+      return JSON.stringify({ noteIds: noteIds, hasMore: false });
     }
     """,
     .fetchNoteMetadataBatch: """
@@ -398,8 +399,13 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
     .probeNoteVisibility,
     .fetchNoteBody
   ] {
-    #expect(template.source.contains("isShared: notesSharedState(note)"))
-    #expect(template.source.contains("attachments: notesAttachmentMetadata(note)"))
+    #expect(template.source.contains("notesSharedState(note"))
+    #expect(template.source.contains("notesAttachmentMetadata(note"))
+  }
+  for template in [
+    NotesJXATemplate.probeNoteVisibility,
+    .fetchNoteBody
+  ] {
     #expect(!template.source.contains("isShared: false"))
     #expect(!template.source.contains("attachments: []"))
   }
@@ -736,6 +742,10 @@ final class NotesTestProvider: NotesProviding, @unchecked Sendable {
   var noteIDRequests: [(accountId: String?, folderId: String?)] = []
   var noteIDBatchSizes: [Int] = []
   var metadataBatchSizes: [Int] = []
+  var metadataSummaryRequests: [(noteIds: [String], batchSize: Int)] = []
+  var hydrationRequests: [(noteIds: [String], batchSize: Int)] = []
+  var hydrationDetailsById: [String: Note] = [:]
+  var hydrationResultOverride: [Note]?
   var bodySearchInputs: [NotesBodySearchInput] = []
   var snippetRequests: [(noteIds: [String], query: String?)] = []
   var attachmentExportResults: [String: NotesAttachmentExportResult] = [:]
@@ -762,6 +772,19 @@ final class NotesTestProvider: NotesProviding, @unchecked Sendable {
   func noteMetadata(noteIds: [String], batchSize: Int) throws -> [Note] {
     metadataBatchSizes.append(batchSize)
     return notes.filter { noteIds.contains($0.id) }
+  }
+
+  func noteMetadataSummaries(noteIds: [String], batchSize: Int) throws -> [Note] {
+    metadataSummaryRequests.append((noteIds: noteIds, batchSize: batchSize))
+    return try noteMetadata(noteIds: noteIds, batchSize: batchSize)
+  }
+
+  func hydrateNoteMetadata(_ notes: [Note], batchSize: Int) throws -> [Note] {
+    hydrationRequests.append((noteIds: notes.map(\.id), batchSize: batchSize))
+    if let hydrationResultOverride {
+      return hydrationResultOverride
+    }
+    return notes.map { hydrationDetailsById[$0.id] ?? $0 }
   }
 
   func bodySearchNoteIds(input: NotesBodySearchInput, batchSize: Int) throws -> [String] {

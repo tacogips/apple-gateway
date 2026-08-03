@@ -53,8 +53,8 @@ final class MailSQLiteDatabase: @unchecked Sendable, MailSQLiteDatabaseHandle {
     close()
   }
 
-  static func immutableReadOnlyURI(forSnapshotPath path: String) -> String {
-    URL(fileURLWithPath: path).absoluteString + "?mode=ro&immutable=1"
+  static func readOnlyURI(forSnapshotPath path: String) -> String {
+    URL(fileURLWithPath: path).absoluteString + "?mode=ro"
   }
 
   func prepare(_ sql: String) throws -> MailSQLiteStatement {

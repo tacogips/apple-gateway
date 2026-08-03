@@ -125,7 +125,7 @@ private final class UsernotedNotificationFixture {
     try Self.createDatabase(at: databaseURL, schema: schema)
     let request = MailSQLiteOpenRequest(
       snapshotPath: databaseURL.path,
-      uri: MailSQLiteDatabase.immutableReadOnlyURI(forSnapshotPath: databaseURL.path),
+      uri: MailSQLiteDatabase.readOnlyURI(forSnapshotPath: databaseURL.path),
       flags: MailSQLiteOpenFlags.mailReadOnlySnapshot
     )
     database = try #require(try LiveMailSQLiteOpener().open(request) as? MailSQLiteDatabase)

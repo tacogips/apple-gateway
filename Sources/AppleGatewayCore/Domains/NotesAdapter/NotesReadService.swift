@@ -73,7 +73,7 @@ public struct NotesReadService: Sendable {
       folderId: input.folderId,
       batchSize: batchSize
     )
-    let notes = try provider.noteMetadata(noteIds: candidateIds, batchSize: batchSize)
+    let notes = try provider.noteMetadataSummaries(noteIds: candidateIds, batchSize: batchSize)
     .filter { note in
       Self.matchesMetadataFilters(note, input: input)
         && Self.matchesQuery(query, note: note, bodyMatchIds: bodyMatches)
@@ -90,6 +90,20 @@ public struct NotesReadService: Sendable {
         note.snippet = snippets[note.id] ?? note.snippet
         return NoteEdge(cursor: edge.cursor, node: note)
       }
+    }
+    guard !connection.edges.isEmpty else {
+      return connection
+    }
+    let hydrated = try provider.hydrateNoteMetadata(connection.edges.map(\.node), batchSize: batchSize)
+    let hydratedById = try Self.validatedHydrationById(hydrated)
+    connection.edges = try connection.edges.map { edge in
+      guard let details = hydratedById[edge.node.id], Self.matchesHydrationSummary(details, edge.node) else {
+        throw Self.staleHydrationError(noteId: edge.node.id)
+      }
+      var note = edge.node
+      note.isShared = details.isShared
+      note.attachments = details.attachments
+      return NoteEdge(cursor: edge.cursor, node: note)
     }
     return connection
   }
@@ -219,6 +233,32 @@ public struct NotesReadService: Sendable {
       return lhs.id < rhs.id
     }
     return lhs.modificationDate > rhs.modificationDate
+  }
+
+  private static func validatedHydrationById(_ notes: [Note]) throws -> [String: Note] {
+    try notes.reduce(into: [:]) { result, note in
+      guard result.updateValue(note, forKey: note.id) == nil else {
+        throw Self.staleHydrationError(noteId: note.id)
+      }
+    }
+  }
+
+  private static func matchesHydrationSummary(_ details: Note, _ summary: Note) -> Bool {
+    details.id == summary.id
+      && details.accountId == summary.accountId
+      && details.folderId == summary.folderId
+      && details.name == summary.name
+      && details.isPasswordProtected == summary.isPasswordProtected
+      && details.creationDate == summary.creationDate
+      && details.modificationDate == summary.modificationDate
+  }
+
+  private static func staleHydrationError(noteId: String) -> AppleGatewayError {
+    AppleGatewayError(
+      code: .unexpectedError,
+      message: "Notes changed while the result page was being hydrated; retry the request",
+      details: ["noteId": noteId]
+    )
   }
 }
 

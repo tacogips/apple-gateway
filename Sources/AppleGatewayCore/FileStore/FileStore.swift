@@ -100,10 +100,16 @@ public struct FileStore: Sendable {
     try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
 
     var copiedPaths: [String] = []
-    for path in [source.path, source.path + "-wal", source.path + "-shm"] where FileManager.default.fileExists(atPath: path) {
-      let sourceURL = URL(fileURLWithPath: path)
+    for sourcePath in [source.path, source.path + "-wal", source.path + "-shm"] {
+      let sourceURL = URL(fileURLWithPath: sourcePath)
       let destination = destinationDirectory.appendingPathComponent(sourceURL.lastPathComponent)
       try FileStorePathSafety.ensureContained(destination, in: root)
+      guard FileManager.default.fileExists(atPath: sourcePath) else {
+        if sourcePath != source.path, FileManager.default.fileExists(atPath: destination.path) {
+          try FileManager.default.removeItem(at: destination)
+        }
+        continue
+      }
       if try snapshotIsCurrent(source: sourceURL, destination: destination) {
         copiedPaths.append(destination.path)
         continue

@@ -75,6 +75,7 @@ struct MailEnvelopeIndexQueryService: MailProviding, Sendable {
 
   func messages(input: MailSearchInput) throws -> MailMessageConnection {
     try validate(input: input)
+    let schema = try schemaLayout()
     let rowsByMailboxId = Dictionary(uniqueKeysWithValues: try mailboxRows().map { ($0.mailboxId, $0) })
     let rowsByAccountId = Dictionary(grouping: rowsByMailboxId.values, by: \.info.accountId)
     let selectedMailboxes = try selectedMailboxRows(
@@ -84,7 +85,7 @@ struct MailEnvelopeIndexQueryService: MailProviding, Sendable {
     )
     let first = try pageSize(input.first)
     let filterHash = filterHash(for: input)
-    let allRows = try messageRows(input: input, mailboxRows: selectedMailboxes)
+    let allRows = try messageRows(input: input, mailboxRows: selectedMailboxes, schema: schema)
     let offset = try offset(after: input.after, rows: allRows, filterHash: filterHash)
     let pageRows = Array(allRows.dropFirst(offset).prefix(first))
     let edges = try pageRows.map { row in
@@ -94,7 +95,7 @@ struct MailEnvelopeIndexQueryService: MailProviding, Sendable {
           dateReceivedCocoa: row.dateReceivedCocoa,
           rowId: row.rowId
         ),
-        node: try message(from: row)
+        node: try message(from: row, schema: schema)
       )
     }
     return MailMessageConnection(
@@ -111,7 +112,8 @@ struct MailEnvelopeIndexQueryService: MailProviding, Sendable {
     guard let rowId = MailStableIdentifier.messageRowId(messageId) else {
       return nil
     }
-    return try messageRow(rowId: rowId).map(message(from:))
+    let schema = try schemaLayout()
+    return try messageRow(rowId: rowId, schema: schema).map { try message(from: $0, schema: schema) }
   }
 
   private func validate(input: MailSearchInput) throws {
@@ -149,7 +151,11 @@ struct MailEnvelopeIndexQueryService: MailProviding, Sendable {
     return rows
   }
 
-  private func messageRows(input: MailSearchInput, mailboxRows: [MailboxRow]) throws -> [MessageRow] {
+  private func messageRows(
+    input: MailSearchInput,
+    mailboxRows: [MailboxRow],
+    schema: MailEnvelopeSchemaLayout
+  ) throws -> [MessageRow] {
     guard !mailboxRows.isEmpty else {
       return []
     }
@@ -157,8 +163,8 @@ struct MailEnvelopeIndexQueryService: MailProviding, Sendable {
     var whereClauses = ["m.mailbox IN (\(mailboxRows.map { _ in "?" }.joined(separator: ", ")))"]
     var bindings = mailboxRows.map { SQLiteBinding.int64($0.rowId) }
     addTextFilter(input.subject, expression: "subj.subject", whereClauses: &whereClauses, bindings: &bindings)
-    addAddressFilter(input.from, addressRole: nil, whereClauses: &whereClauses, bindings: &bindings)
-    addAddressFilter(input.to, addressRole: "to", whereClauses: &whereClauses, bindings: &bindings)
+    addAddressFilter(input.from, addressRole: nil, schema: schema, whereClauses: &whereClauses, bindings: &bindings)
+    addAddressFilter(input.to, addressRole: .to, schema: schema, whereClauses: &whereClauses, bindings: &bindings)
     addQueryFilter(input.query, whereClauses: &whereClauses, bindings: &bindings)
     if let receivedAfter = input.receivedAfter {
       whereClauses.append("m.date_received >= ?")
@@ -176,21 +182,22 @@ struct MailEnvelopeIndexQueryService: MailProviding, Sendable {
     }
 
     let sql = """
-      SELECT m.ROWID, m.message_id, m.mailbox, mb.url, subj.subject,
+      SELECT m.ROWID, \(schema.messageIdentifierExpression), m.mailbox, mb.url, subj.subject,
              sender.address, sender.comment, summaries.summary,
              m.date_sent, m.date_received, m.flags
       FROM messages m
       JOIN mailboxes mb ON mb.ROWID = m.mailbox
       LEFT JOIN subjects subj ON subj.ROWID = m.subject
       LEFT JOIN addresses sender ON sender.ROWID = m.sender
-      LEFT JOIN summaries ON summaries.message_id = m.ROWID
+      \(schema.messageIdentifierJoin)
+      LEFT JOIN summaries ON \(schema.summaryJoinCondition)
       WHERE \(whereClauses.joined(separator: " AND "))
       ORDER BY m.date_received IS NULL ASC, m.date_received DESC, m.ROWID DESC
       """
     return try query(sql, bindings: bindings, map: messageRow(from:))
   }
 
-  private func message(from row: MessageRow) throws -> MailMessage {
+  private func message(from row: MessageRow, schema: MailEnvelopeSchemaLayout) throws -> MailMessage {
     MailMessage(
       id: MailStableIdentifier.messageId(rowId: row.rowId),
       mailboxId: row.mailboxId,
@@ -199,8 +206,8 @@ struct MailEnvelopeIndexQueryService: MailProviding, Sendable {
       subject: row.subject,
       snippet: row.snippet,
       from: row.sender,
-      to: try recipients(messageRowId: row.rowId, role: "to"),
-      cc: try recipients(messageRowId: row.rowId, role: "cc"),
+      to: try recipients(messageRowId: row.rowId, role: .to, schema: schema),
+      cc: try recipients(messageRowId: row.rowId, role: .cc, schema: schema),
       dateSent: row.dateSentCocoa.map(Self.date(fromCocoaSeconds:)),
       dateReceived: row.dateReceivedCocoa.map(Self.date(fromCocoaSeconds:)),
       isRead: row.hasFlag(.read),
@@ -210,17 +217,18 @@ struct MailEnvelopeIndexQueryService: MailProviding, Sendable {
     )
   }
 
-  private func messageRow(rowId: Int64) throws -> MessageRow? {
+  private func messageRow(rowId: Int64, schema: MailEnvelopeSchemaLayout) throws -> MessageRow? {
     try query(
       """
-      SELECT m.ROWID, m.message_id, m.mailbox, mb.url, subj.subject,
+      SELECT m.ROWID, \(schema.messageIdentifierExpression), m.mailbox, mb.url, subj.subject,
              sender.address, sender.comment, summaries.summary,
              m.date_sent, m.date_received, m.flags
       FROM messages m
       JOIN mailboxes mb ON mb.ROWID = m.mailbox
       LEFT JOIN subjects subj ON subj.ROWID = m.subject
       LEFT JOIN addresses sender ON sender.ROWID = m.sender
-      LEFT JOIN summaries ON summaries.message_id = m.ROWID
+      \(schema.messageIdentifierJoin)
+      LEFT JOIN summaries ON \(schema.summaryJoinCondition)
       WHERE m.ROWID = ?
       """,
       bindings: [.int64(rowId)]
@@ -264,7 +272,8 @@ struct MailEnvelopeIndexQueryService: MailProviding, Sendable {
 
   private func addAddressFilter(
     _ value: String?,
-    addressRole: String?,
+    addressRole: MailRecipientRole?,
+    schema: MailEnvelopeSchemaLayout,
     whereClauses: inout [String],
     bindings: inout [SQLiteBinding]
   ) {
@@ -275,13 +284,13 @@ struct MailEnvelopeIndexQueryService: MailProviding, Sendable {
       whereClauses.append("""
         EXISTS (
           SELECT 1 FROM recipients r
-          JOIN addresses a ON a.ROWID = r.address_id
-          WHERE r.message_id = m.ROWID AND r.type = ?
+          JOIN addresses a ON a.ROWID = r.\(schema.recipientAddressColumn)
+          WHERE r.\(schema.recipientMessageColumn) = m.ROWID AND r.type = ?
             AND (a.address LIKE ? ESCAPE '\\' COLLATE NOCASE
                  OR a.comment LIKE ? ESCAPE '\\' COLLATE NOCASE)
         )
         """)
-      bindings.append(.text(addressRole))
+      bindings.append(schema.recipientRoleBinding(addressRole))
       bindings.append(.text(pattern))
       bindings.append(.text(pattern))
     } else {
@@ -354,16 +363,20 @@ struct MailEnvelopeIndexQueryService: MailProviding, Sendable {
     return Dictionary(uniqueKeysWithValues: rows.map { ($0.mailboxRowId, $0.count) })
   }
 
-  private func recipients(messageRowId: Int64, role: String) throws -> [MailAddress] {
+  private func recipients(
+    messageRowId: Int64,
+    role: MailRecipientRole,
+    schema: MailEnvelopeSchemaLayout
+  ) throws -> [MailAddress] {
     try query(
       """
       SELECT a.address, a.comment
       FROM recipients r
-      JOIN addresses a ON a.ROWID = r.address_id
-      WHERE r.message_id = ? AND r.type = ?
+      JOIN addresses a ON a.ROWID = r.\(schema.recipientAddressColumn)
+      WHERE r.\(schema.recipientMessageColumn) = ? AND r.type = ?
       ORDER BY r.ROWID
       """,
-      bindings: [.int64(messageRowId), .text(role)]
+      bindings: [.int64(messageRowId), schema.recipientRoleBinding(role)]
     ) { statement in
       address(email: statement.text(at: 0), name: statement.text(at: 1))
     }
@@ -454,6 +467,37 @@ struct MailEnvelopeIndexQueryService: MailProviding, Sendable {
     return rows
   }
 
+  private func schemaLayout() throws -> MailEnvelopeSchemaLayout {
+    let messageColumns = try tableColumns("messages")
+    let summaryColumns = try tableColumns("summaries")
+    let recipientColumns = try tableColumns("recipients")
+    let globalDataColumns = try tableColumns("message_global_data")
+
+    if summaryColumns.contains("message_id"),
+       recipientColumns.isSuperset(of: ["message_id", "address_id"]) {
+      return .legacy
+    }
+    if messageColumns.contains("summary"),
+       recipientColumns.isSuperset(of: ["message", "address"]) {
+      return .current(hasMessageIdHeader: globalDataColumns.contains("message_id_header"))
+    }
+    throw AppleGatewayError(
+      code: .fileOperationFailed,
+      message: "Unsupported Mail Envelope Index schema",
+      details: [
+        "messagesColumns": messageColumns.sorted().joined(separator: ","),
+        "summariesColumns": summaryColumns.sorted().joined(separator: ","),
+        "recipientsColumns": recipientColumns.sorted().joined(separator: ",")
+      ]
+    )
+  }
+
+  private func tableColumns(_ table: String) throws -> Set<String> {
+    Set(try query("PRAGMA table_info(\(table))", bindings: []) { statement in
+      statement.text(at: 1) ?? ""
+    }.filter { !$0.isEmpty })
+  }
+
   private func invalidArgument(_ message: String) -> AppleGatewayError {
     AppleGatewayError(code: .invalidArgument, message: message)
   }
@@ -463,6 +507,51 @@ private enum MailMessageFlag: Int64 {
   case read = 1
   case flagged = 16
   case attachment = 1_024
+}
+
+private enum MailRecipientRole {
+  case to
+  case cc
+}
+
+private struct MailEnvelopeSchemaLayout {
+  var messageIdentifierExpression: String
+  var messageIdentifierJoin: String
+  var summaryJoinCondition: String
+  var recipientMessageColumn: String
+  var recipientAddressColumn: String
+  var usesNumericRecipientRoles: Bool
+
+  static let legacy = MailEnvelopeSchemaLayout(
+    messageIdentifierExpression: "m.message_id",
+    messageIdentifierJoin: "",
+    summaryJoinCondition: "summaries.message_id = m.ROWID",
+    recipientMessageColumn: "message_id",
+    recipientAddressColumn: "address_id",
+    usesNumericRecipientRoles: false
+  )
+
+  static func current(hasMessageIdHeader: Bool) -> MailEnvelopeSchemaLayout {
+    MailEnvelopeSchemaLayout(
+      messageIdentifierExpression: hasMessageIdHeader
+        ? "COALESCE(global_data.message_id_header, CAST(m.message_id AS TEXT))"
+        : "CAST(m.message_id AS TEXT)",
+      messageIdentifierJoin: hasMessageIdHeader
+        ? "LEFT JOIN message_global_data global_data ON global_data.ROWID = m.global_message_id"
+        : "",
+      summaryJoinCondition: "summaries.ROWID = m.summary",
+      recipientMessageColumn: "message",
+      recipientAddressColumn: "address",
+      usesNumericRecipientRoles: true
+    )
+  }
+
+  func recipientRoleBinding(_ role: MailRecipientRole) -> SQLiteBinding {
+    if usesNumericRecipientRoles {
+      return .int64(role == .to ? 0 : 1)
+    }
+    return .text(role == .to ? "to" : "cc")
+  }
 }
 
 private enum SQLiteBinding {

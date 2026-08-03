@@ -58,7 +58,7 @@ struct MailEnvelopeIndexStore: Sendable {
     )
     return MailSQLiteOpenRequest(
       snapshotPath: snapshot.databasePath,
-      uri: MailSQLiteDatabase.immutableReadOnlyURI(forSnapshotPath: snapshot.databasePath),
+      uri: MailSQLiteDatabase.readOnlyURI(forSnapshotPath: snapshot.databasePath),
       flags: MailSQLiteOpenFlags.mailReadOnlySnapshot
     )
   }

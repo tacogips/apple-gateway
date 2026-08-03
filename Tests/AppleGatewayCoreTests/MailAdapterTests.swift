@@ -104,7 +104,7 @@ import Testing
   }
 }
 
-@Test func mailEnvelopeIndexStoreOpensOnlyReadOnlyImmutableSnapshot() throws {
+@Test func mailEnvelopeIndexStoreOpensOnlyReadOnlySnapshot() throws {
   let root = URL(fileURLWithPath: "/tmp/apple-gateway-test-home/Library/Mail/V10", isDirectory: true)
   let liveIndex = root.appendingPathComponent("MailData/Envelope Index")
   let snapshotPath = "/tmp/apple-gateway/snapshots/mail/hash/Envelope Index"
@@ -133,14 +133,14 @@ import Testing
   #expect(snapshotter.sourceId != root.path)
   #expect(opener.request?.snapshotPath == snapshotPath)
   #expect(opener.request?.uri.hasPrefix(URL(fileURLWithPath: snapshotPath).absoluteString) == true)
-  #expect(opener.request?.uri.hasSuffix("?mode=ro&immutable=1") == true)
+  #expect(opener.request?.uri.hasSuffix("?mode=ro") == true)
   #expect(opener.request?.uri.contains(URL(fileURLWithPath: liveIndex.path).absoluteString) == false)
   #expect(opener.request?.flags == MailSQLiteOpenFlags.readOnly | MailSQLiteOpenFlags.uri)
   #expect((opener.request?.flags ?? 0) & MailSQLiteOpenFlags.readWrite == 0)
   #expect((opener.request?.flags ?? 0) & MailSQLiteOpenFlags.create == 0)
 }
 
-@Test func mailSQLiteOpensReadOnlyImmutableSnapshotAndRunsSmokeStatement() throws {
+@Test func mailSQLiteOpensReadOnlySnapshotAndRunsSmokeStatement() throws {
   let root = try makeMailTemporaryRoot()
   let live = root.appendingPathComponent("Envelope Index")
   try createSmokeSQLiteDatabase(at: live)
@@ -148,7 +148,7 @@ import Testing
     .snapshotSQLiteDatabase(sourcePath: live.path, domain: .mail, sourceId: "mail-root")
   let request = MailSQLiteOpenRequest(
     snapshotPath: snapshot.databasePath,
-    uri: MailSQLiteDatabase.immutableReadOnlyURI(forSnapshotPath: snapshot.databasePath),
+    uri: MailSQLiteDatabase.readOnlyURI(forSnapshotPath: snapshot.databasePath),
     flags: MailSQLiteOpenFlags.mailReadOnlySnapshot
   )
   let database = try #require(try LiveMailSQLiteOpener().open(request) as? MailSQLiteDatabase)
@@ -157,6 +157,46 @@ import Testing
   #expect(try statement.step() == .row)
   #expect(statement.int64(at: 0) == 1)
   #expect(try statement.step() == .done)
+}
+
+@Test func mailSQLiteReadOnlySnapshotIncludesUncheckpointedWALRows() throws {
+  let root = try makeMailTemporaryRoot()
+  let live = root.appendingPathComponent("Envelope Index")
+  var writer: OpaquePointer?
+  guard sqlite3_open(live.path, &writer) == SQLITE_OK, let writer else {
+    throw AppleGatewayError(code: .fileOperationFailed, message: "Could not create WAL smoke database")
+  }
+  defer {
+    sqlite3_close(writer)
+  }
+  try executeSQLite(
+    """
+    PRAGMA journal_mode=WAL;
+    CREATE TABLE smoke(value INTEGER NOT NULL);
+    INSERT INTO smoke(value) VALUES (1);
+    PRAGMA wal_checkpoint(TRUNCATE);
+    INSERT INTO smoke(value) VALUES (2);
+    """,
+    handle: writer,
+    path: live.path
+  )
+
+  let snapshot = try FileStore(cacheRoot: root.appendingPathComponent("cache").path)
+    .snapshotSQLiteDatabase(sourcePath: live.path, domain: .mail, sourceId: "mail-root")
+  let request = MailSQLiteOpenRequest(
+    snapshotPath: snapshot.databasePath,
+    uri: MailSQLiteDatabase.readOnlyURI(forSnapshotPath: snapshot.databasePath),
+    flags: MailSQLiteOpenFlags.mailReadOnlySnapshot
+  )
+  let database = try #require(try LiveMailSQLiteOpener().open(request) as? MailSQLiteDatabase)
+  defer {
+    database.close()
+  }
+  let statement = try database.prepare("SELECT COUNT(*), SUM(value) FROM smoke")
+
+  #expect(try statement.step() == .row)
+  #expect(statement.int(at: 0) == 2)
+  #expect(statement.int(at: 1) == 3)
 }
 
 @Test func snapshotSQLiteDatabaseSkipsCopyWhenDestinationIsCurrent() throws {
@@ -207,6 +247,25 @@ import Testing
   #expect(try String(contentsOf: snapshotDatabase, encoding: .utf8) == "db-new")
   #expect(try String(contentsOf: snapshotWal, encoding: .utf8) == "wal-new")
   #expect(try String(contentsOf: snapshotShm, encoding: .utf8) == "shm-new")
+}
+
+@Test func snapshotSQLiteDatabaseRemovesSidecarsMissingFromSource() throws {
+  let root = try makeMailTemporaryRoot()
+  let live = root.appendingPathComponent("Envelope Index")
+  let liveWal = URL(fileURLWithPath: live.path + "-wal")
+  let liveShm = URL(fileURLWithPath: live.path + "-shm")
+  try Data("db".utf8).write(to: live)
+  try Data("wal".utf8).write(to: liveWal)
+  try Data("shm".utf8).write(to: liveShm)
+  let store = FileStore(cacheRoot: root.appendingPathComponent("cache").path)
+  let first = try store.snapshotSQLiteDatabase(sourcePath: live.path, domain: .mail, sourceId: "mail-root")
+  try FileManager.default.removeItem(at: liveWal)
+  try FileManager.default.removeItem(at: liveShm)
+
+  _ = try store.snapshotSQLiteDatabase(sourcePath: live.path, domain: .mail, sourceId: "mail-root")
+
+  #expect(!FileManager.default.fileExists(atPath: first.databasePath + "-wal"))
+  #expect(!FileManager.default.fileExists(atPath: first.databasePath + "-shm"))
 }
 
 private struct FakeMailFileSystem: MailFileSystem {
@@ -293,12 +352,19 @@ private func createSmokeSQLiteDatabase(at url: URL) throws {
   defer {
     sqlite3_close(handle)
   }
-  let sql = "CREATE TABLE smoke(value INTEGER NOT NULL); INSERT INTO smoke(value) VALUES (1);"
+  try executeSQLite(
+    "CREATE TABLE smoke(value INTEGER NOT NULL); INSERT INTO smoke(value) VALUES (1);",
+    handle: handle,
+    path: url.path
+  )
+}
+
+private func executeSQLite(_ sql: String, handle: OpaquePointer, path: String) throws {
   guard sqlite3_exec(handle, sql, nil, nil, nil) == SQLITE_OK else {
     throw AppleGatewayError(
       code: .fileOperationFailed,
       message: "Could not initialize smoke SQLite database",
-      details: ["path": url.path, "reason": String(cString: sqlite3_errmsg(handle))]
+      details: ["path": path, "reason": String(cString: sqlite3_errmsg(handle))]
     )
   }
 }

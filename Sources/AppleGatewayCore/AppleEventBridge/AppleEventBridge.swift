@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 public enum AppleEventBridgeError: Error, Equatable, Sendable {
   case automationDenied(message: String)
@@ -13,17 +18,23 @@ public struct AppleEventBridge: Sendable {
   private let timeoutSeconds: TimeInterval
   private let environment: [String: String]
   private let maxTimeoutRetries: Int
+  private let terminationGraceSeconds: TimeInterval
+  private let temporaryDirectory: URL
 
   public init(
     osascriptPath: String = "/usr/bin/osascript",
     timeoutSeconds: TimeInterval = TimeInterval(AppleGatewayConfig.Limits.defaultValue.appleEventTimeoutSeconds),
     environment: [String: String] = ProcessInfo.processInfo.environment,
-    maxTimeoutRetries: Int = 1
+    maxTimeoutRetries: Int = 1,
+    terminationGraceSeconds: TimeInterval = 1,
+    temporaryDirectory: URL = FileManager.default.temporaryDirectory
   ) {
     self.osascriptPath = osascriptPath
     self.timeoutSeconds = timeoutSeconds
     self.environment = environment
     self.maxTimeoutRetries = maxTimeoutRetries
+    self.terminationGraceSeconds = max(terminationGraceSeconds, 0.01)
+    self.temporaryDirectory = temporaryDirectory
   }
 
   public func runJXA(script: String, argumentsJSON: String) throws -> Data {
@@ -56,8 +67,36 @@ public struct AppleEventBridge: Sendable {
 
   private func runOnce(script: String, argumentsJSON: String) throws -> Data {
     let process = Process()
-    let stdout = Pipe()
-    let stderr = Pipe()
+    let fileManager = FileManager.default
+    let captureId = UUID().uuidString
+    let captureDirectory = temporaryDirectory
+      .appendingPathComponent("apple-gateway-osascript-\(captureId)", isDirectory: true)
+    do {
+      try fileManager.createDirectory(
+        at: captureDirectory,
+        withIntermediateDirectories: false,
+        attributes: [.posixPermissions: 0o700]
+      )
+    } catch {
+      throw AppleEventBridgeError.appUnavailable(message: "Could not create osascript output capture directory")
+    }
+    defer {
+      try? fileManager.removeItem(at: captureDirectory)
+    }
+
+    let stdoutURL = captureDirectory.appendingPathComponent("stdout")
+    let stderrURL = captureDirectory.appendingPathComponent("stderr")
+    let privateFileAttributes: [FileAttributeKey: Any] = [.posixPermissions: 0o600]
+    guard fileManager.createFile(atPath: stdoutURL.path, contents: nil, attributes: privateFileAttributes),
+          fileManager.createFile(atPath: stderrURL.path, contents: nil, attributes: privateFileAttributes) else {
+      throw AppleEventBridgeError.appUnavailable(message: "Could not create osascript output capture files")
+    }
+    let stdout = try FileHandle(forWritingTo: stdoutURL)
+    let stderr = try FileHandle(forWritingTo: stderrURL)
+    defer {
+      try? stdout.close()
+      try? stderr.close()
+    }
 
     process.executableURL = URL(fileURLWithPath: osascriptPath)
     process.arguments = ["-l", "JavaScript", "-e", script, argumentsJSON]
@@ -76,12 +115,19 @@ public struct AppleEventBridge: Sendable {
     let timedOut = !process.waitUntilExit(timeout: timeoutSeconds)
     if timedOut {
       process.terminate()
-      process.waitUntilExit()
+      if !process.waitUntilExit(timeout: terminationGraceSeconds) {
+        process.forceTerminate()
+        _ = process.waitUntilExit(timeout: terminationGraceSeconds)
+      }
       throw AppleEventBridgeError.timeout(message: "osascript timed out")
     }
 
-    let outputData = stdout.fileHandleForReading.readDataToEndOfFile()
-    let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
+    try? stdout.synchronize()
+    try? stderr.synchronize()
+    try? stdout.close()
+    try? stderr.close()
+    let outputData = try Data(contentsOf: stdoutURL)
+    let errorData = try Data(contentsOf: stderrURL)
     let stderrText = String(data: errorData, encoding: .utf8) ?? ""
 
     guard process.terminationStatus == 0 else {
@@ -110,6 +156,7 @@ public struct AppleEventBridge: Sendable {
       return .automationDenied(message: trimmed(stderr, fallback: "Automation denied"))
     }
     if stderr.contains("-600")
+      || stderr.contains("-609")
       || normalized.contains("application isn")
       || normalized.contains("application is not running")
       || normalized.contains("can't get application")
@@ -142,5 +189,16 @@ private extension Process {
       Thread.sleep(forTimeInterval: 0.01)
     }
     return true
+  }
+
+  func forceTerminate() {
+    guard isRunning else {
+      return
+    }
+#if canImport(Darwin)
+    _ = Darwin.kill(processIdentifier, SIGKILL)
+#elseif canImport(Glibc)
+    _ = Glibc.kill(processIdentifier, SIGKILL)
+#endif
   }
 }

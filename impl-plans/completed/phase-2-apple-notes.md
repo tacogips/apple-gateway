@@ -1,6 +1,6 @@
 # Phase 2: Apple Notes
 
-**Status**: TASK-001 through TASK-006 implementation complete; live Notes
+**Status**: TASK-001 through TASK-007 implementation complete; live Notes
 manual verification remains permission-gated
 **Design Reference**: `design-docs/specs/design-apple-notes.md`
 
@@ -29,6 +29,9 @@ reuses.
       `scripts/live-notes-check.sh` dry-run permission checks plus exact
       Notes Query/Mutation root-field schema checks and permission-gated
       read-only metadata mode
+- [x] Page-local Notes list hydration with guarded per-note shared-state and
+      attachment fallbacks, plus focused pagination and failure-isolation
+      regressions (TASK-007)
 
 ## Tasks
 
@@ -321,7 +324,258 @@ git diff --check
       normalization, shared false/fallback behavior, filename safety,
       canonical/symlink rejection, and timeout propagation
 
+### TASK-007: Page-Local Metadata Hydration and Failure Isolation
+
+**Status**: Complete
+
+**Workflow mode**: `issue-resolution`
+
+**Issue references**: `comm-001899`, `comm-001903`, `comm-001913`,
+`comm-001917`, `comm-001922`, `comm-001923`, `comm-001925`, `comm-001927`,
+`comm-001932`
+
+**Codex-agent references**: None supplied; reference-repository mapping,
+intentional divergence, and Cursor adapter work are not applicable.
+
+**Parallelizable**: No. The provider contract, live JXA behavior, read-service
+orchestration, and regression fixtures describe one two-phase data flow and
+must be finalized and verified together. Later work may separate tests into a
+new file, but it must not proceed against an unsettled provider contract.
+
+Resolve only the two accepted Notes list-hydration findings. Preserve the
+accepted design in
+`design-docs/specs/design-apple-notes.md#notes-attachment-metadata-export-and-shared-state-refinement`:
+candidate discovery, filtering, deterministic sorting, cursor resolution, and
+page slicing use lightweight metadata; shared state and attachment metadata
+are fetched only for the selected page and use per-note compatibility
+fallbacks. Do not change GraphQL schema, cursor format, body or attachment
+export behavior, mutation behavior, other domains, or live-checklist scope.
+
+**Deliverables and implementation tasks**:
+
+1. Define the two-phase metadata boundary in
+   `Sources/AppleGatewayCore/Domains/NotesAdapter/NotesProviding.swift` and
+   `Sources/AppleGatewayCore/Domains/NotesAdapter/LiveNotesAppleEventAdapter.swift`.
+   Preserve existing provider compatibility where safe, expose a lightweight
+   summary operation for candidate evaluation, and expose page-detail
+   hydration that accepts only selected notes or ids. The live summary and
+   detail paths must use vectorized requests bounded by
+   `limits.apple_event_batch_size` so JSON argv size remains bounded.
+2. Update
+   `Sources/AppleGatewayCore/Domains/NotesAdapter/NotesReadService.swift` so it
+   filters, sorts, resolves the cursor, and slices the page before requesting
+   detail metadata. Pass only page ids to hydration, preserve edge order and
+   search snippets while merging detail results, and skip the provider
+   hydration call entirely when the page has no edges.
+3. Revise `fetchNoteMetadataBatch` and its shared helper fragment in
+   `Sources/AppleGatewayCore/Domains/NotesAdapter/NotesJXATemplates.swift`.
+   Lightweight mode may bulk-read only identity, scope, lock-state, name, and
+   sortable dates. Detail mode must identify the requested notes before
+   reading `shared`, `isShared`, or `attachments`; it must not call folder- or
+   account-wide shared/attachment accessors. Guard each selected note's
+   sharing and attachment collection independently, retain the documented
+   `isShared: false` and empty-attachment fallbacks for detail-only failures,
+   and continue hydrating remaining selected notes. Do not downgrade failures
+   in required lightweight metadata.
+4. Add focused service regressions for page-limited hydration and empty-page
+   behavior. Record requested summary ids, hydrated ids, and batch sizes in a
+   test provider; prove a multi-page candidate set hydrates only the current
+   page, a later page hydrates its own ids, snippets and ordering survive the
+   merge, and an empty page issues no hydration request.
+5. Add executable or fixture-backed JXA regressions proving detail hydration
+   never touches unselected notes' shared state or attachments and that a
+   selected note with an unavailable sharing property or attachment
+   collection falls back without aborting or discarding another selected
+   note. Keep permission and timeout errors at the existing bridge boundary.
+   Prefer a cohesive new
+   `Tests/AppleGatewayCoreTests/NotesHydrationTests.swift`; update
+   `Tests/AppleGatewayCoreTests/NotesReadServiceTests.swift` and
+   `Tests/AppleGatewayCoreTests/NotesAttachmentTests.swift` only where their
+   existing goldens, helpers, or assertions own the behavior. No modified
+   non-generated Swift file may exceed 1000 lines.
+6. After implementation, update this task's status, checkboxes, and Progress
+   Log with exact commands, test counts, environment-only failures, and
+   residual permission-gated live Notes risks. Do not mark TASK-007 complete
+   until every automated completion criterion passes.
+
+**Dependencies**:
+
+- Accepted design review `comm-001906` and design requirements at
+  `design-docs/specs/design-apple-notes.md:253`, `:262`, and `:354`.
+- Existing `NotesProviding`, `LiveNotesAppleEventAdapter`,
+  `NotesReadService`, static JSON-argv JXA templates, `NoteConnection`
+  pagination, snippet retrieval, and Notes test fixtures.
+- TASK-001 timeout and error classification and TASK-006 guarded metadata
+  helpers remain authoritative; this task narrows when and where detail
+  hydration occurs without redesigning either boundary.
+
+**Completion Criteria**:
+
+- [x] Candidate filtering, sorting, cursor resolution, and page slicing use
+      lightweight metadata with no shared-state or attachment reads.
+- [x] Detailed hydration receives only selected page ids, is chunked by
+      `apple_event_batch_size`, and is not invoked for an empty page.
+- [x] The live JXA detail path does not evaluate account- or folder-wide
+      `shared` or `attachments` collections before selected-id filtering.
+- [x] A sharing-property or attachment-access failure for one selected note
+      yields only that note's documented fallback and does not abort or erase
+      another selected note's details.
+- [x] Required identity, scope, lock-state, name, creation-date, and
+      modification-date failures remain operation-level errors.
+- [x] Missing, locked, or scope/sort-changed page hydration is rejected as
+      stale instead of returning the retained lightweight summary.
+- [x] Native Notes application-unavailable and connection-invalid errors
+      (`-600` and `-609`) propagate through detail guards to the shared bridge
+      classifier.
+- [x] Lightweight summary requests honor `apple_event_batch_size` instead of
+      serializing every candidate id into one subprocess argument.
+- [x] Apple Event stdout and stderr captures are owner-only, use a private
+      directory, and are cleaned after success and failure.
+- [x] Local timeout handling has a bounded termination grace period and
+      force-kills a subprocess that ignores termination.
+- [x] Hydration merging preserves deterministic edge order, cursor/page info,
+      total count, snippets, and body exclusion.
+- [x] Focused regressions cover first/later pages, empty pages, unselected-note
+      non-access, and per-note failure isolation without live Notes.app.
+- [x] Scope remains limited to the listed Notes adapter/service/test files,
+      shared bridge classification and tests, the Notes design, and this plan;
+      no schema, write-path, export, or other-domain behavior changes.
+- [x] All modified non-generated Swift files remain below 1000 lines.
+- [x] Focused Notes tests, the prior scoped regression suite, build, lint, and
+      diff checks pass.
+
+**Verification commands**:
+
+```bash
+swift test --filter AppleEventBridge
+swift test --filter NotesHydration
+swift test --filter Notes
+nix develop -c bash -lc 'export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer; export SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk; export TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault; export PATH=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:$PATH; swift test --filter "AppleEventBridge|Mail|Notes|Permissions|Usernoted"'
+task build
+task lint
+git --no-pager diff --no-ext-diff --check -- Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/AppleGatewayCore/Domains/NotesAdapter Tests/AppleGatewayCoreTests design-docs/specs/design-apple-notes.md impl-plans/active/phase-2-apple-notes.md
+wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/AppleGatewayCore/Domains/NotesAdapter/*.swift Tests/AppleGatewayCoreTests/*.swift
+```
+
+**Progress tracking**:
+
+- [x] Provider summary/hydration boundary finalized
+- [x] Read service paginates before hydration and skips empty-page hydration
+- [x] JXA detail access is selected-id-only and isolated per note
+- [x] Stale hydration, application-unavailable, and connection-invalid bridge
+      failures are rejected
+- [x] Summary argv batching, private capture, cleanup, and hard-timeout
+      regressions pass
+- [x] Focused pagination, empty-page, non-access, and failure-isolation tests pass
+- [x] Scoped regressions, build, lint, diff, and file-length checks pass
+- [x] Progress Log records exact results and remaining live-only risks
+
 ## Progress Log
+
+- 2026-08-03: Addressed Step 7 adversarial review `comm-001932` for TASK-007.
+  `AppleEventBridge` now captures output in a mode-0700 directory with mode-0600
+  files and removes the directory on every post-creation exit path. Local
+  timeout handling now applies a bounded termination grace period, sends
+  `SIGKILL` when termination is ignored, and bounds final reaping.
+  `LiveNotesAppleEventAdapter` now honors `apple_event_batch_size` for
+  lightweight summary argv payloads. Added stub-process regressions for actual
+  capture-file permissions and cleanup, a SIGTERM-ignoring process, and
+  summary batching. An initial focused run exposed a test-fixture mistake that
+  inspected `/dev/fd` device-node modes; resolving the descriptors with `lsof`
+  corrected the fixture. Final Xcode-pinned verification passed:
+  `swift test --filter AppleEventBridge` (12 tests),
+  `swift test --filter "AppleEventBridge|Mail|Notes|Permissions|Usernoted"`
+  (98 tests, including 5 NotesHydration tests), `task build`, and
+  `swiftlint --quiet`. Diff and file-length checks passed; the largest relevant
+  modified Swift file is 964 lines. Live Notes.app compatibility remains
+  permission-gated and macOS-version-dependent.
+
+- 2026-08-03: Addressed Step 7 adversarial review `comm-001927` for TASK-007.
+  JXA detail guards now rethrow native connection-invalid `-609` errors from
+  both sharing-property and attachment-collection access, and the shared
+  `AppleEventBridge` classifies `-609` stderr as `.appUnavailable`. Added
+  focused executable regressions for both hydration paths plus bridge
+  classification. Verification passed in the Xcode-pinned environment:
+  `swift test --filter "NotesHydration|AppleEventBridge"` (14 tests),
+  `swift test --filter "AppleEventBridge|Mail|Notes|Permissions|Usernoted"`
+  (95 tests), `task build`, and `swiftlint --quiet`. The full
+  `swift test` output completed with 249 passing tests and one unrelated
+  live EventKit test skipped before the enclosing runner timed out. Diff and
+  file-length checks passed; the largest relevant modified Swift file is 964
+  lines. Live Notes.app compatibility remains permission-gated and
+  macOS-version-dependent.
+
+- 2026-08-03: Addressed Step 7 adversarial review `comm-001922` for TASK-007.
+  Live hydration now returns observed detail records to `NotesReadService`,
+  which rejects missing, duplicate, locked, or changed identity/scope/name/date
+  records before merging page-local shared state and attachments. Extended the
+  executable JXA bridge guard to rethrow native application-unavailable `-600`
+  errors. Added focused regressions for missing/locked/moved hydration results
+  and `.appUnavailable` classification. Verification passed in the
+  Xcode-pinned environment: `swift test --filter NotesHydration` (5 tests),
+  `swift test --filter Notes` (34 tests),
+  `swift test --filter "AppleEventBridge|Mail|Notes|Permissions|Usernoted"`
+  (94 tests), `task build`, and `swiftlint --quiet`. Diff and file-length checks
+  passed after this plan update. Live Notes.app compatibility remains
+  permission-gated and macOS-version-dependent.
+
+- 2026-08-03: Addressed Step 7 review `comm-001917` for TASK-007. Wrapped
+  selected-note attachment collection access and enumeration in one per-note
+  guard so non-bridge enumeration failures produce that note's documented
+  empty-attachment fallback, while native automation denial (`-1743`) and
+  timeout (`-1712`) errors still propagate through the bridge. Extended
+  `Tests/AppleGatewayCoreTests/NotesHydrationTests.swift` with an executable
+  lazy-enumeration failure fixture proving another selected note retains its
+  hydrated details. Verification passed in the Nix/Xcode-pinned environment:
+  `swift test --filter NotesHydration` (4 tests), `swift test --filter Notes`
+  (33 tests), `swift test --filter "AppleEventBridge|Mail|Notes|Permissions|Usernoted"`
+  (93 tests), `task build`, and `swiftlint --quiet`. TASK-007 completion
+  criteria remain satisfied after the review fix; live Notes.app compatibility
+  remains permission-gated and macOS-version-dependent.
+
+- 2026-08-03: Addressed Step 7 review `comm-001913` for TASK-007. Updated
+  native JXA bridge-failure detection to recognize `error.errorNumber` for
+  automation denial (`-1743`) and timeout (`-1712`), while retaining
+  `error.number` compatibility. Updated the executable hydration fixture to
+  use native JXA error semantics so the permission and timeout propagation
+  regressions no longer pass through a synthetic property mismatch.
+  Verification passed in the Nix/Xcode-pinned environment:
+  `swift test --filter NotesHydration` (4 tests),
+  `swift test --filter Notes` (33 tests),
+  `swift test --filter "AppleEventBridge|Mail|Notes|Permissions|Usernoted"`
+  (93 tests), `task build`, and `swiftlint --quiet`. An initial parallel
+  ambient `task build` attempt encountered the known incompatible Nix SDK
+  11.3/Xcode Swift 6.3.3 environment plus a concurrent SwiftPM build lock;
+  the sequential pinned verification above corrected both conditions.
+  `git --no-pager diff --no-ext-diff --check -- Sources/AppleGatewayCore/Domains/NotesAdapter Tests/AppleGatewayCoreTests design-docs/specs/design-apple-notes.md impl-plans/active/phase-2-apple-notes.md`
+  passed. File-length verification found every modified non-generated Swift
+  file below 1000 lines (largest: 960 lines).
+
+- 2026-08-03: TASK-007 implemented for issue references `comm-001899` and
+  `comm-001903` under accepted review `comm-001906`. Added the two-phase
+  `NotesProviding` summary/hydration boundary, page-before-hydration service
+  orchestration, selected-id-only JXA detail reads, per-note sharing and
+  attachment fallbacks, and explicit propagation of Apple Event permission
+  (`-1743`) and timeout (`-1712`) failures. Added
+  `Tests/AppleGatewayCoreTests/NotesHydrationTests.swift` for first/later page
+  selection, empty-page skipping, metadata/snippet preservation, unselected
+  note non-access, fallback isolation, and bridge-error classification.
+  Verification passed: `swift test --filter NotesHydration` (4 tests),
+  `swift test --filter Notes` (33 tests), the Nix/Xcode-pinned
+  `swift test --filter "AppleEventBridge|Mail|Notes|Permissions|Usernoted"`
+  suite (93 tests), `task build`, `swiftlint` (0 violations across 130 files),
+  and `git --no-pager diff --no-ext-diff --check -- Sources/AppleGatewayCore/Domains/NotesAdapter Tests/AppleGatewayCoreTests design-docs/specs/design-apple-notes.md impl-plans/active/phase-2-apple-notes.md`.
+  The Nix-wrapped scoped command printed the complete passing test result
+  before the enclosing command runner timed out; no test failed and no test
+  process remained. File-length verification found every modified
+  non-generated Swift file below 1000 lines (largest: 960 lines). Live
+  Notes.app compatibility remains permission-gated and macOS-version-dependent.
+
+- 2026-08-03: TASK-007 implementation plan created in `issue-resolution`
+  mode from accepted review `comm-001906` for findings `comm-001899` and
+  `comm-001903`. No implementation code was written in this planning step.
+  Codex-agent references were not supplied and are not applicable. Plan-file
+  verification: `git --no-pager diff --no-ext-diff --check -- impl-plans/active/phase-2-apple-notes.md`.
 
 - 2026-07-18: TASK-006 self-review revisions completed for
   `SELF-REVIEW-001` and `SELF-REVIEW-002`. Split attachment/export coverage

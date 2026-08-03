@@ -130,6 +130,14 @@ mutations. Inspect the exact mutation names and inputs with:
 apple-gateway schema print
 ```
 
+Notes list queries filter, sort, and paginate lightweight metadata before
+requesting shared state and attachment metadata from Notes.app. Only notes on
+the selected page receive this detailed hydration, and an empty page performs
+no detail request. If Notes.app cannot expose sharing or attachments for one
+selected note, that note falls back to `isShared: false` or an empty attachment
+list without discarding details for other notes. Automation denial, timeout,
+application-unavailable, and stale page metadata remain request-level errors.
+
 Notifications are posted through `AppleGatewayNotifier.app`, installed under
 Homebrew `libexec` by the formula and cask packages. The first notification
 request may prompt for notification authorization.

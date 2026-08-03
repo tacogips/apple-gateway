@@ -91,39 +91,49 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
     const limit = input.limit || 200;
     const noteIds = [];
     let seen = 0;
-    let hasMore = false;
-    app.accounts().forEach(account => {
+    for (const account of app.accounts()) {
       const accountId = String(account.id());
       if (input.accountId && input.accountId !== accountId) {
-        return;
+        continue;
       }
-      account.folders().forEach(folder => {
+      for (const folder of account.folders()) {
         const folderId = String(folder.id());
         if (input.folderId && input.folderId !== folderId) {
-          return;
+          continue;
         }
-        folder.notes().forEach(note => {
-          if (note.passwordProtected && note.passwordProtected()) {
-            return;
+        const notes = folder.notes;
+        const folderNoteIds = notes.id();
+        const protectedValues = notes.passwordProtected();
+        for (let index = 0; index < folderNoteIds.length; index += 1) {
+          if (protectedValues[index]) {
+            continue;
           }
           if (seen < start) {
             seen += 1;
-            return;
+            continue;
           }
           if (noteIds.length >= limit) {
-            hasMore = true;
-            return;
+            return JSON.stringify({ noteIds: noteIds, hasMore: true });
           }
-          noteIds.push(String(note.id()));
+          noteIds.push(String(folderNoteIds[index]));
           seen += 1;
-        });
-      });
-    });
-    return JSON.stringify({ noteIds: noteIds, hasMore: hasMore });
+        }
+      }
+    }
+    return JSON.stringify({ noteIds: noteIds, hasMore: false });
   }
   """
 
   private static let noteMetadataHelpersSource = """
+  function isNotesBridgeFailure(error) {
+    return error && (
+      error.errorNumber === -1743 || error.errorNumber === -1712
+      || error.errorNumber === -600 || error.errorNumber === -609
+      || error.number === -1743 || error.number === -1712
+      || error.number === -600 || error.number === -609
+    );
+  }
+
   function normalizedNotesValue(value) {
     try {
       if (value === null || value === undefined) {
@@ -136,6 +146,9 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
       }
       return text;
     } catch (error) {
+      if (isNotesBridgeFailure(error)) {
+        throw error;
+      }
       return null;
     }
   }
@@ -148,39 +161,55 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
       }
       return typeof property === 'function' ? property.call(object) : property;
     } catch (error) {
+      if (isNotesBridgeFailure(error)) {
+        throw error;
+      }
       return null;
     }
   }
 
-  function notesAttachmentMetadata(note) {
-    let attachments;
+  function notesAttachmentMetadata(note, preloadedAttachments) {
     try {
-      attachments = note.attachments();
+      let attachments;
+      if (preloadedAttachments !== null && preloadedAttachments !== undefined) {
+        attachments = preloadedAttachments;
+      } else {
+        attachments = note.attachments();
+      }
+      const output = [];
+      attachments.forEach(attachment => {
+        try {
+          const id = normalizedNotesValue(guardedNotesProperty(attachment, 'id'));
+          if (!id) {
+            return;
+          }
+          const name = normalizedNotesValue(guardedNotesProperty(attachment, 'name'))
+            || normalizedNotesValue(guardedNotesProperty(attachment, 'fileName'))
+            || 'Untitled Attachment';
+          const contentIdentifier = normalizedNotesValue(
+            guardedNotesProperty(attachment, 'contentIdentifier')
+          );
+          output.push({ id: id, name: name, contentIdentifier: contentIdentifier, downloadKey: null });
+        } catch (error) {
+          if (isNotesBridgeFailure(error)) {
+            throw error;
+          }
+          // A malformed attachment must not hide other attachment metadata.
+        }
+      });
+      return output;
     } catch (error) {
+      if (isNotesBridgeFailure(error)) {
+        throw error;
+      }
       return [];
     }
-    const output = [];
-    attachments.forEach(attachment => {
-      try {
-        const id = normalizedNotesValue(guardedNotesProperty(attachment, 'id'));
-        if (!id) {
-          return;
-        }
-        const name = normalizedNotesValue(guardedNotesProperty(attachment, 'name'))
-          || normalizedNotesValue(guardedNotesProperty(attachment, 'fileName'))
-          || 'Untitled Attachment';
-        const contentIdentifier = normalizedNotesValue(
-          guardedNotesProperty(attachment, 'contentIdentifier')
-        );
-        output.push({ id: id, name: name, contentIdentifier: contentIdentifier, downloadKey: null });
-      } catch (error) {
-        // A malformed attachment must not hide other attachment metadata.
-      }
-    });
-    return output;
   }
 
-  function notesSharedState(note) {
+  function notesSharedState(note, preloadedShared) {
+    if (typeof preloadedShared === 'boolean') {
+      return preloadedShared;
+    }
     const shared = guardedNotesProperty(note, 'shared');
     if (typeof shared === 'boolean') {
       return shared;
@@ -195,38 +224,46 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
     const input = JSON.parse(argv[0]);
     const wanted = {};
     input.noteIds.forEach(id => { wanted[id] = true; });
+    const includeDetails = input.includeDetails !== false;
     const app = Application('Notes');
     const notes = [];
-    app.accounts().forEach(account => {
+    for (const account of app.accounts()) {
       const accountId = String(account.id());
-      account.folders().forEach(folder => {
+      for (const folder of account.folders()) {
         const folderId = String(folder.id());
-        folder.notes().forEach(note => {
-          const noteId = String(note.id());
+        const folderNotes = folder.notes;
+        const folderNoteIds = folderNotes.id();
+        const protectedValues = folderNotes.passwordProtected();
+        const names = folderNotes.name();
+        const creationDates = folderNotes.creationDate();
+        const modificationDates = folderNotes.modificationDate();
+        for (let index = 0; index < folderNoteIds.length; index += 1) {
+          const noteId = String(folderNoteIds[index]);
           if (!wanted[noteId]) {
-            return;
+            continue;
           }
-          if (note.passwordProtected && note.passwordProtected()) {
-            return;
+          if (protectedValues[index]) {
+            continue;
           }
+          const note = folderNotes[index];
           notes.push({
             id: noteId,
             accountId: accountId,
             folderId: folderId,
-            name: String(note.name()),
+            name: String(names[index]),
             snippet: '',
             plaintext: null,
             bodyHtml: null,
             bodyFile: null,
             isPasswordProtected: false,
-            isShared: notesSharedState(note),
-            creationDate: note.creationDate().toISOString(),
-            modificationDate: note.modificationDate().toISOString(),
-            attachments: notesAttachmentMetadata(note)
+            isShared: includeDetails ? notesSharedState(note, null) : false,
+            creationDate: creationDates[index].toISOString(),
+            modificationDate: modificationDates[index].toISOString(),
+            attachments: includeDetails ? notesAttachmentMetadata(note, null) : []
           });
-        });
-      });
-    });
+        }
+      }
+    }
     return JSON.stringify(notes);
   }
   """

@@ -59,6 +59,20 @@ import Testing
   }
 }
 
+@Test func appleEventBridgeClassifiesConnectionInvalidStderrAsAppUnavailable() throws {
+  let fixture = try StubOsascriptFixture(mode: "connection-invalid")
+  let bridge = AppleEventBridge(osascriptPath: fixture.executablePath, environment: fixture.environment)
+
+  do {
+    _ = try bridge.runJXA(script: "static script", argumentsJSON: #"{"ok":true}"#)
+    Issue.record("Expected appUnavailable")
+  } catch AppleEventBridgeError.appUnavailable(let message) {
+    #expect(message.contains("-609"))
+  } catch {
+    Issue.record("Unexpected error: \(error)")
+  }
+}
+
 @Test func appleEventBridgeRejectsGarbageOutput() throws {
   let fixture = try StubOsascriptFixture(mode: "garbage")
   let bridge = AppleEventBridge(osascriptPath: fixture.executablePath, environment: fixture.environment)
@@ -71,6 +85,75 @@ import Testing
   } catch {
     Issue.record("Unexpected error: \(error)")
   }
+}
+
+@Test func appleEventBridgeDrainsLargeOutputWithoutPipeDeadlock() throws {
+  let fixture = try StubOsascriptFixture(mode: "large-output")
+  let bridge = AppleEventBridge(
+    osascriptPath: fixture.executablePath,
+    timeoutSeconds: 5,
+    environment: fixture.environment,
+    maxTimeoutRetries: 0
+  )
+
+  let data = try bridge.runJXA(script: "static script", argumentsJSON: #"{"ok":true}"#)
+  let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+  let value = try #require(object["value"] as? String)
+
+  #expect(value.count == 200_000)
+}
+
+@Test func appleEventBridgeUsesPrivateCaptureFilesAndCleansThemUp() throws {
+  let fixture = try StubOsascriptFixture(mode: "capture-permissions")
+  let bridge = AppleEventBridge(
+    osascriptPath: fixture.executablePath,
+    environment: fixture.environment,
+    temporaryDirectory: fixture.root
+  )
+
+  let data = try bridge.runJXA(script: "static script", argumentsJSON: #"{"ok":true}"#)
+  let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: String])
+
+  #expect(object["stdoutMode"] == "600")
+  #expect(object["stderrMode"] == "600")
+  #expect(try fixture.captureDirectories().isEmpty)
+}
+
+@Test func appleEventBridgeHardStopsProcessThatIgnoresTermination() throws {
+  let fixture = try StubOsascriptFixture(mode: "ignore-term")
+  let bridge = AppleEventBridge(
+    osascriptPath: fixture.executablePath,
+    timeoutSeconds: 0.05,
+    environment: fixture.environment,
+    maxTimeoutRetries: 0,
+    terminationGraceSeconds: 0.05,
+    temporaryDirectory: fixture.root
+  )
+  let startedAt = Date()
+
+  do {
+    _ = try bridge.runJXA(script: "static script", argumentsJSON: #"{"ok":true}"#)
+    Issue.record("Expected hard timeout")
+  } catch AppleEventBridgeError.timeout {
+    #expect(Date().timeIntervalSince(startedAt) < 2)
+    #expect(try fixture.captureDirectories().isEmpty)
+  }
+}
+
+@Test func liveNotesSummaryArgumentsHonorBatchSize() throws {
+  let fixture = try StubOsascriptFixture(mode: "summary-array-max-two")
+  let adapter = LiveNotesAppleEventAdapter(bridge: AppleEventBridge(
+    osascriptPath: fixture.executablePath,
+    environment: fixture.environment
+  ))
+
+  let notes = try adapter.noteMetadataSummaries(
+    noteIds: ["note-1", "note-2", "note-3", "note-4", "note-5"],
+    batchSize: 2
+  )
+
+  #expect(notes.isEmpty)
+  #expect(try fixture.invocationCount() == 3)
 }
 
 @Test func appleEventBridgeKeepsUserPayloadOutOfScriptSource() throws {
@@ -141,6 +224,13 @@ private struct StubOsascriptFixture {
     return Int(contents.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
   }
 
+  func captureDirectories() throws -> [URL] {
+    try FileManager.default.contentsOfDirectory(
+      at: root,
+      includingPropertiesForKeys: nil
+    ).filter { $0.lastPathComponent.hasPrefix("apple-gateway-osascript-") }
+  }
+
   private static let stubSource = """
   #!/usr/bin/env bash
   set -euo pipefail
@@ -174,8 +264,42 @@ private struct StubOsascriptFixture {
       printf 'execution error: Not authorized to send Apple events. (-1743)\\n' >&2
       exit 1
       ;;
+    connection-invalid)
+      printf 'execution error: Connection is invalid. (-609)\\n' >&2
+      exit 1
+      ;;
     garbage)
       printf 'not json\\n'
+      ;;
+    large-output)
+      /usr/bin/awk 'BEGIN {
+        printf "{\\\"value\\\":\\\""
+        for (i = 0; i < 200000; i += 1) {
+          printf "x"
+        }
+        printf "\\\"}\\n"
+      }'
+      ;;
+    capture-permissions)
+      stdout_path="$(/usr/sbin/lsof -a -p "$$" -d 1 -Fn | /usr/bin/sed -n 's/^n//p')"
+      stderr_path="$(/usr/sbin/lsof -a -p "$$" -d 2 -Fn | /usr/bin/sed -n 's/^n//p')"
+      stdout_mode="$(/usr/bin/stat -f '%Lp' "$stdout_path")"
+      stderr_mode="$(/usr/bin/stat -f '%Lp' "$stderr_path")"
+      printf '{"stdoutMode":"%s","stderrMode":"%s"}\\n' "$stdout_mode" "$stderr_mode"
+      ;;
+    ignore-term)
+      trap '' TERM
+      while true; do
+        :
+      done
+      ;;
+    summary-array-max-two)
+      note_count="$(printf '%s' "${5:-}" | /usr/bin/grep -o 'note-' | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+      if [[ "$note_count" -gt 2 ]]; then
+        printf 'summary batch contained %s note ids\\n' "$note_count" >&2
+        exit 2
+      fi
+      printf '[]\\n'
       ;;
     *)
       printf 'unknown stub mode: %s\\n' "$mode" >&2

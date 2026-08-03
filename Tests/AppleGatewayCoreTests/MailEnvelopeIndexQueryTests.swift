@@ -132,9 +132,27 @@ import Testing
   #expect(message.files.attachments.isEmpty)
 }
 
+@Test func mailEnvelopeIndexSupportsCurrentMailSchema() throws {
+  let fixture = try MailEnvelopeFixture(schemaMode: .current)
+  let message = try #require(try fixture.service.messages(input: MailSearchInput(query: "planning")).edges.first?.node)
+
+  #expect(message.messageId == "rfc-102-current")
+  #expect(message.subject == "Project Plan")
+  #expect(message.snippet == "Planning summary")
+  #expect(message.from?.email == "bob@example.com")
+  #expect(message.to.map(\.email) == ["carol@example.com"])
+  #expect(message.cc.isEmpty)
+  #expect(try fixture.messageIds(MailSearchInput(to: "team")) == ["message-101", "message-104"])
+}
+
 enum AccountsPlistMode {
   case readable
   case unreadableDirectory
+}
+
+enum MailEnvelopeSchemaMode {
+  case legacy
+  case current
 }
 
 final class MailEnvelopeFixture {
@@ -145,16 +163,19 @@ final class MailEnvelopeFixture {
   let inboxMailboxId: String
   let receiptsMailboxId: String
 
-  init(accountsPlistMode: AccountsPlistMode = .readable) throws {
+  init(
+    accountsPlistMode: AccountsPlistMode = .readable,
+    schemaMode: MailEnvelopeSchemaMode = .legacy
+  ) throws {
     root = FileManager.default.temporaryDirectory
       .appendingPathComponent("apple-gateway-mail-query-tests")
       .appendingPathComponent(UUID().uuidString, isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let databaseURL = root.appendingPathComponent("Envelope Index")
-    try Self.createDatabase(at: databaseURL)
+    try Self.createDatabase(at: databaseURL, schemaMode: schemaMode)
     let request = MailSQLiteOpenRequest(
       snapshotPath: databaseURL.path,
-      uri: MailSQLiteDatabase.immutableReadOnlyURI(forSnapshotPath: databaseURL.path),
+      uri: MailSQLiteDatabase.readOnlyURI(forSnapshotPath: databaseURL.path),
       flags: MailSQLiteOpenFlags.mailReadOnlySnapshot
     )
     database = try #require(try LiveMailSQLiteOpener().open(request) as? MailSQLiteDatabase)
@@ -203,7 +224,7 @@ final class MailEnvelopeFixture {
     try data.write(to: url)
   }
 
-  private static func createDatabase(at url: URL) throws {
+  private static func createDatabase(at url: URL, schemaMode: MailEnvelopeSchemaMode) throws {
     var handle: OpaquePointer?
     guard sqlite3_open(url.path, &handle) == SQLITE_OK, let handle else {
       throw AppleGatewayError(code: .fileOperationFailed, message: "Could not create fixture database")
@@ -211,7 +232,16 @@ final class MailEnvelopeFixture {
     defer {
       sqlite3_close(handle)
     }
-    try exec(
+    let schema = switch schemaMode {
+    case .legacy:
+      legacySchema
+    case .current:
+      currentSchema
+    }
+    try exec(schema, handle: handle)
+  }
+
+  private static let legacySchema =
       """
       CREATE TABLE mailboxes(ROWID INTEGER PRIMARY KEY, url TEXT NOT NULL);
       CREATE TABLE subjects(ROWID INTEGER PRIMARY KEY, subject TEXT);
@@ -269,10 +299,68 @@ final class MailEnvelopeFixture {
         (5, 103, 'cc', 3),
         (6, 104, 'to', 4),
         (7, 106, 'to', 5);
-      """,
-      handle: handle
-    )
-  }
+      """
+
+  private static let currentSchema =
+    """
+    CREATE TABLE mailboxes(ROWID INTEGER PRIMARY KEY, url TEXT NOT NULL);
+    CREATE TABLE subjects(ROWID INTEGER PRIMARY KEY, subject TEXT);
+    CREATE TABLE addresses(ROWID INTEGER PRIMARY KEY, address TEXT, comment TEXT);
+    CREATE TABLE summaries(ROWID INTEGER PRIMARY KEY, summary TEXT NOT NULL);
+    CREATE TABLE recipients(ROWID INTEGER PRIMARY KEY, message INTEGER, type INTEGER, address INTEGER, position INTEGER);
+    CREATE TABLE message_global_data(ROWID INTEGER PRIMARY KEY, message_id_header TEXT);
+    CREATE TABLE messages(
+      ROWID INTEGER PRIMARY KEY,
+      message_id INTEGER,
+      global_message_id INTEGER,
+      mailbox INTEGER NOT NULL,
+      subject INTEGER,
+      summary INTEGER,
+      sender INTEGER,
+      date_sent REAL,
+      date_received REAL,
+      flags INTEGER NOT NULL
+    );
+
+    INSERT INTO mailboxes(ROWID, url) VALUES
+      (1, 'imap://user@example.com/INBOX'),
+      (2, 'imap://user@example.com/Receipts'),
+      (3, 'local:///Archive.mbox'),
+      (4, 'odd://opaque/Quarantine');
+    INSERT INTO subjects(ROWID, subject) VALUES
+      (1, 'Invoice 100%_ literal'),
+      (2, 'Project Plan'),
+      (3, 'Flag update'),
+      (4, 'Archive News'),
+      (5, 'Unknown Source'),
+      (6, 'Invoice 100AA literal');
+    INSERT INTO addresses(ROWID, address, comment) VALUES
+      (1, 'alice@example.com', 'Alice'),
+      (2, 'bob@example.com', 'Bob'),
+      (3, 'carol@example.com', 'Carol'),
+      (4, 'team@example.com', 'Team'),
+      (5, 'literal@example.com', 'Percent_User');
+    INSERT INTO summaries(ROWID, summary) VALUES
+      (1, 'Receipt summary 100%_ literal'),
+      (2, 'Planning summary'),
+      (3, 'Flag summary'),
+      (4, 'Archive summary'),
+      (5, 'Unknown summary'),
+      (6, 'Receipt summary 100AA literal');
+    INSERT INTO message_global_data(ROWID, message_id_header) VALUES
+      (1, 'rfc-101-current'), (2, 'rfc-102-current'), (3, 'rfc-103-current'),
+      (4, 'rfc-104-current'), (5, 'rfc-105-current'), (6, 'rfc-106-current');
+    INSERT INTO messages(ROWID, message_id, global_message_id, mailbox, subject, summary, sender, date_sent, date_received, flags) VALUES
+      (101, 1001, 1, 1, 1, 1, 1, \(cocoa("2026-01-05T11:00:00Z")), \(cocoa("2026-01-05T12:00:00Z")), 0),
+      (102, 1002, 2, 1, 2, 2, 2, \(cocoa("2026-01-04T11:00:00Z")), \(cocoa("2026-01-04T12:00:00Z")), 1),
+      (103, 1003, 3, 2, 3, 3, 1, \(cocoa("2026-01-05T11:30:00Z")), \(cocoa("2026-01-05T12:00:00Z")), 17),
+      (104, 1004, 4, 3, 4, 4, 3, \(cocoa("2026-01-03T11:00:00Z")), \(cocoa("2026-01-03T12:00:00Z")), 1025),
+      (105, 1005, 5, 4, 5, 5, 3, \(cocoa("2026-01-06T11:00:00Z")), \(cocoa("2026-01-06T12:00:00Z")), 0),
+      (106, 1006, 6, 1, 6, 6, 5, \(cocoa("2026-01-04T10:00:00Z")), \(cocoa("2026-01-04T13:00:00Z")), 0);
+    INSERT INTO recipients(ROWID, message, type, address, position) VALUES
+      (1, 101, 0, 4, 0), (2, 101, 1, 3, 0), (3, 102, 0, 3, 0),
+      (4, 103, 0, 2, 0), (5, 103, 1, 3, 0), (6, 104, 0, 4, 0), (7, 106, 0, 5, 0);
+    """
 
   private static func exec(_ sql: String, handle: OpaquePointer) throws {
     var errorMessage: UnsafeMutablePointer<CChar>?

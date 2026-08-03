@@ -654,8 +654,8 @@ Summarized here; full treatment in `design-permissions.md`.
   deliberately.
 - Full Disk Access (Mail, notification DB) cannot be prompted; the doctor
   output prints the manual-grant deep link.
-- Private databases are opened read-only (`immutable=1` where applicable)
-  and copied to the cache dir before parsing when a live WAL lock exists.
+- Private databases are opened read-only from cache snapshots and copied with
+  exact WAL sidecars so uncheckpointed transactions remain visible.
 - Release binaries and the notifier helper app are Developer ID signed and
   notarized so TCC grants survive updates.
 - File paths returned by the gateway are always under the cache root or a
@@ -691,7 +691,7 @@ public signatures, keeping the library trivially callable from any context.
 | --- | --- | --- |
 | 0 | Target restructure, config, CLI frame, GraphQL runtime, permissions/doctor, file store | `impl-plans/active/phase-0-foundation-and-graphql-runtime.md` |
 | 1 | Calendar + Reminders + EventKit alarms | `impl-plans/active/phase-1-calendar-reminders.md` |
-| 2 | Apple Notes | `impl-plans/active/phase-2-apple-notes.md` |
+| 2 | Apple Notes | `impl-plans/completed/phase-2-apple-notes.md` |
 | 3 | Apple Mail retrieval | `impl-plans/active/phase-3-apple-mail.md` |
 | 4 | Notifications (helper app, post/list/dismiss) | `impl-plans/active/phase-4-notifications.md` |
 | 5 | Clock alarms bridge + packaging updates | `impl-plans/active/phase-5-clock-alarms-and-packaging.md` |

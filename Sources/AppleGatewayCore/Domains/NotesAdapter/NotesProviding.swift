@@ -5,6 +5,8 @@ public protocol NotesProviding: Sendable {
   func folders(accountId: String?) throws -> [NoteFolder]
   func noteIds(accountId: String?, folderId: String?, batchSize: Int) throws -> [String]
   func noteMetadata(noteIds: [String], batchSize: Int) throws -> [Note]
+  func noteMetadataSummaries(noteIds: [String], batchSize: Int) throws -> [Note]
+  func hydrateNoteMetadata(_ notes: [Note], batchSize: Int) throws -> [Note]
   func bodySearchNoteIds(input: NotesBodySearchInput, batchSize: Int) throws -> [String]
   func searchSnippets(noteIds: [String], query: String?, batchSize: Int) throws -> [String: String]
   func noteMetadata(noteId: String) throws -> NoteLookupResult
@@ -14,6 +16,16 @@ public protocol NotesProviding: Sendable {
     attachmentId: String,
     to destination: URL
   ) throws -> NotesAttachmentExportResult
+}
+
+public extension NotesProviding {
+  func noteMetadataSummaries(noteIds: [String], batchSize: Int) throws -> [Note] {
+    try noteMetadata(noteIds: noteIds, batchSize: batchSize)
+  }
+
+  func hydrateNoteMetadata(_ notes: [Note], batchSize _: Int) throws -> [Note] {
+    notes
+  }
 }
 
 public enum NotesAttachmentExportResult: Equatable, Sendable {

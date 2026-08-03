@@ -68,7 +68,9 @@ import Testing
     .appendingPathComponent("apple-gateway-permissions-tests")
     .appendingPathComponent(UUID().uuidString)
   try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-  let envelopeIndex = root.appendingPathComponent("Envelope Index")
+  let mailData = root.appendingPathComponent("MailData", isDirectory: true)
+  try FileManager.default.createDirectory(at: mailData, withIntermediateDirectories: true)
+  let envelopeIndex = mailData.appendingPathComponent("Envelope Index")
   try Data("probe".utf8).write(to: envelopeIndex)
   var config = AppleGatewayConfig.defaultValue
   config.mail.mailRoot = root.path
@@ -76,6 +78,7 @@ import Testing
   let status = LivePermissionProbe().mailFullDiskAccessStatus(config: config)
 
   #expect(status.state == .granted)
+  #expect(status.details["path"] == nil)
 }
 
 @Test func requestPathCallsClockAutomationProvider() {

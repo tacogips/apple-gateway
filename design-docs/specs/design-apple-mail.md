@@ -57,7 +57,7 @@ doctor.
 
 ### Envelope Index Access
 
-- Open with SQLite URI `file:...?mode=ro&immutable=1` on a snapshot copy:
+- Open with SQLite URI `file:...?mode=ro` on a snapshot copy:
   Mail holds a WAL write lock, so the adapter copies `Envelope Index`
   (plus `-wal`/`-shm` when present) into the cache dir and opens the copy.
   The copy refreshes when the source mtime changes or after
@@ -75,15 +75,17 @@ doctor.
 Phase 3 TASK-001 implements only the access substrate:
 
 - A minimal SQLite boundary inside `Domains/MailAdapter/` that can open a
-  database URI read-only and immutable, prepare statements, step rows, read
+  database URI read-only, prepare statements, step rows, read
   typed columns, and close/finalize handles deterministically.
 - The live `Envelope Index` path is never passed to SQLite. The adapter first
   asks the Phase 0 file-store snapshot helper to copy `Envelope Index` and
   any exact `-wal` / `-shm` sidecars into
   `snapshots/mail/<source-hash>/`, refreshing when source mtime metadata
   changes. SQLite opens only the returned snapshot path.
-- The SQLite URI uses `mode=ro&immutable=1`; no code path may request
-  `SQLITE_OPEN_READWRITE`, `SQLITE_OPEN_CREATE`, or a mutable URI for Mail.
+- The SQLite URI uses `mode=ro`; no code path may request
+  `SQLITE_OPEN_READWRITE` or `SQLITE_OPEN_CREATE`. The snapshot is not marked
+  immutable because SQLite must apply copied WAL transactions that have not
+  yet been checkpointed into the main database file.
 - The wrapper remains schema-agnostic in TASK-001. It may support smoke
   statements such as `SELECT 1`, but account, mailbox, message, filter,
   pagination, and summary queries remain TASK-002.

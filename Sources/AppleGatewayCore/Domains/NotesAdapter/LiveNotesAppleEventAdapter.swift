@@ -44,10 +44,22 @@ public struct LiveNotesAppleEventAdapter: NotesProviding, NotesWriting {
   }
 
   public func noteMetadata(noteIds: [String], batchSize: Int) throws -> [Note] {
+    try noteMetadata(noteIds: noteIds, batchSize: batchSize, includeDetails: true)
+  }
+
+  public func noteMetadataSummaries(noteIds: [String], batchSize: Int) throws -> [Note] {
+    try noteMetadata(noteIds: noteIds, batchSize: batchSize, includeDetails: false)
+  }
+
+  public func hydrateNoteMetadata(_ notes: [Note], batchSize: Int) throws -> [Note] {
+    try noteMetadata(noteIds: notes.map(\.id), batchSize: batchSize, includeDetails: true)
+  }
+
+  private func noteMetadata(noteIds: [String], batchSize: Int, includeDetails: Bool) throws -> [Note] {
     try noteIds.chunked(size: max(batchSize, 1)).reduce(into: []) { notes, chunk in
       let batch: [Note] = try run(
         template: .fetchNoteMetadataBatch,
-        arguments: NotesMetadataBatchArguments(noteIds: chunk)
+        arguments: NotesMetadataBatchArguments(noteIds: chunk, includeDetails: includeDetails)
       )
       notes.append(contentsOf: batch)
     }
@@ -215,6 +227,7 @@ private struct NotesWindowArguments: Encodable {
 
 private struct NotesMetadataBatchArguments: Encodable {
   var noteIds: [String]
+  var includeDetails: Bool
 }
 
 private struct NotesBodySearchChunkArguments: Encodable {
