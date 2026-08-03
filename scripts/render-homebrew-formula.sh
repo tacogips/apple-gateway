@@ -71,7 +71,6 @@ main() {
 class AppleGateway < Formula
   desc "$project_description"
   homepage "https://github.com/$github_repository"
-  version "$version"
   license "MIT"
 
   livecheck do
