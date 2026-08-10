@@ -148,7 +148,7 @@ iTerm2. Record results in this plan's Progress Log. Use
   mapping for `.writeOnly` and `.notDetermined`, semaphore-bridged
   full-access request helpers, and pure `EventKitDateTime` conversion helpers.
   Verification passed with the Xcode Swift toolchain: `swift test --filter
-  EventKitSession`, `swift build`, `task test`, and `swiftlint`.
+  EventKitSession`, `swift build`, `mise run test`, and `swiftlint`.
 - 2026-07-03: TASK-002 routed through Riela session
   `codex-design-and-implement-review-loop-session-353`; manager routing
   selected issue-resolution, but issue intake immediately emitted the known
@@ -158,7 +158,7 @@ iTerm2. Record results in this plan's Progress Log. Use
   methods, `CalendarReadService`, 4-year event range chunking, query/status/date
   filtering, offset cursor connections, and fake-backed tests. Verification
   passed with the Xcode Swift toolchain: `swift test --filter
-  CalendarReadService`, `swift build`, `task test`, and `swiftlint`.
+  CalendarReadService`, `swift build`, `mise run test`, and `swiftlint`.
 - 2026-07-03: TASK-003 routed through Riela session
   `codex-design-and-implement-review-loop-session-354`; manager routing
   selected issue-resolution, but issue intake stalled with stale timestamps
@@ -169,7 +169,7 @@ iTerm2. Record results in this plan's Progress Log. Use
   alarm/recurrence full-replacement semantics, read-only calendar guards before
   writer calls, and recurrence span pass-through for event update/delete.
   Verification passed with the Xcode Swift toolchain: `swift test --filter
-  CalendarWriteService`, `swift build`, `task test`, and `swiftlint`.
+  CalendarWriteService`, `swift build`, `mise run test`, and `swiftlint`.
 - 2026-07-03: TASK-004 routed through Riela session
   `codex-design-and-implement-review-loop-session-356`; manager routing
   selected issue-resolution, but issue intake stalled with stale timestamps
@@ -182,7 +182,7 @@ iTerm2. Record results in this plan's Progress Log. Use
   alarm, event search, update event span, complete reminder, reader schema
   reads, and reader mutation rejection. Verification passed with the Xcode
   Swift toolchain: `swift build`, `swift test --filter GraphQLRuntime`,
-  `swift run AppleGatewaySmokeTests`, `task test`, and `swiftlint`.
+  `swift run AppleGatewaySmokeTests`, `mise run test`, and `swiftlint`.
 - 2026-07-03: Riela session
   `codex-design-and-implement-review-loop-session-359` identified that
   TASK-005 was premature because production GraphQL CLI defaults still used
@@ -203,7 +203,7 @@ iTerm2. Record results in this plan's Progress Log. Use
   GraphQL and smoke tests continue to cover reader write rejection and fake
   injection. Verification passed with the Xcode Swift toolchain:
   `swift build`, `swift test --filter EventKitCalendarReminderMapper`,
-  `task test`, and `swiftlint`.
+  `mise run test`, and `swiftlint`.
 - 2026-07-03: The same Riela session accepted the design review and advanced
   to implementation planning, then the local Riela process was intentionally
   cancelled after local TASK-004A implementation and verification had already
@@ -238,7 +238,7 @@ iTerm2. Record results in this plan's Progress Log. Use
   completed EventKit implementation, schema, models, fake tests, and live
   checklist artifact while leaving TASK-005 live execution open because
   Calendar/Reminders permissions are not granted. Verification:
-  `git diff --check`, `task build`, and `swift run apple-gateway --help`.
+  `git diff --check`, `mise run build`, and `swift run apple-gateway --help`.
 - 2026-07-03: Safer TASK-005 helper update routed through Riela session
   `codex-simple-work-package-session-421`. Updated
   `scripts/live-calendar-reminders-check.sh` so default mode is a successful

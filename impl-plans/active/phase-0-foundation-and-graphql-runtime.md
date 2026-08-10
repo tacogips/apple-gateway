@@ -24,7 +24,7 @@ small) SDL.
 - [x] `Sources/AppleGatewayCore/{GraphQLRuntime,CLI,Config,Permissions,FileStore,AppleEventBridge,Domains}/` skeleton
 - [x] Working `graphql`, `schema print`, `permissions status|request`,
       `config validate`, `file download`, `cache prune`, `version` commands
-- [x] Updated `Taskfile.yml` test task running unit + smoke tests
+- [x] Updated `Taskfile.yml` test mise run running unit + smoke tests
 - [x] `Tests/` and smoke-test scaffolding with fake adapter wiring
 
 ## Tasks
@@ -108,7 +108,7 @@ legacy usage keys, `NSAppleEventsUsageDescription`) and the
 - `swift build`
 - `otool -s __TEXT __info_plist .build/debug/apple-gateway`
 - `otool -s __TEXT __info_plist .build/debug/apple-gateway-reader`
-- `task test`
+- `mise run test`
 - `swiftlint`
 
 **Completion Criteria**:
@@ -121,7 +121,7 @@ legacy usage keys, `NSAppleEventsUsageDescription`) and the
       notes if intentionally preserved
 - [x] Reader entrypoint exists and delegates through the shared core CLI
       behavior rather than duplicating command handling
-- [x] `task test` and `swiftlint` pass on the restructured tree
+- [x] `mise run test` and `swiftlint` pass on the restructured tree
 
 ### TASK-002: Config loading
 
@@ -218,7 +218,7 @@ defaults for every key in `design-apple-gateway.md#configuration`,
 
 - `swift build`
 - `swift test --filter Config`
-- `task test`
+- `mise run test`
 - `swiftlint`
 
 **Completion Criteria**:
@@ -347,7 +347,7 @@ printer. Register the `permissions` query field as the first real field.
 
 - `swift build`
 - `swift test --filter GraphQL`
-- `task test`
+- `mise run test`
 - `swiftlint`
 
 **Completion Criteria**:
@@ -466,7 +466,7 @@ exit-code mapping table from the primary spec.
 - `swift build`
 - `swift test --filter Error`
 - `swift test --filter GraphQL`
-- `task test`
+- `mise run test`
 - `swiftlint`
 
 **Completion Criteria**:
@@ -653,7 +653,7 @@ shared failure-message formatter naming the responsible process.
 - `swift test --filter GraphQL`
 - `swift test --filter Command`
 - `swift test`
-- `task test`
+- `mise run test`
 - `swiftlint`
 
 ### TASK-006: File store
@@ -740,7 +740,7 @@ notifications phases).
 - `swift test --filter FileStore`
 - `swift test --filter Command`
 - `swift test`
-- `task test`
+- `mise run test`
 - `swiftlint`
 
 ### TASK-007: CLI frame and smoke tests
@@ -820,7 +820,7 @@ adapters (mail-gateway smoke pattern).
       injection seams; it must not add hidden production test-mode flags or
       call live TCC, Apple Events, application UI, Mail, notification DB, signing,
       notarization, release, commit, or push paths.
-- [x] Update `Taskfile.yml` so `task test` runs the unit test suite and the
+- [x] Update `Taskfile.yml` so `mise run test` runs the unit test suite and the
       smoke executable. Keep release, signing, notarization, cask, tap, and
       upload tasks untouched.
 - [x] Add focused unit tests under
@@ -848,7 +848,7 @@ adapters (mail-gateway smoke pattern).
   to the command contract, including usage exit 2 behavior.
 - `AppleGatewaySmokeTests` executable target covering deterministic full CLI
   flows against fake seams.
-- `Taskfile.yml` test task running both unit tests and smoke tests.
+- `Taskfile.yml` test mise run running both unit tests and smoke tests.
 
 **Dependencies**:
 
@@ -874,7 +874,7 @@ adapters (mail-gateway smoke pattern).
       pretty-print deterministic sorted-key JSON where specified
 - [x] Usage errors write diagnostics to stderr only and exit 2; JSON
       business envelopes write to stdout
-- [x] `task test` runs both `swift test` and the smoke executable
+- [x] `mise run test` runs both `swift test` and the smoke executable
 
 **Verification Commands**:
 
@@ -882,7 +882,7 @@ adapters (mail-gateway smoke pattern).
 - `swift test --filter Command`
 - `swift test`
 - `swift run AppleGatewaySmokeTests`
-- `task test`
+- `mise run test`
 - `swiftlint`
 
 ## Progress Log
@@ -902,9 +902,9 @@ adapters (mail-gateway smoke pattern).
   accepted Riela design/review artifacts. Added global `--config` and
   `--pretty` parsing in the shared core command frame, JSON stdout envelopes
   for selected-command config failures, `AppleGatewaySmokeTests`, and smoke
-  wiring in `task test`. Verification passed with the Xcode Swift toolchain:
+  wiring in `mise run test`. Verification passed with the Xcode Swift toolchain:
   `swift build`, `swift test --filter Command`, `swift run
-  AppleGatewaySmokeTests`, `swift test`, `task test`, `swiftlint`, and the
+  AppleGatewaySmokeTests`, `swift test`, `mise run test`, `swiftlint`, and the
   no-config GraphQL CLI smoke command for `{ permissions { calendars } }`.
 - 2026-07-03: Phase 0 closeout routed through Riela session
   `codex-design-and-implement-review-loop-session-350`; manager routing
@@ -927,7 +927,7 @@ adapters (mail-gateway smoke pattern).
   executables with identical SwiftPM linker settings. Verification passed:
   `swift build`, `otool -s __TEXT __info_plist .build/debug/apple-gateway`,
   `otool -s __TEXT __info_plist .build/debug/apple-gateway-reader`,
-  `task test`, and `swiftlint`. The first plain `swift build` attempt used an
+  `mise run test`, and `swiftlint`. The first plain `swift build` attempt used an
   incompatible Nix macOS 11.3 SDK with the Xcode Swift 6.3 toolchain; rerunning
   with Xcode `DEVELOPER_DIR`, `SDKROOT`, `TOOLCHAINS`, and toolchain `PATH`
   succeeded.
@@ -942,7 +942,7 @@ adapters (mail-gateway smoke pattern).
   `config validate [--config <path>]` routing through `AppleGatewayCommand`;
   added focused config unit tests under `Tests/AppleGatewayCoreTests/Config/`.
   Verification passed with explicit Xcode toolchain environment:
-  `swift build`, `swift test --filter Config`, `task test`, and `swiftlint`.
+  `swift build`, `swift test --filter Config`, `mise run test`, and `swiftlint`.
   A plain `swift build` attempt still failed before compilation due to the
   existing Nix macOS 11.3 SDK mismatch with the Xcode Swift 6.3 toolchain.
 - 2026-07-03: TASK-003 implementation plan expanded after Step 3 design
@@ -961,12 +961,12 @@ adapters (mail-gateway smoke pattern).
   Explicitly deferred TASK-004, TASK-005, TASK-006, and TASK-007. Preserved
   codex-agent reference `comm-000520` residual risks. Verification passed with
   explicit Xcode toolchain environment: `swift build`,
-  `swift test --filter GraphQL`, `task test`, and `swiftlint`.
+  `swift test --filter GraphQL`, `mise run test`, and `swiftlint`.
 - 2026-07-03: TASK-003 post-integrity coverage hardening added after Riela's
   low-severity findings. Reader SDL is now pinned with an exact snapshot test,
   and command tests cover `graphql --query-file`, `--variables`,
   `--variables-file`, and `--pretty`. Verification passed with explicit Xcode
-  toolchain environment: `swift test --filter GraphQL`, `task test`,
+  toolchain environment: `swift test --filter GraphQL`, `mise run test`,
   `swiftlint`, `swift build`, plus CLI checks for permissions query execution
   and reader mutation rejection.
 - 2026-07-03: TASK-004 implementation plan expanded after Step 3 design
@@ -989,7 +989,7 @@ adapters (mail-gateway smoke pattern).
   the shell selected the incompatible Nix macOS 11.3 SDK with Xcode Swift 6.3;
   verification passed with explicit Xcode toolchain environment:
   `swift build`, `swift test --filter Error`, `swift test --filter GraphQL`,
-  `task test`, and `swiftlint`.
+  `mise run test`, and `swiftlint`.
 - 2026-07-03: TASK-005 design and implementation plan accepted through
   Riela session `codex-design-and-implement-review-loop-session-333`
   (`comm-000545` / `comm-000547`). The Riela implementation worker stalled
@@ -1008,7 +1008,7 @@ adapters (mail-gateway smoke pattern).
   domains, formatter contract, JSON status output, and full GraphQL field
   coverage. Verification passed with explicit Xcode toolchain environment:
   `swift build`, `swift test --filter Permissions`, `swift test --filter
-  GraphQL`, `swift test --filter Command`, `swift test`, `task test`,
+  GraphQL`, `swift test --filter Command`, `swift test`, `mise run test`,
   `swiftlint`, plus CLI smokes for `permissions status --json` and the full
   GraphQL `permissions` field query.
 - 2026-07-03: TASK-006 design clarification was started through Riela
@@ -1029,7 +1029,7 @@ adapters (mail-gateway smoke pattern).
   key-material preservation/removal semantics, snapshot sidecar copying, and
   command envelopes. Verification passed with explicit Xcode toolchain
   environment: `swift build`, `swift test --filter FileStore`, `swift test
-  --filter Command`, `swift test`, `task test`, and `swiftlint`.
+  --filter Command`, `swift test`, `mise run test`, and `swiftlint`.
 - 2026-07-03: TASK-005 implementation plan expanded after Step 3 design
   acceptance from communication `comm-000545`. Scope is limited to
   non-prompting permission status probes, isolated prompt-capable request

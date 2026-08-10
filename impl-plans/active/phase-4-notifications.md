@@ -213,14 +213,14 @@ Run the narrowest regression first, then the repository-required full checks:
 ```bash
 swift test --filter notificationAdapterGatewayConnectionAppliesDateFiltersBeforePagination
 swift test --filter NotificationAdapter
-task build
-task test
-task lint
+mise run build
+mise run test
+mise run lint
 git diff --check
 ```
 
-If `task lint` reports that SwiftLint is unavailable, record that environment
-limitation; `task build`, `task test`, and `git diff --check` remain required.
+If `mise run lint` reports that SwiftLint is unavailable, record that environment
+limitation; `mise run build`, `mise run test`, and `git diff --check` remain required.
 Live Notification Center state is not required for this deterministic adapter
 test. If go-task itself is unavailable, use `swift build` and `swift test` as
 the recorded build and full-suite fallbacks.
@@ -235,7 +235,7 @@ the recorded build and full-suite fallbacks.
       connection.
 - [x] Missing or malformed helper timestamps do not pass an active date
       filter and remain visible when no date bound is supplied.
-- [x] Focused adapter tests, `task build`, and the full `task test` suite pass.
+- [x] Focused adapter tests, `mise run build`, and the full `mise run test` suite pass.
 
 ## Progress Log
 
@@ -243,8 +243,8 @@ the recorded build and full-suite fallbacks.
   ranges with the SYSTEM_DB message, parses ISO-8601 timestamps with and
   without fractional seconds, applies the inclusive/exclusive date interval
   before cursor pagination, and excludes invalid timestamps only for active
-  date filters. Focused NotificationAdapter tests (7 tests), `task build`,
-  full `task test` (181 tests plus AppleGatewaySmokeTests), `task lint` (0
+  date filters. Focused NotificationAdapter tests (7 tests), `mise run build`,
+  full `mise run test` (181 tests plus AppleGatewaySmokeTests), `mise run lint` (0
   violations), and `git diff --check` passed.
 
 - 2026-07-02: Plan created from approved design docs.
@@ -268,7 +268,7 @@ the recorded build and full-suite fallbacks.
   `bash -n scripts/build-notifier-app.sh`, `bash
   scripts/build-notifier-app.sh --dry-run`, real local bundle assembly with
   valid `Info.plist` and executable placement, `swift build`, `swift test`,
-  `task lint`, and `git diff --check`. Live notification prompt/action/reply
+  `mise run lint`, and `git diff --check`. Live notification prompt/action/reply
   verification remains manual.
 - 2026-07-03: TASK-002 implementation completed after Riela session
   `codex-design-and-implement-review-loop-session-384` started and then
@@ -279,7 +279,7 @@ the recorded build and full-suite fallbacks.
   activation waits, and invalid post payloads. Added deterministic stub-helper
   tests for post activation, list, dismiss, dismiss all, missing helper,
   fallback permitted/forbidden, and helper timeout. Verified `swift test
-  --filter Notification`, `swift build`, `swift test`, and `task lint`.
+  --filter Notification`, `swift build`, `swift test`, and `mise run lint`.
 - 2026-07-03: TASK-003 implementation completed after Riela session
   `codex-design-and-implement-review-loop-session-385` started and then
   stalled in intake. Added usernoted database path probing for Sequoia+
@@ -291,7 +291,7 @@ the recorded build and full-suite fallbacks.
   `NOTIFICATION_DB_UNAVAILABLE` mapping. Added deterministic fixture tests
   for post-Sequoia and legacy schemas, FDA denial, missing DB, schema drift,
   filters, pagination, and undecodable blobs. Verified `swift test --filter
-  Usernoted`, `swift build`, full `swift test`, `task lint`, and
+  Usernoted`, `swift build`, full `swift test`, `mise run lint`, and
   `git diff --check`.
 - 2026-07-03: TASK-004 implementation completed after Riela session
   `codex-design-and-implement-review-loop-session-387` started and then
@@ -304,8 +304,8 @@ the recorded build and full-suite fallbacks.
   manual checks for first-run helper prompt, action click, reply text,
   dismiss, and system-wide list were skipped because this was a
   non-interactive run. Verified `swift test --filter notifications`, `swift
-  run AppleGatewaySmokeTests`, full `swift test`, `task lint`, schema print
-  for full/reader roles, `task build` with Xcode toolchain environment, and
+  run AppleGatewaySmokeTests`, full `swift test`, `mise run lint`, schema print
+  for full/reader roles, `mise run build` with Xcode toolchain environment, and
   `git diff --check`.
 - 2026-07-03: Riela work package
   `codex-simple-work-package-session-408` added the missing Phase 4

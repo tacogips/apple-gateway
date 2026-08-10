@@ -518,9 +518,9 @@ scratch Notes folder. It must record:
 Verification for TASK-005 must explicitly include:
 
 ```bash
-task build
-task test
-task lint
+mise run build
+mise run test
+mise run lint
 swift run apple-gateway --help
 ```
 

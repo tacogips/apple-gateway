@@ -383,12 +383,12 @@ same FDA gate.
   phase plan.
 
 TASK-001 verification commands are the narrow relevant Swift tests for the
-Mail adapter and file-store snapshot integration first, then `task build`,
-`task test`, `task lint`, and `swift run apple-gateway --help` when the
+Mail adapter and file-store snapshot integration first, then `mise run build`,
+`mise run test`, `mise run lint`, and `swift run apple-gateway --help` when the
 implementation touches shared behavior or command wiring. TASK-001 does not
 require SDL snapshot updates because GraphQL schema registration is TASK-004.
 TASK-004 verification starts with focused Mail GraphQL runtime, Mail
 adapter, Mail parser/materializer, file-store, and smoke tests, then broadens
-to `task build`, `task test`, `task lint`, `swift run apple-gateway
+to `mise run build`, `mise run test`, `mise run lint`, `swift run apple-gateway
 schema print --role full`, `swift run apple-gateway schema print --role
 reader`, and `swift run apple-gateway --help`.

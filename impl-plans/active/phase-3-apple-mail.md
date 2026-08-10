@@ -120,9 +120,9 @@ Then run shared verification because TASK-001 touches shared config,
 file-store, errors, or package linking:
 
 ```bash
-task build
-task test
-task lint
+mise run build
+mise run test
+mise run lint
 swift run apple-gateway --help
 ```
 
@@ -201,9 +201,9 @@ Mail.app, download a body and an attachment).
 - 2026-07-03: Step 6 verification passed:
   `env -u DEVELOPER_DIR -u SDKROOT -u TOOLCHAINS swift test --filter MailAdapterTests`;
   `env -u DEVELOPER_DIR -u SDKROOT -u TOOLCHAINS swift test --filter FileStoreTests`;
-  `env -u DEVELOPER_DIR -u SDKROOT -u TOOLCHAINS task build`;
-  `env -u DEVELOPER_DIR -u SDKROOT -u TOOLCHAINS task test`;
-  `env -u DEVELOPER_DIR -u SDKROOT -u TOOLCHAINS task lint`;
+  `env -u DEVELOPER_DIR -u SDKROOT -u TOOLCHAINS mise run build`;
+  `env -u DEVELOPER_DIR -u SDKROOT -u TOOLCHAINS mise run test`;
+  `env -u DEVELOPER_DIR -u SDKROOT -u TOOLCHAINS mise run lint`;
   `env -u DEVELOPER_DIR -u SDKROOT -u TOOLCHAINS swift run apple-gateway --help`.
 - 2026-07-03: TASK-002 design update routed through Riela session
   `codex-design-and-implement-review-loop-session-377`. Step 2 updated
@@ -222,9 +222,9 @@ Mail.app, download a body and an attachment).
   checklist work was added.
 - 2026-07-03: TASK-002 verification passed with the Xcode SDK environment:
   `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" swift test --filter "MailEnvelopeIndexQueryTests|MailAdapterTests"`;
-  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" task build`;
-  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" task test`;
-  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" task lint`;
+  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" mise run build`;
+  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" mise run test`;
+  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" mise run lint`;
   `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" swift run apple-gateway --help`;
   `git diff --check`.
 - 2026-07-03: TASK-003 routed through Riela session
@@ -244,9 +244,9 @@ Mail.app, download a body and an attachment).
   update, TASK-004 smoke flows, or manual checklist work was added.
 - 2026-07-03: TASK-003 verification passed with the Xcode SDK environment:
   `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" swift test --filter "MailEMLXParserTests|MailEnvelopeIndexQueryTests|MailAdapterTests"`;
-  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" task build`;
-  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" task test`;
-  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" task lint`;
+  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" mise run build`;
+  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" mise run test`;
+  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" mise run lint`;
   `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" swift run apple-gateway --help`;
   `git diff --check`.
 - 2026-07-03: TASK-004 routed through Riela session
@@ -276,9 +276,9 @@ Mail.app, download a body and an attachment).
   `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" swift test --filter "MailEMLXParserTests|MailGraphQLRuntimeTests|MailEnvelopeIndexQueryTests"`;
   `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" swift test --filter "MailGraphQLRuntimeTests|GraphQLRuntimeTests|CommandTests|FileStoreTests"`;
   `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" swift run AppleGatewaySmokeTests`;
-  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" task build`;
-  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" task test`;
-  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" task lint`;
+  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" mise run build`;
+  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" mise run test`;
+  `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" mise run lint`;
   `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" swift run apple-gateway schema print --role full`;
   `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" swift run apple-gateway schema print --role reader`;
   `env -u SDKROOT -u DEVELOPER_DIR PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH" swift run apple-gateway --help`;

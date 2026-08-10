@@ -42,7 +42,7 @@ accessing a live calendar.
 - [x] `Sources/AppleGatewayCore/Domains/EventKitCalendarReminderMapper.swift`
       passes `nil` for empty recurrence components and rejects weekdays outside
       `1...7`.
-- [x] Targeted tests, `task test`, SwiftLint, whitespace checks, and scope
+- [x] Targeted tests, `mise run test`, SwiftLint, whitespace checks, and scope
       checks pass.
 
 ## Tasks
@@ -190,7 +190,7 @@ swift test --filter jsonObjectConversionDistinguishesBooleansFromZeroAndOne
 swift test --filter createEventRecurrenceVariablesMatchInlineLiteral
 swift test --filter weeklyRecurrenceRuleMappingUsesNilForUnusedComponents
 swift test --filter recurrenceRuleMappingRejectsInvalidWeekdays
-task test
+mise run test
 swiftlint
 git diff --check
 if rg -n '[[:blank:]]+$' design-docs/issue-1-recurrence-input.md impl-plans/issue-1-recurrence-input.md; then exit 1; fi
@@ -211,7 +211,7 @@ version/release files, commits, or pushes are present.
 **Completion Criteria**:
 
 - [x] All four targeted tests pass.
-- [x] `task test` passes, including `swift test` and
+- [x] `mise run test` passes, including `swift test` and
       `swift run AppleGatewaySmokeTests`.
 - [x] `swiftlint`, `git diff --check`, and the explicit untracked-document
       whitespace check pass.
@@ -273,7 +273,7 @@ implicitly.
   `swift test --filter createEventRecurrenceVariablesMatchInlineLiteral`,
   `swift test --filter weeklyRecurrenceRuleMappingUsesNilForUnusedComponents`,
   `swift test --filter recurrenceRuleMappingRejectsInvalidWeekdays`,
-  `swift test` (197 tests), and `task test` (197 tests plus
+  `swift test` (197 tests), and `mise run test` (197 tests plus
   `AppleGatewaySmokeTests: passed`). The unqualified first focused test command
   failed before compilation because the active Nix SDK 11.3 did not match the
   Xcode Swift 6.3.3 compiler; the prescribed Xcode SDK override resolved it.

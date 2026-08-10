@@ -64,7 +64,7 @@ requests, Clock.app automation, packaging, or other feature work.
 - Top-level help and missing-domain usage guidance both contain
   `calendar|reminders|notes|notifications|clock-alarms`.
 - The implementation adds no new domain enum, provider route, or public API.
-- Focused command tests, SwiftLint, the package build, and the full task test
+- Focused command tests, SwiftLint, the package build, and the full mise run test
   suite pass before any commit or push.
 
 ### Verification
@@ -75,8 +75,8 @@ Run from the repository root:
 swift test --filter commandReportsUsage
 swift test --filter commandPermissionsRequestUsageIncludesClockAlarms
 swiftlint
-task build
-task test
+mise run build
+mise run test
 ```
 
 If `task` is unavailable, use `swift build` and `swift test`; report SwiftLint
@@ -86,7 +86,7 @@ as unavailable rather than silently skipping it.
 
 Both user-visible permission-domain usage strings now include `clock-alarms`,
 with focused tests for top-level help and the missing-domain diagnostic.
-Verification passed: both focused command tests, `task build`, full `task test`
-(181 tests plus AppleGatewaySmokeTests), `task lint` (0 violations), and
+Verification passed: both focused command tests, `mise run build`, full `mise run test`
+(181 tests plus AppleGatewaySmokeTests), `mise run lint` (0 violations), and
 `git diff --check`. Permission routing, Clock automation, and packaging were
 not changed.

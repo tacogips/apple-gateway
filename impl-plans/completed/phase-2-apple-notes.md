@@ -179,7 +179,7 @@ Implementation tasks:
       timeout/chunking observation
 - [x] TASK-001 static JXA JSON-argv boundary and TASK-002/TASK-003/TASK-004
       behavior remain covered by the relevant existing tests
-- [x] Verification passes with `task build`, `task test`, `task lint`, and
+- [x] Verification passes with `mise run build`, `mise run test`, `mise run lint`, and
       `swift run apple-gateway --help`
 
 ### TASK-006: Attachment Metadata, Export, and Shared State
@@ -296,16 +296,16 @@ Implementation tasks:
       failures, not unsupported export or every attachment key
 - [x] `UnavailableNotesProvider` and every Notes fake/smoke provider compile
       against the revised provider contract
-- [x] `task build`, focused Notes tests, full `task test`, `task lint`, and
+- [x] `mise run build`, focused Notes tests, full `mise run test`, `mise run lint`, and
       `git diff --check` pass before any commit or push
 
 **Verification commands**:
 
 ```bash
-task build
+mise run build
 swift test --filter Notes
-task test
-task lint
+mise run test
+mise run lint
 git diff --check
 ```
 
@@ -451,8 +451,8 @@ swift test --filter AppleEventBridge
 swift test --filter NotesHydration
 swift test --filter Notes
 nix develop -c bash -lc 'export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer; export SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk; export TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault; export PATH=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:$PATH; swift test --filter "AppleEventBridge|Mail|Notes|Permissions|Usernoted"'
-task build
-task lint
+mise run build
+mise run lint
 git --no-pager diff --no-ext-diff --check -- Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/AppleGatewayCore/Domains/NotesAdapter Tests/AppleGatewayCoreTests design-docs/specs/design-apple-notes.md impl-plans/active/phase-2-apple-notes.md
 wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/AppleGatewayCore/Domains/NotesAdapter/*.swift Tests/AppleGatewayCoreTests/*.swift
 ```
@@ -485,7 +485,7 @@ wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/A
   corrected the fixture. Final Xcode-pinned verification passed:
   `swift test --filter AppleEventBridge` (12 tests),
   `swift test --filter "AppleEventBridge|Mail|Notes|Permissions|Usernoted"`
-  (98 tests, including 5 NotesHydration tests), `task build`, and
+  (98 tests, including 5 NotesHydration tests), `mise run build`, and
   `swiftlint --quiet`. Diff and file-length checks passed; the largest relevant
   modified Swift file is 964 lines. Live Notes.app compatibility remains
   permission-gated and macOS-version-dependent.
@@ -498,7 +498,7 @@ wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/A
   classification. Verification passed in the Xcode-pinned environment:
   `swift test --filter "NotesHydration|AppleEventBridge"` (14 tests),
   `swift test --filter "AppleEventBridge|Mail|Notes|Permissions|Usernoted"`
-  (95 tests), `task build`, and `swiftlint --quiet`. The full
+  (95 tests), `mise run build`, and `swiftlint --quiet`. The full
   `swift test` output completed with 249 passing tests and one unrelated
   live EventKit test skipped before the enclosing runner timed out. Diff and
   file-length checks passed; the largest relevant modified Swift file is 964
@@ -515,7 +515,7 @@ wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/A
   Xcode-pinned environment: `swift test --filter NotesHydration` (5 tests),
   `swift test --filter Notes` (34 tests),
   `swift test --filter "AppleEventBridge|Mail|Notes|Permissions|Usernoted"`
-  (94 tests), `task build`, and `swiftlint --quiet`. Diff and file-length checks
+  (94 tests), `mise run build`, and `swiftlint --quiet`. Diff and file-length checks
   passed after this plan update. Live Notes.app compatibility remains
   permission-gated and macOS-version-dependent.
 
@@ -529,7 +529,7 @@ wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/A
   hydrated details. Verification passed in the Nix/Xcode-pinned environment:
   `swift test --filter NotesHydration` (4 tests), `swift test --filter Notes`
   (33 tests), `swift test --filter "AppleEventBridge|Mail|Notes|Permissions|Usernoted"`
-  (93 tests), `task build`, and `swiftlint --quiet`. TASK-007 completion
+  (93 tests), `mise run build`, and `swiftlint --quiet`. TASK-007 completion
   criteria remain satisfied after the review fix; live Notes.app compatibility
   remains permission-gated and macOS-version-dependent.
 
@@ -543,8 +543,8 @@ wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/A
   `swift test --filter NotesHydration` (4 tests),
   `swift test --filter Notes` (33 tests),
   `swift test --filter "AppleEventBridge|Mail|Notes|Permissions|Usernoted"`
-  (93 tests), `task build`, and `swiftlint --quiet`. An initial parallel
-  ambient `task build` attempt encountered the known incompatible Nix SDK
+  (93 tests), `mise run build`, and `swiftlint --quiet`. An initial parallel
+  ambient `mise run build` attempt encountered the known incompatible Nix SDK
   11.3/Xcode Swift 6.3.3 environment plus a concurrent SwiftPM build lock;
   the sequential pinned verification above corrected both conditions.
   `git --no-pager diff --no-ext-diff --check -- Sources/AppleGatewayCore/Domains/NotesAdapter Tests/AppleGatewayCoreTests design-docs/specs/design-apple-notes.md impl-plans/active/phase-2-apple-notes.md`
@@ -563,7 +563,7 @@ wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/A
   Verification passed: `swift test --filter NotesHydration` (4 tests),
   `swift test --filter Notes` (33 tests), the Nix/Xcode-pinned
   `swift test --filter "AppleEventBridge|Mail|Notes|Permissions|Usernoted"`
-  suite (93 tests), `task build`, `swiftlint` (0 violations across 130 files),
+  suite (93 tests), `mise run build`, `swiftlint` (0 violations across 130 files),
   and `git --no-pager diff --no-ext-diff --check -- Sources/AppleGatewayCore/Domains/NotesAdapter Tests/AppleGatewayCoreTests design-docs/specs/design-apple-notes.md impl-plans/active/phase-2-apple-notes.md`.
   The Nix-wrapped scoped command printed the complete passing test result
   before the enclosing command runner timed out; no test failed and no test
@@ -589,8 +589,8 @@ wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/A
   canonical escape, post-export symlink, and explicit timeout propagation
   tests. Verification passed with the Xcode SDK/toolchain pinned over the
   ambient incompatible Nix SDK: `swift test --filter Notes` (29 tests),
-  `task build`, `task test` (185 tests plus AppleGatewaySmokeTests), and
-  `task lint` (0 violations). `git diff --check` is recorded after this plan
+  `mise run build`, `mise run test` (185 tests plus AppleGatewaySmokeTests), and
+  `mise run lint` (0 violations). `git diff --check` is recorded after this plan
   update.
 
 - 2026-07-18: TASK-006 implemented. Added guarded shared JXA metadata helpers,
@@ -598,8 +598,8 @@ wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/A
   capability-backed attachment keys, explicit materializer retry/error
   classification, configured-root service/materializer composition, and
   focused decoding/export/fallback/containment/injection tests. Verification
-  passed: `task build`, `swift test --filter Notes` (25 tests), `task test`
-  (181 tests plus AppleGatewaySmokeTests), `task lint` (0 violations), and
+  passed: `mise run build`, `swift test --filter Notes` (25 tests), `mise run test`
+  (181 tests plus AppleGatewaySmokeTests), `mise run lint` (0 violations), and
   `git diff --check`. Live Notes.app export remains optional manual
   verification because TCC and Notes scripting support vary by macOS release.
 
@@ -617,7 +617,7 @@ wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/A
   JSON argv passing, timeout retry, -1712 retry-then-fail,
   permission-denied stderr, garbage stdout, invalid argument JSON, and
   quote/backslash injection payload separation. Verification passed:
-  `swift build`, `swift test --filter AppleEventBridge`, `task test`,
+  `swift build`, `swift test --filter AppleEventBridge`, `mise run test`,
   `swiftlint`, and `swift run apple-gateway --help`.
 - 2026-07-03: TASK-002 design boundary routed through Riela session
   `codex-design-and-implement-review-loop-session-365`; intake and
@@ -631,7 +631,7 @@ wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/A
   Implemented Notes read models, `NotesProviding`,
   `LiveNotesAppleEventAdapter`, `NotesReadService`, and fake-provider tests.
   Verification passed: `swift build`, `swift test --filter Notes`,
-  `task test`, `swiftlint`, and `git diff --check`.
+  `mise run test`, `swiftlint`, and `git diff --check`.
 - 2026-07-03: TASK-003 design-doc update routed through Riela session
   `codex-design-and-implement-review-loop-session-367`; documented the
   single-note body fetch contract, strict-over inline cutoff semantics,
@@ -649,7 +649,7 @@ wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/A
   path-safe Notes source ids for FileStore payloads, `PLAINTEXT`/`HTML`
   bodyFile keys, `NotesFileMaterializer`, and best-effort attachment keys.
   Verification passed: `swift build`, `swift test --filter Notes`,
-  `task test`, `swiftlint`, and `git diff --check`.
+  `mise run test`, `swiftlint`, and `git diff --check`.
 - 2026-07-03: TASK-004 implementation completed from Riela session
   `codex-design-and-implement-review-loop-session-369`; Riela accepted the
   TASK-004 design-doc update and independent design review with no findings.
@@ -660,7 +660,7 @@ wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/A
   delete-to-Recently-Deleted behavior, move refetch behavior, and lossy-HTML
   docs coverage. TASK-005 schema registration and live smoke/manual flows
   remain out of scope. Verification passed with the Xcode SDK environment:
-  `swift build`, `swift test --filter Notes`, `task test`, `swiftlint`, and
+  `swift build`, `swift test --filter Notes`, `mise run test`, `swiftlint`, and
   `git diff --check`.
 - 2026-07-03: TASK-005 design and implementation routed through Riela
   session `codex-design-and-implement-review-loop-session-371`; Riela
@@ -674,8 +674,8 @@ wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/A
   delete and reader mutation rejection, and
   `impl-plans/live-checklists/phase-2-apple-notes-live.md`. Live manual
   execution remains permission-gated and was not run in this automated pass.
-  Verification passed with the Xcode SDK environment: `task build`,
-  `task test`, `task lint`, `swift run apple-gateway --help`, and
+  Verification passed with the Xcode SDK environment: `mise run build`,
+  `mise run test`, `mise run lint`, `swift run apple-gateway --help`, and
   `git diff --check`.
 - 2026-07-03: Documentation/status cleanup routed through Riela session
   `codex-simple-work-package-session-395`; the workflow identified the stale
@@ -683,7 +683,7 @@ wc -l Sources/AppleGatewayCore/AppleEventBridge/AppleEventBridge.swift Sources/A
   before file edits. Updated the deliverable checkbox to match the completed
   JXA template, adapter, read/write, schema, smoke, and live-checklist
   evidence already recorded above. Live manual verification remains
-  permission-gated. Verification: `git diff --check`, `task build`, and
+  permission-gated. Verification: `git diff --check`, `mise run build`, and
   `swift run apple-gateway --help`.
 - 2026-07-03: Documentation-only Phase 2 status cleanup completed via Riela
   session `codex-simple-work-package-session-410`. Updated the top-level

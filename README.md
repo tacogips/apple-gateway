@@ -7,9 +7,9 @@ through Phone or FaceTime.
 ## Development
 
 ```bash
-nix develop
-task build
-task test
+mise install
+mise run build
+mise run test
 swift run apple-gateway --help
 ```
 
@@ -26,19 +26,19 @@ The package uses Swift Package Manager with:
 Build local formula archives:
 
 ```bash
-task build:homebrew -- darwin-arm64 darwin-x64
+mise run build:homebrew -- darwin-arm64 darwin-x64
 ```
 
 Render a formula after both platform archives exist:
 
 ```bash
-task homebrew:formula -- 0.1.0
+mise run homebrew:formula -- 0.1.0
 ```
 
 Render directly into the default sibling tap checkout:
 
 ```bash
-task homebrew:tap-formula -- 0.1.0
+mise run homebrew:tap-formula -- 0.1.0
 ```
 
 Install from the tap after the formula is published:
@@ -56,27 +56,27 @@ Apple signing credentials must stay local and must not be committed.
 Check the build plan:
 
 ```bash
-task build:homebrew-cask -- --dry-run darwin-arm64 darwin-x64
+mise run build:homebrew-cask -- --dry-run darwin-arm64 darwin-x64
 ```
 
 Build with local signing credentials:
 
 ```bash
 kinko exec --env APPLE_SIGNING_IDENTITY,APPLE_ID,APPLE_PASSWORD,APPLE_TEAM_ID -- \
-  task build:homebrew-cask -- darwin-arm64 darwin-x64
+  mise run build:homebrew-cask -- darwin-arm64 darwin-x64
 ```
 
 Render a Cask:
 
 ```bash
-task homebrew:cask -- 0.1.0
+mise run homebrew:cask -- 0.1.0
 ```
 
 For a tagged release, build, upload, and render the tap Cask:
 
 ```bash
 kinko exec --env APPLE_SIGNING_IDENTITY,APPLE_ID,APPLE_PASSWORD,APPLE_TEAM_ID -- \
-  task release:homebrew-cask-local -- v0.1.0
+  mise run release:homebrew-cask-local -- v0.1.0
 ```
 
 See `packaging/homebrew/README.md` and `.agents/skills/` for release workflows.
@@ -187,19 +187,19 @@ the system microphone:
 
 ```bash
 # Darwin only; BlackHole 2ch is the recommended default.
-nix run .#install-virtual-audio-driver -- blackhole-2ch
+mise run install-virtual-audio-driver -- blackhole-2ch
 ```
 
 The allowlisted Homebrew casks are `blackhole-2ch`, `blackhole-16ch`,
 `blackhole-64ch`, `vb-cable`, and `loopback`. For example:
 
 ```bash
-nix run .#install-virtual-audio-driver -- vb-cable
-nix run .#install-virtual-audio-driver -- loopback
+mise run install-virtual-audio-driver -- vb-cable
+mise run install-virtual-audio-driver -- loopback
 ```
 
-`nix run .#install-blackhole` remains a compatibility shortcut for BlackHole
-2ch. Entering `nix develop` only checks for a compatible driver and prints the
+`mise run install-blackhole` remains a compatibility shortcut for BlackHole
+2ch. Running `mise install` only provisions tools; the driver task checks for a compatible driver and prints the
 generic command when one is missing; it never installs or modifies host audio
 drivers automatically.
 

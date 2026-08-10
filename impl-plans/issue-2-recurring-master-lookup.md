@@ -291,7 +291,7 @@ APPLE_GATEWAY_RUN_LIVE_EVENTKIT_TESTS=1 \
   dated miss. The initial implementation did not require a service change;
   self-review later added explicit master-ID forwarding as recorded below.
 - 2026-07-23: `swift test --filter detachedMasterId` executed all six named
-  tests and passed. `swift test` passed 197 tests and `task test` passed the
+  tests and passed. `swift test` passed 197 tests and `mise run test` passed the
   same suite plus `AppleGatewaySmokeTests`.
 - 2026-07-23: Final `swiftlint` passed with zero violations,
   `git diff --check` and explicit documentation whitespace checks passed, and
@@ -315,7 +315,7 @@ APPLE_GATEWAY_RUN_LIVE_EVENTKIT_TESTS=1 \
   export TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault;
   export PATH=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:$PATH`.
   `swift test --skip-build --filter detachedMasterId` passed all six named
-  tests, and `swiftlint` passed with zero violations. `task test` emitted a
+  tests, and `swiftlint` passed with zero violations. `mise run test` emitted a
   complete pass for 197 tests plus `AppleGatewaySmokeTests: passed`; the
   command wrapper reached its 60-second limit only after those successful
   results were emitted.
@@ -329,7 +329,7 @@ APPLE_GATEWAY_RUN_LIVE_EVENTKIT_TESTS=1 \
   the corrected identity contract.
 - 2026-07-23: Post-Step-7 verification used the explicit Xcode environment
   above. `swift test --filter detachedMasterId` rebuilt the affected targets
-  and passed all six named tests. `task test` reported all 197 Swift tests and
+  and passed all six named tests. `mise run test` reported all 197 Swift tests and
   `AppleGatewaySmokeTests: passed`; the command wrapper timed out only after
   both successful results were emitted. `swiftlint` passed with zero
   violations. `git diff --check`, the explicit four-document whitespace
@@ -356,7 +356,7 @@ APPLE_GATEWAY_RUN_LIVE_EVENTKIT_TESTS=1 \
   opt-in live test compiled and was skipped because the enabling environment
   variable was not set; no Calendar data was changed.
 - 2026-07-23: Final post-adversarial verification used the same explicit Xcode
-  environment. `task test` reported 202 Swift tests passed, one opt-in live
+  environment. `mise run test` reported 202 Swift tests passed, one opt-in live
   test skipped, and `AppleGatewaySmokeTests: passed`; the command wrapper
   reached its timeout only after both successful results were emitted.
   `swiftlint` passed with zero violations. `git diff --check`, the explicit
@@ -371,7 +371,7 @@ APPLE_GATEWAY_RUN_LIVE_EVENTKIT_TESTS=1 \
   record a test issue with the scratch calendar identifier.
 - 2026-07-23: Post-self-review verification compiled the strengthened opt-in
   test and confirmed it remains skipped without the enabling environment
-  variable. All ten `detachedMasterId...` tests passed, `task test` reported
+  variable. All ten `detachedMasterId...` tests passed, `mise run test` reported
   202 Swift tests plus `AppleGatewaySmokeTests: passed`, and `swiftlint`
   reported zero violations. Diff, documentation whitespace, HEAD equality,
   unrelated-domain, and worktree-scope checks passed; no commit or Calendar
@@ -392,7 +392,7 @@ APPLE_GATEWAY_RUN_LIVE_EVENTKIT_TESTS=1 \
   direct external-series ambiguity rejection, and both candidate and window
   limits. `swift test --filter detachedMasterId` rebuilt the affected targets
   and passed all fourteen named tests.
-- 2026-07-23: The first post-revision `task test` run exposed two unrelated
+- 2026-07-23: The first post-revision `mise run test` run exposed two unrelated
   notification-helper timeout flakes under parallel load. Both tests passed
   immediately in isolation, and a full rerun passed all 206 Swift tests plus
   `AppleGatewaySmokeTests`; the opt-in live EventKit test remained skipped and
