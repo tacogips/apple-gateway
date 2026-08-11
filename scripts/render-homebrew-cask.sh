@@ -5,10 +5,6 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 artifact_name="apple-gateway"
 product="apple-gateway"
-reader_product="apple-gateway-reader"
-notifier_app="AppleGatewayNotifier.app"
-github_repository="tacogips/apple-gateway"
-project_description="macOS CLI and GraphQL bridge for Apple apps"
 
 usage() {
   cat <<EOF
@@ -21,7 +17,6 @@ Reads archive checksums from:
 Environment:
   CASK_RELEASE_DIR       Directory containing archives and .sha256 files.
   CASK_RELEASE_BASE_URL  Release URL base. Defaults to GitHub v<version>.
-  CASK_VERIFIED_URL      Verified URL prefix. Defaults from GitHub release URL.
 
 Example:
   scripts/build-homebrew-cask-release.sh darwin-arm64 darwin-x64
@@ -56,16 +51,11 @@ main() {
     return 2
   fi
 
-  local version output release_dir release_base_url default_verified_url verified_url
+  local version output release_dir release_base_url
   version="$1"
   output="${2:-$repo_root/Casks/$artifact_name.rb}"
   release_dir="${CASK_RELEASE_DIR:-$repo_root/dist/homebrew-cask}"
-  release_base_url="${CASK_RELEASE_BASE_URL:-https://github.com/$github_repository/releases/download/v$version}"
-  default_verified_url="github.com/$github_repository/releases/download/"
-  if [[ "$release_base_url" =~ ^https://github\.com/([^/]+/[^/]+)/releases/download/ ]]; then
-    default_verified_url="github.com/${BASH_REMATCH[1]}/releases/download/"
-  fi
-  verified_url="${CASK_VERIFIED_URL:-$default_verified_url}"
+  release_base_url="${CASK_RELEASE_BASE_URL:-https://github.com/user/repo/releases/download/v$version}"
 
   local darwin_arm64_sha darwin_x64_sha
   darwin_arm64_sha="$(sha_for_target "$version" darwin-arm64 "$release_dir")"
@@ -81,10 +71,10 @@ cask "apple-gateway" do
          intel: "$darwin_x64_sha"
 
   url "$release_base_url/$artifact_name-#{version}-#{arch}.dmg",
-      verified: "$verified_url"
+      verified: "github.com/user/repo/releases/download/"
   name "apple-gateway"
-  desc "$project_description"
-  homepage "https://github.com/$github_repository"
+  desc "A Swift command line tool"
+  homepage "https://github.com/user/repo"
 
   livecheck do
     url :url
@@ -92,14 +82,11 @@ cask "apple-gateway" do
   end
 
   binary "$product"
-  binary "$reader_product"
-  artifact "libexec/$notifier_app", target: "#{HOMEBREW_PREFIX}/libexec/$notifier_app"
+
   caveats do
     <<~EOS
-      This cask installs the signed and notarized macOS command line tools,
-      and the AppleGatewayNotifier helper app.
-      Homebrew links $product and $reader_product into the native Homebrew
-      prefix for this Mac.
+      This cask installs the signed and notarized macOS command line tool.
+      Homebrew links $product into the native Homebrew prefix for this Mac.
     EOS
   end
 end

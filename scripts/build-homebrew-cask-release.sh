@@ -4,9 +4,6 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 product="apple-gateway"
-reader_product="apple-gateway-reader"
-notifier_product="AppleGatewayNotifier"
-notifier_app="AppleGatewayNotifier.app"
 artifact_name="apple-gateway"
 
 usage() {
@@ -31,6 +28,7 @@ Optional environment:
   SWIFT_SDKROOT         Defaults to Xcode's macOS SDK path.
   NOTARYTOOL            Defaults to Xcode's notarytool.
   STAPLER               Defaults to Xcode's stapler.
+
 Examples:
   scripts/build-homebrew-cask-release.sh --dry-run darwin-arm64 darwin-x64
   kinko exec --env APPLE_SIGNING_IDENTITY,APPLE_ID,APPLE_PASSWORD,APPLE_TEAM_ID -- \
@@ -186,9 +184,8 @@ swift_bin() {
 }
 
 swift_release_bin_path() {
-  local target swift_exe developer_dir sdkroot triple product_name
+  local target swift_exe developer_dir sdkroot triple
   target="$1"
-  product_name="$2"
   swift_exe="$(swift_bin)"
   developer_dir="${SWIFT_DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
   sdkroot="${SWIFT_SDKROOT:-/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk}"
@@ -197,31 +194,10 @@ swift_release_bin_path() {
   (
     cd "$repo_root"
     DEVELOPER_DIR="$developer_dir" SDKROOT="$sdkroot" \
-      "$swift_exe" build -c release --product "$product_name" --triple "$triple" >/dev/null
+      "$swift_exe" build -c release --product "$product" --triple "$triple" >/dev/null
     DEVELOPER_DIR="$developer_dir" SDKROOT="$sdkroot" \
-      "$swift_exe" build -c release --product "$product_name" --triple "$triple" --show-bin-path
+      "$swift_exe" build -c release --product "$product" --triple "$triple" --show-bin-path
   )
-}
-
-build_notifier_app() {
-  local target app_path signing_mode signing_identity notifier_bin_path
-  target="$1"
-  app_path="$2"
-  signing_mode="$3"
-  signing_identity="${4:-}"
-  notifier_bin_path="$(swift_release_bin_path "$target" "$notifier_product" | tail -n 1)"
-  if [[ "$signing_mode" == "identity" ]]; then
-    APPLE_GATEWAY_NOTIFIER_SIGNING=identity APPLE_GATEWAY_NOTIFIER_IDENTITY="$signing_identity" \
-      "$repo_root/scripts/build-notifier-app.sh" \
-      --configuration release \
-      --executable "$notifier_bin_path/$notifier_product" \
-      --output "$app_path" >/dev/null
-  else
-    APPLE_GATEWAY_NOTIFIER_SIGNING=none "$repo_root/scripts/build-notifier-app.sh" \
-      --configuration release \
-      --executable "$notifier_bin_path/$notifier_product" \
-      --output "$app_path" >/dev/null
-  fi
 }
 
 assert_codesigning_identity() {
@@ -231,15 +207,13 @@ assert_codesigning_identity() {
 }
 
 print_plan() {
-  local version target release_dir work_dir dmg_path staged_binary staged_reader helper_app triple install_prefix
+  local version target release_dir work_dir dmg_path staged_binary triple install_prefix
   version="$1"
   target="$2"
   release_dir="$3"
   work_dir="$release_dir/work/$artifact_name-$version-$target"
   dmg_path="$release_dir/$artifact_name-$version-$target.dmg"
   staged_binary="$work_dir/$product"
-  staged_reader="$work_dir/$reader_product"
-  helper_app="$work_dir/libexec/$notifier_app"
   triple="$(swift_triple_for_target "$target")"
   install_prefix="$(install_prefix_for_target "$target")"
 
@@ -252,10 +226,6 @@ print_plan() {
   printf '  swift triple: %s\n' "$triple"
   printf '  cask install prefix: %s\n' "$install_prefix"
   printf '  staged signed binary: %s\n' "$staged_binary"
-  printf '  staged signed reader binary: %s\n' "$staged_reader"
-  printf '  staged signed notifier helper: %s\n' "$helper_app"
-  printf '  helper signing: codesign --force --options runtime --timestamp --sign APPLE_SIGNING_IDENTITY %s\n' "$helper_app"
-  printf '  helper notarization: included inside notarized DMG\n'
   printf '  notarized DMG: %s\n' "$dmg_path"
   printf '  checksum: %s.sha256\n' "$dmg_path"
   printf '  required Apple env: APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID\n'
@@ -263,15 +233,13 @@ print_plan() {
 }
 
 build_target() {
-  local version target release_dir work_dir dmg_path staged_binary staged_reader helper_app bin_path reader_bin_path notarytool stapler
+  local version target release_dir work_dir dmg_path staged_binary bin_path notarytool stapler
   version="$1"
   target="$2"
   release_dir="$3"
   work_dir="$release_dir/work/$artifact_name-$version-$target"
   dmg_path="$release_dir/$artifact_name-$version-$target.dmg"
   staged_binary="$work_dir/$product"
-  staged_reader="$work_dir/$reader_product"
-  helper_app="$work_dir/libexec/$notifier_app"
   notarytool="${NOTARYTOOL:-/Applications/Xcode.app/Contents/Developer/usr/bin/notarytool}"
   stapler="${STAPLER:-/Applications/Xcode.app/Contents/Developer/usr/bin/stapler}"
 
@@ -291,21 +259,14 @@ build_target() {
   assert_codesigning_identity "$APPLE_SIGNING_IDENTITY"
 
   rm -rf "$work_dir" "$dmg_path" "$dmg_path.sha256"
-  mkdir -p "$work_dir/libexec"
+  mkdir -p "$work_dir"
 
-  bin_path="$(swift_release_bin_path "$target" "$product" | tail -n 1)"
-  reader_bin_path="$(swift_release_bin_path "$target" "$reader_product" | tail -n 1)"
+  bin_path="$(swift_release_bin_path "$target" | tail -n 1)"
   cp "$bin_path/$product" "$staged_binary"
-  cp "$reader_bin_path/$reader_product" "$staged_reader"
   chmod 0755 "$staged_binary"
-  chmod 0755 "$staged_reader"
-  build_notifier_app "$target" "$helper_app" identity "$APPLE_SIGNING_IDENTITY"
 
   codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$staged_binary"
   codesign --verify --strict --verbose=2 "$staged_binary"
-  codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$staged_reader"
-  codesign --verify --strict --verbose=2 "$staged_reader"
-  codesign --verify --strict --verbose=2 "$helper_app"
 
   hdiutil create -quiet -fs HFS+ -format UDZO -volname "$product" -srcfolder "$work_dir" "$dmg_path"
   codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$dmg_path"

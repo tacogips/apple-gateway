@@ -5,10 +5,6 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 artifact_name="apple-gateway"
 product="apple-gateway"
-reader_product="apple-gateway-reader"
-notifier_app="AppleGatewayNotifier.app"
-github_repository="tacogips/apple-gateway"
-project_description="macOS CLI and GraphQL bridge for Apple apps"
 
 usage() {
   cat <<EOF
@@ -60,7 +56,7 @@ main() {
   version="$1"
   output="${2:-$repo_root/Formula/$artifact_name.rb}"
   release_dir="${RELEASE_DIR:-$repo_root/dist/homebrew}"
-  release_base_url="${RELEASE_BASE_URL:-https://github.com/$github_repository/releases/download/v$version}"
+  release_base_url="${RELEASE_BASE_URL:-https://github.com/user/repo/releases/download/v$version}"
 
   local darwin_arm64_sha darwin_x64_sha
   darwin_arm64_sha="$(sha_for_target "$version" darwin-arm64 "$release_dir")"
@@ -68,9 +64,10 @@ main() {
 
   mkdir -p "$(dirname "$output")"
   cat > "$output" <<EOF
-class AppleGateway < Formula
-  desc "$project_description"
-  homepage "https://github.com/$github_repository"
+class App < Formula
+  desc "A Swift command line tool"
+  homepage "https://github.com/user/repo"
+  version "$version"
   license "MIT"
 
   livecheck do
@@ -90,14 +87,10 @@ class AppleGateway < Formula
 
   def install
     bin.install "bin/$product"
-    bin.install "bin/$reader_product"
-    libexec.install "libexec/$notifier_app"
   end
 
   test do
     assert_match "$version", shell_output("#{bin}/$product --version")
-    assert_match "$version", shell_output("#{bin}/$reader_product --version")
-    assert_path_exists libexec/"$notifier_app"
   end
 end
 EOF
