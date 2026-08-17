@@ -21,6 +21,7 @@ swift = "6.3.3"
 swiftlint = "latest"
 gitleaks = "latest"
 github-cli = "latest"
+pre-commit = "latest"
 
 [tasks."default"]
 description = "Show available tasks"
@@ -151,3 +152,22 @@ brew install --cask "$driver"
 [tasks."install-blackhole"]
 description = "Install the BlackHole 2ch virtual audio driver"
 run = "mise run install-virtual-audio-driver -- blackhole-2ch"
+
+[tasks.install-git-hooks]
+description = "Install mise tools and the repository pre-commit hook"
+run = '''
+mise install
+
+hooks_path=$(git config --local --get core.hooksPath || true)
+if [ "$hooks_path" = ".git/hooks" ]; then
+  git config --local --unset-all core.hooksPath
+  hooks_path=""
+fi
+
+if [ -z "$hooks_path" ]; then
+  mise exec -- pre-commit install
+else
+  mise exec -- pre-commit validate-config .pre-commit-config.yaml
+  echo "Using existing custom Git hooks path: $hooks_path"
+fi
+'''
