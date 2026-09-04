@@ -3,6 +3,8 @@ import Testing
 @testable import AppleGatewayCore
 
 @Test func sdkInvokesCalendarOperationsThroughInjectedServices() async throws {
+  let home = try SDKTestHome()
+  defer { home.remove() }
   let double = SDKCalendarDouble()
   let services = SDKFixtures.calendarServices(double)
   let sdk = AppleGatewaySDK(
@@ -17,7 +19,7 @@ import Testing
   #expect(!calendarsDocument.document.contains("$"))
   let calendars = await sdk.invoke(
     GatewayOperationRequest(operation: "calendars"),
-    environment: SDKFixtures.environment
+    environment: home.environment()
   )
   #expect(calendars.errors.isEmpty)
   #expect(double.calendarRequests == [nil])
@@ -36,14 +38,16 @@ import Testing
   #expect(eventsDocument.document.contains("$input"))
   let events = await sdk.invoke(
     GatewayOperationRequest(operation: "events", variables: variables),
-    environment: SDKFixtures.environment
+    environment: home.environment()
   )
   #expect(events.errors.isEmpty)
   #expect(double.eventWindows.count == 1)
   #expect(double.eventWindows.first?.calendarIds == ["calendar-1"])
 }
 
-@Test func sdkInvokesReminderMutationAndNotesQueryThroughInjectedServices() async {
+@Test func sdkInvokesReminderMutationAndNotesQueryThroughInjectedServices() async throws {
+  let home = try SDKTestHome()
+  defer { home.remove() }
   let calendarDouble = SDKCalendarDouble()
   let calendarServices = SDKFixtures.calendarServices(calendarDouble)
   let notesDouble = SDKNotesDouble()
@@ -61,20 +65,22 @@ import Testing
       operation: "createReminder",
       variables: ["input": .object(["listId": .string("list-1"), "title": .string("Submit")])]
     ),
-    environment: SDKFixtures.environment
+    environment: home.environment()
   )
   #expect(reminder.errors.isEmpty)
   #expect(calendarDouble.createdReminders.last?.title == "Submit")
 
   let notes = await sdk.invoke(
     GatewayOperationRequest(operation: "notes", variables: ["input": .object(["first": .int(1)])]),
-    environment: SDKFixtures.environment
+    environment: home.environment()
   )
   #expect(notes.errors.isEmpty)
   #expect(notesDouble.noteIDsRequests == 1)
 }
 
-@Test func readerSDKPreservesNamedAndRawMutationBoundaries() async {
+@Test func readerSDKPreservesNamedAndRawMutationBoundaries() async throws {
+  let home = try SDKTestHome()
+  defer { home.remove() }
   let sdk = AppleGatewaySDK(role: .reader, permissionsProvider: SDKPermissionsProvider())
   let named = await sdk.invoke(GatewayOperationRequest(operation: "createReminder"))
   #expect(named.exitCode == 2)
@@ -85,7 +91,7 @@ import Testing
   let raw = await sdk.execute(
     document: "mutation { createReminder(input: { title: \"x\" }) { id } }",
     variables: [:],
-    environment: SDKFixtures.environment
+    environment: home.environment()
   )
   #expect(raw.exitCode == 5)
   #expect(raw.errors.first?.code == "WRITE_DISABLED_IN_READER")
@@ -93,6 +99,8 @@ import Testing
 }
 
 @Test func sdkRawExecutionIsByteCompatibleWithCLIAfterRequestIDNormalization() async throws {
+  let home = try SDKTestHome()
+  defer { home.remove() }
   let calendarDouble = SDKCalendarDouble()
   let calendarServices = SDKFixtures.calendarServices(calendarDouble)
   let notesDouble = SDKNotesDouble()
@@ -109,10 +117,10 @@ import Testing
     calendarWriteService: calendarServices.1, notesReadService: notesServices.0,
     notesWriteService: notesServices.1
   )
-  let sdkEnvelope = await sdk.execute(document: document, variables: variables, environment: SDKFixtures.environment)
+  let sdkEnvelope = await sdk.execute(document: document, variables: variables, environment: home.environment())
   let cli = try AppleGatewayCommand(
     arguments: ["graphql", "--query", document, "--variables", try GatewayJSONValue.object(variables).jsonString()],
-    environment: SDKFixtures.environment, permissionsProvider: SDKPermissionsProvider(),
+    environment: home.environment(), permissionsProvider: SDKPermissionsProvider(),
     calendarReadService: calendarServices.0, calendarWriteService: calendarServices.1,
     notesReadService: notesServices.0, notesWriteService: notesServices.1
   ).runResult()
@@ -124,7 +132,9 @@ import Testing
 }
 
 @Test func sdkConfigFailureMatchesCLIByteForByteAfterRequestIDNormalization() async throws {
-  let environment = ["HOME": "/tmp", "APPLE_GATEWAY_CONFIG": "/tmp/apple-gateway-sdk-missing-config.toml"]
+  let home = try SDKTestHome()
+  defer { home.remove() }
+  let environment = home.environment(["APPLE_GATEWAY_CONFIG": home.url.appendingPathComponent("missing.toml").path])
   let sdk = AppleGatewaySDK(permissionsProvider: SDKPermissionsProvider())
   let sdkEnvelope = await sdk.execute(document: "{ permissions { calendars } }", variables: [:], environment: environment)
   let cli = try AppleGatewayCommand(
@@ -137,11 +147,12 @@ import Testing
 }
 
 @Test func sdkConstructsDefaultNotesServicesFromEachExecutionEnvironment() async throws {
-  let environment = [
-    "HOME": "/tmp",
+  let home = try SDKTestHome()
+  defer { home.remove() }
+  let environment = home.environment([
     "APPLE_GATEWAY_LIMITS_DEFAULT_PAGE_SIZE": "1",
     "APPLE_GATEWAY_LIMITS_MAX_PAGE_SIZE": "1"
-  ]
+  ])
   let document = "{ notes(input: { first: 2 }) { totalCount } }"
   let sdk = AppleGatewaySDK(permissionsProvider: SDKPermissionsProvider())
   let sdkEnvelope = await sdk.execute(document: document, variables: [:], environment: environment)

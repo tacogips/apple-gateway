@@ -95,7 +95,6 @@ final class SDKNotesDouble: NotesProviding, NotesWriting, @unchecked Sendable {
 enum SDKFixtures {
   static let startDate = Date(timeIntervalSince1970: 1_767_262_400)
   static let endDate = Date(timeIntervalSince1970: 1_767_266_000)
-  static let environment = ["HOME": "/tmp"]
 
   static func calendarServices(_ double: SDKCalendarDouble) -> (CalendarReadService, CalendarWriteService) {
     (
@@ -117,5 +116,25 @@ enum SDKFixtures {
       with: #""requestId":"REQUEST_ID""#,
       options: .regularExpression
     )
+  }
+}
+
+struct SDKTestHome {
+  let url: URL
+
+  init() throws {
+    url = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "apple-gateway-sdk-tests-\(UUID().uuidString)",
+      isDirectory: true
+    )
+    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+  }
+
+  func environment(_ overrides: [String: String] = [:]) -> [String: String] {
+    ["HOME": url.path].merging(overrides, uniquingKeysWith: { _, override in override })
+  }
+
+  func remove() {
+    try? FileManager.default.removeItem(at: url)
   }
 }

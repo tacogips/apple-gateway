@@ -26,10 +26,10 @@ import Testing
     #expect(runtime == catalog)
     #expect(runtime.scalars.contains("DateTime"))
     #expect(catalog.scalars.contains("DateTime"))
-    #expect(!runtime.definitions.keys.contains("String"))
-    #expect(!catalog.definitions.keys.contains("String"))
-    #expect(!runtime.definitions.keys.contains("ID"))
-    #expect(!catalog.definitions.keys.contains("ID"))
+    #expect(!runtime.scalars.contains("String"))
+    #expect(!catalog.scalars.contains("String"))
+    #expect(!runtime.scalars.contains("ID"))
+    #expect(!catalog.scalars.contains("ID"))
   }
 }
 
