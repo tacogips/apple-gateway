@@ -23,8 +23,15 @@ let package = Package(
     .executable(name: "AppleGatewayNotifier", targets: ["AppleGatewayNotifier"]),
     .executable(name: "AppleGatewaySmokeTests", targets: ["AppleGatewaySmokeTests"])
   ],
+  dependencies: [
+    // The operator switches this path dependency to a URL pin when the kit is published.
+    .package(path: "../../gateway-sdk-kit")
+  ],
   targets: [
-    .target(name: "AppleGatewayCore"),
+    .target(
+      name: "AppleGatewayCore",
+      dependencies: [.product(name: "GatewaySDKKit", package: "gateway-sdk-kit")]
+    ),
     .executableTarget(
       name: "AppleGatewayCLI",
       dependencies: ["AppleGatewayCore"],

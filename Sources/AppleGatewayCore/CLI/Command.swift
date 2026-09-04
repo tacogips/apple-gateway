@@ -111,7 +111,7 @@ public struct AppleGatewayCommand: Sendable {
     }
 
     if commandArguments.first == "schema" {
-      return AppleGatewayCommandResult(output: try runSchemaCommand(Array(commandArguments.dropFirst())))
+      return try runSchemaCommand(Array(commandArguments.dropFirst()), pretty: frame.pretty)
     }
 
     if let firstArgument = commandArguments.first {
@@ -135,11 +135,13 @@ public struct AppleGatewayCommand: Sendable {
            \(executableName) config validate [--config <path>]
            \(executableName) graphql --query <query> | --query-file <path>
                          [--variables <json> | --variables-file <path>] [--pretty]
+           \(executableName) graphql operation <name> [--variables <json> | --variables-file <path>] [--select a.b,c]
            \(executableName) permissions status [--json]
            \(executableName) permissions request --domain calendar|reminders|notes|mail|notifications|clock-alarms|phone-calls
            \(executableName) file download --key <key> [--key <key> ...] [--output-dir <dir>]
            \(executableName) cache prune [--all]
            \(executableName) schema print [--role full|reader]
+           \(executableName) schema search <regex> [--role full|reader] [--kinds a,b] [--include-referenced-types] [--limit N]
     """
   }
 
@@ -282,6 +284,13 @@ public struct AppleGatewayCommand: Sendable {
     _ arguments: [String],
     frame: GlobalCommandFrame
   ) throws -> AppleGatewayCommandResult {
+    if arguments.first == "operation" {
+      return try runGraphQLOperationCommand(
+        Array(arguments.dropFirst()),
+        configPath: frame.configPath,
+        pretty: frame.pretty
+      )
+    }
     var options = try parseGraphQLArguments(arguments)
     options.pretty = options.pretty || frame.pretty
     let query: String
@@ -315,26 +324,31 @@ public struct AppleGatewayCommand: Sendable {
       return try configErrorResult(error, pretty: options.pretty)
     }
 
-    let response = GraphQLRuntime.executeResponse(
+    let response = serviceComposition.executeResponse(
       query: query,
       variables: variables,
-      role: role,
       config: config,
-      permissionsProvider: permissionsProvider,
-      calendarReadService: calendarReadService,
-      calendarWriteService: calendarWriteService,
-      notesReadService: notesReadService,
-      notesWriteService: notesWriteService,
-      mailReadService: mailReadService ?? MailServiceFactory.liveReadService(config: config),
-      mailWriteService: mailWriteService ?? MailServiceFactory.liveWriteService(config: config),
-      notificationsService: notificationsService ?? NotificationsServiceFactory.liveService(config: config),
-      clockAlarmsService: clockAlarmsService ?? ClockAlarmsServiceFactory.liveService(config: config),
-      phoneCallsService: phoneCallsService ?? PhoneCallsServiceFactory.liveService(config: config),
       pretty: options.pretty
     )
     return AppleGatewayCommandResult(
       output: String(data: response.data, encoding: .utf8) ?? "",
       exitCode: response.exitCode
+    )
+  }
+
+  var serviceComposition: GraphQLServiceComposition {
+    GraphQLServiceComposition(
+      role: role,
+      permissionsProvider: permissionsProvider,
+      calendarReadService: calendarReadService,
+      calendarWriteService: calendarWriteService,
+      notesReadService: notesReadService,
+      notesWriteService: notesWriteService,
+      mailReadService: mailReadService,
+      mailWriteService: mailWriteService,
+      notificationsService: notificationsService,
+      clockAlarmsService: clockAlarmsService,
+      phoneCallsService: phoneCallsService
     )
   }
 
@@ -383,7 +397,7 @@ public struct AppleGatewayCommand: Sendable {
     return options
   }
 
-  private func readOptionValue(
+  func readOptionValue(
     _ arguments: [String],
     index: inout Int,
     name: String
@@ -571,7 +585,7 @@ public struct AppleGatewayCommand: Sendable {
     )
   }
 
-  private func configErrorResult(
+  func configErrorResult(
     _ error: AppleGatewayConfigError,
     pretty: Bool
   ) throws -> AppleGatewayCommandResult {
@@ -653,12 +667,15 @@ public struct AppleGatewayCommand: Sendable {
     return domain
   }
 
-  private func runSchemaCommand(_ arguments: [String]) throws -> String {
+  private func runSchemaCommand(_ arguments: [String], pretty: Bool) throws -> AppleGatewayCommandResult {
+    if arguments.first == "search" {
+      return try runSchemaSearchCommand(Array(arguments.dropFirst()), pretty: pretty)
+    }
     guard arguments.first == "print" else {
       throw Error.invalidUsage("Usage: apple-gateway schema print [--role full|reader]")
     }
     let role = try parseSchemaPrintArguments(Array(arguments.dropFirst()))
-    return GraphQLRuntime.schema(role: role ?? self.role)
+    return AppleGatewayCommandResult(output: GraphQLRuntime.schema(role: role ?? self.role))
   }
 
   private func parseSchemaPrintArguments(_ arguments: [String]) throws -> AppleGatewayRole? {
@@ -683,7 +700,7 @@ public struct AppleGatewayCommand: Sendable {
     return role
   }
 
-  private func parseRole(_ value: String) throws -> AppleGatewayRole {
+  func parseRole(_ value: String) throws -> AppleGatewayRole {
     switch value {
     case "full":
       return .full
@@ -694,7 +711,7 @@ public struct AppleGatewayCommand: Sendable {
     }
   }
 
-  private func resolveConfig(configPath: String?) throws -> ResolvedAppleGatewayConfig {
+  func resolveConfig(configPath: String?) throws -> ResolvedAppleGatewayConfig {
     try AppleGatewayConfigResolver().resolve(
       cliConfigPath: configPath,
       environment: environment

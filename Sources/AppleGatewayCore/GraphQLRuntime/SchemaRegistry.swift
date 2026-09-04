@@ -16,6 +16,7 @@ struct GraphQLFieldDefinition: Equatable {
   var name: String
   var type: GraphQLTypeReference
   var arguments: [GraphQLArgumentDefinition]
+  var description: String?
   var resolver: GraphQLResolver?
 
   static func == (lhs: GraphQLFieldDefinition, rhs: GraphQLFieldDefinition) -> Bool {
@@ -39,6 +40,11 @@ struct GraphQLSchemaModule {
   var types: [GraphQLNamedTypeDefinition]
   var queryFields: [GraphQLFieldDefinition]
   var mutationFields: [GraphQLFieldDefinition]
+}
+
+struct GraphQLDomainModule {
+  let domain: String
+  let module: GraphQLSchemaModule
 }
 
 typealias GraphQLResolvedArguments = [String: GraphQLValue]
@@ -84,11 +90,20 @@ struct GraphQLSchemaRegistry {
     mutationFields = role == .reader ? [] : mutations
   }
 
+  static var domainModules: [GraphQLDomainModule] {
+    [
+      GraphQLDomainModule(domain: "permissions", module: .permissions),
+      GraphQLDomainModule(domain: "calendarReminders", module: .calendarReminders),
+      GraphQLDomainModule(domain: "notes", module: .notes),
+      GraphQLDomainModule(domain: "mail", module: .mail),
+      GraphQLDomainModule(domain: "notifications", module: .notifications),
+      GraphQLDomainModule(domain: "clockAlarms", module: .clockAlarms),
+      GraphQLDomainModule(domain: "phoneCalls", module: .phoneCalls)
+    ]
+  }
+
   static func bootstrap(role: AppleGatewayRole) -> GraphQLSchemaRegistry {
-    GraphQLSchemaRegistry(
-      modules: [.permissions, .calendarReminders, .notes, .mail, .notifications, .clockAlarms, .phoneCalls],
-      role: role
-    )
+    GraphQLSchemaRegistry(modules: domainModules.map(\.module), role: role)
   }
 
   func rootFields(for kind: GraphQLOperationKind) -> [GraphQLFieldDefinition] {

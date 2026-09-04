@@ -21,6 +21,43 @@ The package uses Swift Package Manager with:
 - Installed executables: `apple-gateway`, `apple-gateway-reader`, and the
   packaged `AppleGatewayNotifier.app` helper
 
+## Client SDK (AppleGatewaySDK)
+
+`AppleGatewayCore` exposes `AppleGatewaySDK`, a Swift façade backed by the
+same GraphQL runtime as the CLI. The package currently uses the local
+`GatewaySDKKit` path dependency; operators switch it to a URL pin when the kit
+is published.
+
+```swift
+import AppleGatewayCore
+import GatewaySDKKit
+
+let sdk = AppleGatewaySDK()
+let catalog = sdk.catalog
+let matches = try sdk.searchSchema("reminder")
+let events = await sdk.invoke(
+  GatewayOperationRequest(operation: "events", variables: ["input": .object([:])])
+)
+let raw = await sdk.execute(
+  document: "{ permissions { calendars } }",
+  variables: [:],
+  environment: ["HOME": "/tmp"]
+)
+```
+
+The reader-tier façade (`AppleGatewaySDK(role: .reader)`) cannot build named
+mutations, and the runtime also rejects raw mutations. `execute` observes only
+the environment dictionary supplied to it.
+
+The CLI can search the same catalog or build an operation document without
+interpolating GraphQL strings:
+
+```bash
+apple-gateway schema search reminder --kinds query,mutation --limit 10
+apple-gateway graphql operation events --variables '{"input":{"first":10}}'
+apple-gateway graphql operation permissions --select calendars,reminders
+```
+
 ## Homebrew Formula
 
 Build local formula archives:
