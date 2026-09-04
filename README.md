@@ -69,10 +69,11 @@ apple-gateway graphql operation events --variables '{"input":{"startDate":"2026-
 apple-gateway graphql operation permissions --select calendars,reminders
 ```
 
-`schema search reminder` returns catalog definitions as JSON, for example:
+`schema search reminder --limit 1` returns the exact-name catalog definition as
+JSON, including match provenance and SDL:
 
 ```json
-[{"kind":"query","name":"reminders","tier":"reader"}]
+[{"kind":"query","matchedOn":["name","argument:reminderId","summary"],"name":"reminder","sdl":"type Query {\n  \"\"\"\n  reminder\n  \"\"\"\n  reminder(reminderId: ID!): Reminder\n}","tier":"reader"}]
 ```
 
 ## Homebrew Formula

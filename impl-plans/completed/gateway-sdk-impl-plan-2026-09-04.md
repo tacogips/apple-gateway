@@ -78,7 +78,24 @@ Implementation status (2026-09-04):
   `Sources/AppleGatewayCore/SDK/AppleSchemaCatalogExporter.swift`,
   `Sources/AppleGatewayCore/SDK/AppleGatewaySDK.swift`,
   `Sources/AppleGatewayCore/Permissions/PermissionsProvider.swift`,
-  `Tests/AppleGatewayCoreTests/NotesReadServiceTests.swift`, and focused SDK tests.
+  `Sources/AppleGatewayCore/Domains/ClockAlarmsAdapter/ClockAlarmUIAutomationAdapter.swift`,
+  `Sources/AppleGatewayCore/Domains/ClockAlarmsAdapter/ClockAlarmsProviding.swift`,
+  `Sources/AppleGatewayCore/Domains/MailAdapter/MailEnvelopeIndexStore.swift`,
+  `Sources/AppleGatewayCore/Domains/MailAdapter/MailReadService.swift`,
+  `Sources/AppleGatewayCore/Domains/MailAdapter/MailRootResolver.swift`,
+  `Sources/AppleGatewayCore/Domains/NotesAdapter/UnavailableNotesServices.swift`,
+  `Sources/AppleGatewayCore/Domains/NotificationsAdapter/NotificationHelperAdapter.swift`,
+  `Sources/AppleGatewayCore/Domains/NotificationsAdapter/NotificationsProviding.swift`,
+  `Sources/AppleGatewayCore/Domains/NotificationsAdapter/UsernotedNotificationStore.swift`,
+  `Sources/AppleGatewayCore/Domains/PhoneCallsAdapter/PhoneAudioController.swift`,
+  `Sources/AppleGatewayCore/Domains/PhoneCallsAdapter/PhoneCallAdapter.swift`,
+  `Sources/AppleGatewayCore/Domains/PhoneCallsAdapter/PhoneCallListeningController.swift`,
+  `Sources/AppleGatewayCore/Domains/PhoneCallsAdapter/PhoneCallsProviding.swift`,
+  `Tests/AppleGatewayCoreTests/NotesReadServiceTests.swift`,
+  `Tests/AppleGatewayCoreTests/SDK/AppleGatewaySDKTests.swift`,
+  `Tests/AppleGatewayCoreTests/SDK/AppleSchemaCatalogExporterTests.swift`,
+  `Tests/AppleGatewayCoreTests/SDK/CommandSDKSubcommandTests.swift`, and
+  `Tests/AppleGatewayCoreTests/SDK/SDKTestSupport.swift`.
 - Initial verification passed:
   `arch -arm64 /bin/zsh -lc 'swift build && swift test && swift run AppleGatewaySmokeTests && swiftlint'`.
   Swift test reported 261 passing tests (one operator-owned live integration test skipped);
