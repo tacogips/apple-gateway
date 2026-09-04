@@ -108,8 +108,11 @@ private func comparableSDL(_ sdl: String) -> ComparableSDL {
 
 private func normalizeMember(_ line: String, kind: String) -> String {
   guard kind != "enum" else { return line }
-  guard let closingParenthesis = line.firstIndex(of: ")") else {
+  if kind == "input" {
     return normalizeTypeSuffix(in: line)
+  }
+  guard let closingParenthesis = line.firstIndex(of: ")") else {
+    return line
   }
   let arguments = line[line.index(after: line.startIndex)..<closingParenthesis]
   let suffix = line[line.index(after: closingParenthesis)...]

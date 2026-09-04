@@ -149,7 +149,8 @@ import Testing
     arguments: ["graphql", "--query", document], environment: environment,
     permissionsProvider: SDKPermissionsProvider()
   ).runResult()
-  #expect(sdkEnvelope.errors.isEmpty)
+  #expect(sdkEnvelope.errors.first?.code == "INVALID_ARGUMENT")
+  #expect(sdkEnvelope.errors.first?.message == "first must not exceed max page size")
   #expect(sdkEnvelope.exitCode == cli.exitCode)
   #expect(SDKFixtures.normalizeRequestID(sdkEnvelope.rawOutput) == SDKFixtures.normalizeRequestID(cli.output))
 }
