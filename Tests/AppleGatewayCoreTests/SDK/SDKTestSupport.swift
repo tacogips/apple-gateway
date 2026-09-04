@@ -18,6 +18,10 @@ final class SDKCalendarDouble: CalendarProviding, CalendarWriting, RemindersProv
     id: "event-1", calendarId: "calendar-1", title: "Planning",
     startDate: SDKFixtures.startDate, endDate: SDKFixtures.endDate
   )
+  let secondEvent = CalendarEvent(
+    id: "event-2", calendarId: "calendar-1", title: "Retrospective",
+    startDate: SDKFixtures.secondEventStartDate, endDate: SDKFixtures.secondEventEndDate
+  )
 
   func calendars(entityType: CalendarEntityType?) throws -> [GatewayCalendar] {
     calendarRequests.append(entityType)
@@ -30,7 +34,7 @@ final class SDKCalendarDouble: CalendarProviding, CalendarWriting, RemindersProv
 
   func events(in window: EventFetchWindow) throws -> [CalendarEvent] {
     eventWindows.append(window)
-    return [event]
+    return [event, secondEvent]
   }
 
   func event(eventId: String, occurrenceDate: Date?) throws -> CalendarEvent? {
@@ -95,6 +99,8 @@ final class SDKNotesDouble: NotesProviding, NotesWriting, @unchecked Sendable {
 enum SDKFixtures {
   static let startDate = Date(timeIntervalSince1970: 1_767_262_400)
   static let endDate = Date(timeIntervalSince1970: 1_767_266_000)
+  static let secondEventStartDate = Date(timeIntervalSince1970: 1_767_264_200)
+  static let secondEventEndDate = Date(timeIntervalSince1970: 1_767_267_800)
 
   static func calendarServices(_ double: SDKCalendarDouble) -> (CalendarReadService, CalendarWriteService) {
     (

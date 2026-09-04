@@ -24,12 +24,15 @@ import Testing
   )
   #expect(calendars.errors.isEmpty)
   #expect(double.calendarRequests == [nil])
+  let calendarResults = try #require(sdkEnvelopeData(calendars)["calendars"] as? [[String: Any]])
+  #expect(calendarResults.map { $0["id"] as? String } == ["calendar-1", "list-1"])
+  #expect(calendarResults.first?["title"] as? String == "Work")
 
   let variables: [String: GatewayJSONValue] = [
     "input": .object([
       "calendarIds": .array([.string("calendar-1")]),
-      "startDate": .string("2026-01-01T00:00:00Z"),
-      "endDate": .string("2026-01-01T01:00:00Z"),
+      "startDate": .string("2026-01-01T10:00:00Z"),
+      "endDate": .string("2026-01-01T12:00:00Z"),
       "first": .int(1)
     ])
   ]
@@ -42,8 +45,22 @@ import Testing
     environment: home.environment()
   )
   #expect(events.errors.isEmpty)
-  #expect(double.eventWindows.count == 1)
-  #expect(double.eventWindows.first?.calendarIds == ["calendar-1"])
+  #expect(double.eventWindows == [
+    EventFetchWindow(
+      startDate: Date(timeIntervalSince1970: 1_767_261_600),
+      endDate: Date(timeIntervalSince1970: 1_767_268_800),
+      calendarIds: ["calendar-1"]
+    )
+  ])
+  let eventConnection = try #require(sdkEnvelopeData(events)["events"] as? [String: Any])
+  let eventEdges = try #require(eventConnection["edges"] as? [[String: Any]])
+  let firstEvent = try #require(eventEdges.first?["node"] as? [String: Any])
+  let eventPageInfo = try #require(eventConnection["pageInfo"] as? [String: Any])
+  #expect(eventConnection["totalCount"] as? Int == 2)
+  #expect(eventEdges.count == 1)
+  #expect(firstEvent["id"] as? String == "event-1")
+  #expect(firstEvent["title"] as? String == "Planning")
+  #expect(eventPageInfo["hasNextPage"] as? Bool == true)
 }
 
 @Test func sdkInvokesReminderMutationAndNotesQueryThroughInjectedServices() async throws {
@@ -70,6 +87,10 @@ import Testing
   )
   #expect(reminder.errors.isEmpty)
   #expect(calendarDouble.createdReminders.last?.title == "Submit")
+  let createdReminder = try #require(sdkEnvelopeData(reminder)["createReminder"] as? [String: Any])
+  #expect(createdReminder["id"] as? String == "reminder-1")
+  #expect(createdReminder["listId"] as? String == "list-1")
+  #expect(createdReminder["title"] as? String == "Submit")
 
   let notes = await sdk.invoke(
     GatewayOperationRequest(operation: "notes", variables: ["input": .object(["first": .int(1)])]),
@@ -77,6 +98,13 @@ import Testing
   )
   #expect(notes.errors.isEmpty)
   #expect(notesDouble.noteIDsRequests == 1)
+  let noteConnection = try #require(sdkEnvelopeData(notes)["notes"] as? [String: Any])
+  let noteEdges = try #require(noteConnection["edges"] as? [[String: Any]])
+  let firstNote = try #require(noteEdges.first?["node"] as? [String: Any])
+  #expect(noteConnection["totalCount"] as? Int == 1)
+  #expect(noteEdges.count == 1)
+  #expect(firstNote["id"] as? String == "note-1")
+  #expect(firstNote["name"] as? String == "Release")
 }
 
 @Test func readerSDKPreservesNamedAndRawMutationBoundaries() async throws {
@@ -277,6 +305,11 @@ import Testing
   )
   #expect(outOfRange.errors.first?.code == "INVALID_ARGUMENT")
   #expect(outOfRange.errors.first?.message == "Integer variable is outside the supported range")
+}
+
+private func sdkEnvelopeData(_ envelope: GatewayEnvelope) throws -> [String: Any] {
+  let object = try #require(JSONSerialization.jsonObject(with: Data(envelope.rawOutput.utf8)) as? [String: Any])
+  return try #require(object["data"] as? [String: Any])
 }
 
 private final class SDKNotesServicesFactoryProbe: @unchecked Sendable {
