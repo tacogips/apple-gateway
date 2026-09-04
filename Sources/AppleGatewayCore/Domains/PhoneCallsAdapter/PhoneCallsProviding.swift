@@ -20,8 +20,11 @@ public enum PhoneCallsServiceFactory {
     UnavailablePhoneCallsService()
   }
 
-  public static func liveService(config: AppleGatewayConfig) -> any PhoneCallsProviding {
-    LivePhoneCallsAdapter(config: config)
+  public static func liveService(
+    config: AppleGatewayConfig,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> any PhoneCallsProviding {
+    LivePhoneCallsAdapter(config: config, environment: environment)
   }
 }
 

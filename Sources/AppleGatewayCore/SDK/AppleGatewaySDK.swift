@@ -77,7 +77,7 @@ public struct AppleGatewaySDK: GatewaySDK {
       return errorEnvelope(AppleGatewayError(code: .invalidArgument, message: String(describing: error)))
     }
 
-    let response = serviceComposition(config: config).executeResponse(
+    let response = serviceComposition(config: config, environment: environment).executeResponse(
       query: document,
       variables: runtimeVariables,
       config: config,
@@ -89,15 +89,19 @@ public struct AppleGatewaySDK: GatewaySDK {
     )
   }
 
-  private func serviceComposition(config: AppleGatewayConfig) -> GraphQLServiceComposition {
+  private func serviceComposition(
+    config: AppleGatewayConfig,
+    environment: [String: String]
+  ) -> GraphQLServiceComposition {
     let calendarServices = calendarReadService == nil || calendarWriteService == nil
       ? CalendarReminderServiceFactory.liveServices()
       : nil
     let notesServices = notesReadService == nil || notesWriteService == nil
-      ? NotesServiceFactory.liveServices(config: config)
+      ? NotesServiceFactory.liveServices(config: config, environment: environment)
       : nil
     return GraphQLServiceComposition(
       role: role,
+      environment: environment,
       permissionsProvider: permissionsProvider,
       calendarReadService: calendarReadService
         ?? calendarServices?.readService
@@ -105,8 +109,12 @@ public struct AppleGatewaySDK: GatewaySDK {
       calendarWriteService: calendarWriteService
         ?? calendarServices?.writeService
         ?? CalendarReminderServiceFactory.liveWriteService(),
-      notesReadService: notesReadService ?? notesServices?.readService ?? NotesServiceFactory.liveReadService(),
-      notesWriteService: notesWriteService ?? notesServices?.writeService ?? NotesServiceFactory.liveWriteService(),
+      notesReadService: notesReadService
+        ?? notesServices?.readService
+        ?? NotesServiceFactory.liveReadService(config: config, environment: environment),
+      notesWriteService: notesWriteService
+        ?? notesServices?.writeService
+        ?? NotesServiceFactory.liveWriteService(config: config, environment: environment),
       mailReadService: mailReadService,
       mailWriteService: mailWriteService,
       notificationsService: notificationsService,

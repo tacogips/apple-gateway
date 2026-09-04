@@ -14,13 +14,16 @@ protocol PhoneCallListeningControlling: Sendable {
 struct LivePhoneCallListeningController: PhoneCallListeningControlling {
   private let configuration: PhoneCallAudioConfiguration
   private let executablePath: String
+  private let environment: [String: String]
 
   init(
     configuration: PhoneCallAudioConfiguration,
-    executablePath: String? = Bundle.main.executableURL?.path
+    executablePath: String? = Bundle.main.executableURL?.path,
+    environment: [String: String] = ProcessInfo.processInfo.environment
   ) {
     self.configuration = configuration
     self.executablePath = executablePath ?? ""
+    self.environment = environment
   }
 
   func status() throws -> PhoneCallListeningStatus {
@@ -94,6 +97,7 @@ struct LivePhoneCallListeningController: PhoneCallListeningControlling {
       "--chunks-dir", chunksDirectoryURL.path,
       "--player-state-file", playerStateFileURL.path
     ]
+    process.environment = environment
     process.standardOutput = FileHandle.nullDevice
     process.standardError = FileHandle.nullDevice
     do {

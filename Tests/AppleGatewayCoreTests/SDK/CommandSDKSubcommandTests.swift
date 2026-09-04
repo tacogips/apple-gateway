@@ -83,6 +83,43 @@ import Testing
   #expect(!selected.contains("sourceTitle"))
 }
 
+@Test func graphQLOperationAcceptsInlineAndFileVariables() throws {
+  let home = try SDKTestHome()
+  defer { home.remove() }
+  let variables = "{\"input\":{\"startDate\":\"2026-01-01T00:00:00Z\",\"endDate\":\"2026-01-01T01:00:00Z\"}}"
+
+  let inlineDouble = SDKCalendarDouble()
+  let inline = try command(
+    ["graphql", "operation", "events", "--variables", variables],
+    environment: home.environment(),
+    calendarServices: SDKFixtures.calendarServices(inlineDouble)
+  ).runResult()
+  #expect(inline.exitCode == 0)
+  #expect(inlineDouble.eventWindows.count == 1)
+
+  let variablesFile = home.url.appendingPathComponent("events-variables.json")
+  try variables.write(to: variablesFile, atomically: true, encoding: .utf8)
+  let fileDouble = SDKCalendarDouble()
+  let file = try command(
+    ["graphql", "operation", "events", "--variables-file", variablesFile.path],
+    environment: home.environment(),
+    calendarServices: SDKFixtures.calendarServices(fileDouble)
+  ).runResult()
+  #expect(file.exitCode == 0)
+  #expect(fileDouble.eventWindows.count == 1)
+}
+
+@Test func schemaSearchIncludesReferencedTypesWhenRequested() throws {
+  let home = try SDKTestHome()
+  defer { home.remove() }
+  let result = try command(
+    ["schema", "search", "calendars", "--include-referenced-types"],
+    environment: home.environment()
+  ).run()
+  let matches = try JSONSerialization.jsonObject(with: Data(result.utf8)) as? [[String: Any]]
+  #expect(matches?.contains { $0["name"] as? String == "Calendar" } == true)
+}
+
 @Test func graphQLOperationReturnsRawCompatibleErrorsAndHelpDocumentsCommands() throws {
   let home = try SDKTestHome()
   defer { home.remove() }

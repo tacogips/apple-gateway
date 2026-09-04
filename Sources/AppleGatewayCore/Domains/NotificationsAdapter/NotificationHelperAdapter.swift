@@ -152,13 +152,16 @@ public protocol NotificationFallbackPosting: Sendable {
 public struct OsascriptNotificationFallback: NotificationFallbackPosting {
   private let osascriptPath: String
   private let timeoutSeconds: TimeInterval
+  private let environment: [String: String]
 
   public init(
     osascriptPath: String = "/usr/bin/osascript",
-    timeoutSeconds: TimeInterval = TimeInterval(AppleGatewayConfig.Limits.defaultValue.appleEventTimeoutSeconds)
+    timeoutSeconds: TimeInterval = TimeInterval(AppleGatewayConfig.Limits.defaultValue.appleEventTimeoutSeconds),
+    environment: [String: String] = ProcessInfo.processInfo.environment
   ) {
     self.osascriptPath = osascriptPath
     self.timeoutSeconds = timeoutSeconds
+    self.environment = environment
   }
 
   public func post(_ input: PostNotificationInput) throws {
@@ -173,6 +176,7 @@ public struct OsascriptNotificationFallback: NotificationFallbackPosting {
       input.body ?? "",
       input.subtitle ?? ""
     ]
+    process.environment = environment
     process.standardOutput = Pipe()
     process.standardError = stderr
 
@@ -206,20 +210,30 @@ public struct OsascriptNotificationFallback: NotificationFallbackPosting {
 
 public struct LiveNotificationsAdapter: NotificationsProviding {
   private let config: AppleGatewayConfig
+  private let environment: [String: String]
   private let resolver: NotificationHelperResolver
   private let helperExecutor: NotificationHelperExecuting
   private let fallbackPoster: NotificationFallbackPosting
 
   public init(
     config: AppleGatewayConfig,
-    resolver: NotificationHelperResolver = NotificationHelperResolver(),
-    helperExecutor: NotificationHelperExecuting = SubprocessNotificationHelperExecutor(),
-    fallbackPoster: NotificationFallbackPosting = OsascriptNotificationFallback()
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    resolver: NotificationHelperResolver? = nil,
+    helperExecutor: (any NotificationHelperExecuting)? = nil,
+    fallbackPoster: (any NotificationFallbackPosting)? = nil
   ) {
     self.config = config
-    self.resolver = resolver
-    self.helperExecutor = helperExecutor
-    self.fallbackPoster = fallbackPoster
+    self.environment = environment
+    let homeDirectory = environment["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
+    self.resolver = resolver ?? NotificationHelperResolver(homeDirectory: homeDirectory)
+    self.helperExecutor = helperExecutor ?? SubprocessNotificationHelperExecutor(
+      timeoutSeconds: TimeInterval(config.limits.appleEventTimeoutSeconds),
+      environment: environment
+    )
+    self.fallbackPoster = fallbackPoster ?? OsascriptNotificationFallback(
+      timeoutSeconds: TimeInterval(config.limits.appleEventTimeoutSeconds),
+      environment: environment
+    )
   }
 
   public func notifications(input: NotificationSearchInput) throws -> DeliveredNotificationConnection {
@@ -227,7 +241,7 @@ public struct LiveNotificationsAdapter: NotificationsProviding {
     case .gatewayHelper:
       return try gatewayConnection(input: input)
     case .systemDb:
-      let database = try UsernotedNotificationStore(config: config).openDatabase()
+      let database = try UsernotedNotificationStore(config: config, environment: environment).openDatabase()
       defer {
         database.close()
       }

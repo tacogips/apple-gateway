@@ -143,10 +143,16 @@ public struct LiveClockAlarmsAdapter: ClockAlarmsProviding {
   private let executor: any ClockAlarmUIAutomationExecuting
 
   public init(
-    config _: AppleGatewayConfig,
-    executor: any ClockAlarmUIAutomationExecuting = JXAClockAlarmUIAutomationExecutor()
+    config: AppleGatewayConfig,
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    executor: (any ClockAlarmUIAutomationExecuting)? = nil
   ) {
-    self.executor = executor
+    self.executor = executor ?? JXAClockAlarmUIAutomationExecutor(
+      bridge: AppleEventBridge(
+        timeoutSeconds: TimeInterval(config.limits.appleEventTimeoutSeconds),
+        environment: environment
+      )
+    )
   }
 
   public func clockAlarms() throws -> [ClockAlarm] {

@@ -12,22 +12,30 @@ public struct LivePhoneCallsAdapter: PhoneCallsProviding {
     contactResolver: any PhoneContactResolving,
     controller: any PhoneCallUIControlling,
     audioController: (any PhoneAudioControlling)? = nil,
-    listeningController: (any PhoneCallListeningControlling)? = nil
+    listeningController: (any PhoneCallListeningControlling)? = nil,
+    environment: [String: String] = ProcessInfo.processInfo.environment
   ) {
     let audioConfiguration = PhoneCallAudioConfiguration(config: config)
     self.contactResolver = contactResolver
     self.controller = controller
     self.audioConfiguration = audioConfiguration
-    self.audioController = audioController ?? LivePhoneAudioController(configuration: audioConfiguration)
+    self.audioController = audioController ?? LivePhoneAudioController(
+      configuration: audioConfiguration,
+      environment: environment
+    )
     self.listeningController = listeningController
-      ?? LivePhoneCallListeningController(configuration: audioConfiguration)
+      ?? LivePhoneCallListeningController(configuration: audioConfiguration, environment: environment)
   }
 
-  public init(config: AppleGatewayConfig) {
+  public init(
+    config: AppleGatewayConfig,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) {
     self.init(
       config: config,
       contactResolver: LivePhoneContactResolver(),
-      controller: LivePhoneCallUIController()
+      controller: LivePhoneCallUIController(),
+      environment: environment
     )
   }
 

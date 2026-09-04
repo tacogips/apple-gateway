@@ -181,7 +181,21 @@ extension GraphQLValue {
     case let value as Int:
       return .int(value)
     case let value as Double:
+      guard value.isFinite else {
+        throw GraphQLRuntimeError(
+          message: "Variables must not contain non-finite numbers",
+          location: nil,
+          code: .invalidArgument
+        )
+      }
       if value.rounded() == value {
+        guard value >= Double(Int.min), value < Double(Int.max) else {
+          throw GraphQLRuntimeError(
+            message: "Integer variable is outside the supported range",
+            location: nil,
+            code: .invalidArgument
+          )
+        }
         return .int(Int(value))
       }
       return .float(value)

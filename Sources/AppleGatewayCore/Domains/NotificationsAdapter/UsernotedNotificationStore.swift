@@ -65,11 +65,14 @@ public struct UsernotedDatabasePathResolver: Sendable {
     return paths
   }
 
-  public static func defaultDarwinUserDirectory() -> String? {
+  public static func defaultDarwinUserDirectory(
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> String? {
     let process = Process()
     let output = Pipe()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/getconf")
     process.arguments = ["DARWIN_USER_DIR"]
+    process.environment = environment
     process.standardOutput = output
     process.standardError = Pipe()
     do {
@@ -104,9 +107,19 @@ struct UsernotedNotificationStore: Sendable {
     self.sqliteOpener = sqliteOpener
   }
 
-  init(config: AppleGatewayConfig) {
-    let fileStore = FileStore(cacheRoot: config.storage.cacheDir.expandingTildeInUsernotedPath)
-    self.init(snapshotter: FileStoreUsernotedSnapshotter(fileStore: fileStore))
+  init(
+    config: AppleGatewayConfig,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) {
+    let homeDirectory = environment["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
+    let fileStore = FileStore(cacheRoot: config.storage.cacheDir.expandingTildeInUsernotedPath(homeDirectory: homeDirectory))
+    self.init(
+      pathResolver: UsernotedDatabasePathResolver(
+        homeDirectory: homeDirectory,
+        darwinUserDirectory: UsernotedDatabasePathResolver.defaultDarwinUserDirectory(environment: environment)
+      ),
+      snapshotter: FileStoreUsernotedSnapshotter(fileStore: fileStore)
+    )
   }
 
   func openDatabase() throws -> MailSQLiteDatabase {
@@ -176,7 +189,10 @@ struct UsernotedNotificationStore: Sendable {
 }
 
 private extension String {
-  var expandingTildeInUsernotedPath: String {
-    (self as NSString).expandingTildeInPath
+  func expandingTildeInUsernotedPath(homeDirectory: String) -> String {
+    guard self == "~" || hasPrefix("~/") else {
+      return self
+    }
+    return URL(fileURLWithPath: homeDirectory).appendingPathComponent(String(dropFirst(2))).path
   }
 }

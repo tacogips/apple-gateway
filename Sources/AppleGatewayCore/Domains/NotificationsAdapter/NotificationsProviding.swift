@@ -13,8 +13,11 @@ enum NotificationsServiceFactory {
     UnavailableNotificationsService()
   }
 
-  static func liveService(config: AppleGatewayConfig) -> any NotificationsProviding {
-    LiveNotificationsAdapter(config: config)
+  static func liveService(
+    config: AppleGatewayConfig,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> any NotificationsProviding {
+    LiveNotificationsAdapter(config: config, environment: environment)
   }
 }
 

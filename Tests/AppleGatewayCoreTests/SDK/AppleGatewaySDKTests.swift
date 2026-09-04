@@ -1,3 +1,4 @@
+import Foundation
 import GatewaySDKKit
 import Testing
 @testable import AppleGatewayCore
@@ -146,24 +147,43 @@ import Testing
   #expect(SDKFixtures.normalizeRequestID(sdkEnvelope.rawOutput) == SDKFixtures.normalizeRequestID(cli.output))
 }
 
-@Test func sdkConstructsDefaultNotesServicesFromEachExecutionEnvironment() async throws {
+@Test func sdkDefaultServicesUseTheSuppliedEnvironmentInsteadOfAmbientHome() async throws {
   let home = try SDKTestHome()
   defer { home.remove() }
-  let environment = home.environment([
-    "APPLE_GATEWAY_LIMITS_DEFAULT_PAGE_SIZE": "1",
-    "APPLE_GATEWAY_LIMITS_MAX_PAGE_SIZE": "1"
-  ])
-  let document = "{ notes(input: { first: 2 }) { totalCount } }"
+  let suppliedHome = home.url.path
+  let ambientHome = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
+  #expect(suppliedHome != ambientHome)
   let sdk = AppleGatewaySDK(permissionsProvider: SDKPermissionsProvider())
-  let sdkEnvelope = await sdk.execute(document: document, variables: [:], environment: environment)
-  let cli = try AppleGatewayCommand(
-    arguments: ["graphql", "--query", document], environment: environment,
-    permissionsProvider: SDKPermissionsProvider()
-  ).runResult()
-  #expect(sdkEnvelope.errors.first?.code == "INVALID_ARGUMENT")
-  #expect(sdkEnvelope.errors.first?.message == "first must not exceed max page size")
-  #expect(sdkEnvelope.exitCode == cli.exitCode)
-  #expect(SDKFixtures.normalizeRequestID(sdkEnvelope.rawOutput) == SDKFixtures.normalizeRequestID(cli.output))
+  let envelope = await sdk.execute(
+    document: "{ mailAccounts { id } }",
+    variables: [:],
+    environment: home.environment()
+  )
+  #expect(envelope.errors.first?.code == "MAIL_STORE_NOT_FOUND")
+  #expect(envelope.rawOutput.contains(suppliedHome.replacingOccurrences(of: "/", with: "\\/")))
+  #expect(!envelope.rawOutput.contains(ambientHome.replacingOccurrences(of: "/", with: "\\/")))
+}
+
+@Test func sdkRawExecutionRejectsUnsafeDoubleVariables() async throws {
+  let home = try SDKTestHome()
+  defer { home.remove() }
+  let sdk = AppleGatewaySDK(permissionsProvider: SDKPermissionsProvider())
+
+  let nonFinite = await sdk.execute(
+    document: "{ permissions { calendars } }",
+    variables: ["value": .double(.infinity)],
+    environment: home.environment()
+  )
+  #expect(nonFinite.errors.first?.code == "INVALID_ARGUMENT")
+  #expect(nonFinite.errors.first?.message == "Variables must not contain non-finite numbers")
+
+  let outOfRange = await sdk.execute(
+    document: "{ permissions { calendars } }",
+    variables: ["value": .double(.greatestFiniteMagnitude)],
+    environment: home.environment()
+  )
+  #expect(outOfRange.errors.first?.code == "INVALID_ARGUMENT")
+  #expect(outOfRange.errors.first?.message == "Integer variable is outside the supported range")
 }
 
 private struct SDKPermissionsProvider: PermissionsProviding {

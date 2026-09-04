@@ -3,6 +3,7 @@ import Foundation
 /// The common runtime context used by both the CLI and the public SDK façade.
 struct GraphQLServiceComposition: Sendable {
   let role: AppleGatewayRole
+  let environment: [String: String]
   let permissionsProvider: any PermissionsProviding
   let calendarReadService: CalendarReadService
   let calendarWriteService: CalendarWriteService
@@ -30,11 +31,11 @@ struct GraphQLServiceComposition: Sendable {
       calendarWriteService: calendarWriteService,
       notesReadService: notesReadService,
       notesWriteService: notesWriteService,
-      mailReadService: mailReadService ?? MailServiceFactory.liveReadService(config: config),
-      mailWriteService: mailWriteService ?? MailServiceFactory.liveWriteService(config: config),
-      notificationsService: notificationsService ?? NotificationsServiceFactory.liveService(config: config),
-      clockAlarmsService: clockAlarmsService ?? ClockAlarmsServiceFactory.liveService(config: config),
-      phoneCallsService: phoneCallsService ?? PhoneCallsServiceFactory.liveService(config: config),
+      mailReadService: mailReadService ?? MailServiceFactory.liveReadService(config: config, environment: environment),
+      mailWriteService: mailWriteService ?? MailServiceFactory.liveWriteService(config: config, environment: environment),
+      notificationsService: notificationsService ?? NotificationsServiceFactory.liveService(config: config, environment: environment),
+      clockAlarmsService: clockAlarmsService ?? ClockAlarmsServiceFactory.liveService(config: config, environment: environment),
+      phoneCallsService: phoneCallsService ?? PhoneCallsServiceFactory.liveService(config: config, environment: environment),
       pretty: pretty
     )
   }

@@ -13,8 +13,11 @@ public enum ClockAlarmsServiceFactory {
     UnavailableClockAlarmsService()
   }
 
-  public static func liveService(config: AppleGatewayConfig) -> any ClockAlarmsProviding {
-    LiveClockAlarmsAdapter(config: config)
+  public static func liveService(
+    config: AppleGatewayConfig,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> any ClockAlarmsProviding {
+    LiveClockAlarmsAdapter(config: config, environment: environment)
   }
 }
 

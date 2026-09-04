@@ -77,7 +77,7 @@ struct MailRootResolver: Sendable {
   private func candidateRoots(config: AppleGatewayConfig) -> [URL] {
     let configuredRoot = config.mail.mailRoot.trimmingCharacters(in: .whitespacesAndNewlines)
     if !configuredRoot.isEmpty {
-      return [URL(fileURLWithPath: configuredRoot.expandingTildeInPath, isDirectory: true).standardizedFileURL]
+      return [URL(fileURLWithPath: expandingTilde(configuredRoot), isDirectory: true).standardizedFileURL]
     }
     let mailRoot = homeDirectory.appendingPathComponent("Library/Mail", isDirectory: true)
     return Self.supportedVersions.map { version in
@@ -99,10 +99,11 @@ struct MailRootResolver: Sendable {
       )
     }
   }
-}
 
-private extension String {
-  var expandingTildeInPath: String {
-    (self as NSString).expandingTildeInPath
+  private func expandingTilde(_ path: String) -> String {
+    guard path == "~" || path.hasPrefix("~/") else {
+      return path
+    }
+    return homeDirectory.appendingPathComponent(String(path.dropFirst(2))).path
   }
 }

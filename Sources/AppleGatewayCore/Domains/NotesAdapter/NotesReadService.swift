@@ -129,10 +129,7 @@ public struct NotesReadService: Sendable {
     guard value > 0 else {
       throw AppleGatewayError(code: .invalidArgument, message: "first must be positive")
     }
-    guard value <= limits.maxPageSize else {
-      throw AppleGatewayError(code: .invalidArgument, message: "first must not exceed max page size")
-    }
-    return value
+    return min(value, limits.maxPageSize)
   }
 
   private func note(from result: NoteBodyFetchResult) throws -> Note {

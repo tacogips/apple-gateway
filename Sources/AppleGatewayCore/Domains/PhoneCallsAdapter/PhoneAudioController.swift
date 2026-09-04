@@ -12,13 +12,16 @@ protocol PhoneAudioControlling: Sendable {
 struct LivePhoneAudioController: PhoneAudioControlling {
   private let configuration: PhoneCallAudioConfiguration
   private let executablePath: String
+  private let environment: [String: String]
 
   init(
     configuration: PhoneCallAudioConfiguration,
-    executablePath: String? = Bundle.main.executableURL?.path
+    executablePath: String? = Bundle.main.executableURL?.path,
+    environment: [String: String] = ProcessInfo.processInfo.environment
   ) {
     self.configuration = configuration
     self.executablePath = executablePath ?? ""
+    self.environment = environment
   }
 
   func play(filePath: String) throws -> PhoneCallAudioResult {
@@ -67,6 +70,7 @@ struct LivePhoneAudioController: PhoneAudioControlling {
       "--previous-input-device-id", "\(previousInput)",
       "--state-file", stateFileURL.path
     ]
+    process.environment = environment
     process.standardOutput = FileHandle.nullDevice
     process.standardError = FileHandle.nullDevice
     do {

@@ -25,20 +25,37 @@ public struct MailReadService: Sendable {
 }
 
 public enum MailServiceFactory {
-  public static func liveServices(config: AppleGatewayConfig = .defaultValue) -> MailServices {
-    let provider = LiveMailEnvelopeIndexProvider(config: config)
+  public static func liveServices(
+    config: AppleGatewayConfig = .defaultValue,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> MailServices {
+    let provider = LiveMailEnvelopeIndexProvider(config: config, environment: environment)
     return MailServices(
       readService: MailReadService(provider: provider),
-      writeService: MailWriteService(provider: provider, writer: LiveMailAppleEventWriter())
+      writeService: MailWriteService(
+        provider: provider,
+        writer: LiveMailAppleEventWriter(
+          bridge: AppleEventBridge(
+            timeoutSeconds: TimeInterval(config.limits.appleEventTimeoutSeconds),
+            environment: environment
+          )
+        )
+      )
     )
   }
 
-  public static func liveReadService(config: AppleGatewayConfig = .defaultValue) -> MailReadService {
-    liveServices(config: config).readService
+  public static func liveReadService(
+    config: AppleGatewayConfig = .defaultValue,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> MailReadService {
+    liveServices(config: config, environment: environment).readService
   }
 
-  public static func liveWriteService(config: AppleGatewayConfig = .defaultValue) -> MailWriteService {
-    liveServices(config: config).writeService
+  public static func liveWriteService(
+    config: AppleGatewayConfig = .defaultValue,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> MailWriteService {
+    liveServices(config: config, environment: environment).writeService
   }
 
   public static func unavailableReadService() -> MailReadService {
@@ -111,6 +128,7 @@ public struct UnavailableMailWriter: MailWriting {
 
 struct LiveMailEnvelopeIndexProvider: MailProviding {
   var config: AppleGatewayConfig
+  var environment: [String: String]
 
   func accounts() throws -> [MailAccount] {
     try withQueryService { try $0.accounts() }
@@ -129,13 +147,20 @@ struct LiveMailEnvelopeIndexProvider: MailProviding {
   }
 
   private func withQueryService<T>(_ operation: (MailEnvelopeIndexQueryService) throws -> T) throws -> T {
-    let resolver = MailRootResolver()
+    let homeDirectory = URL(
+      fileURLWithPath: environment["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory(),
+      isDirectory: true
+    )
+    let resolver = MailRootResolver(homeDirectory: homeDirectory)
     let paths = try resolver.resolve(config: config)
-    let database = try MailEnvelopeIndexStore(config: config).openDatabase(config: config)
+    let database = try MailEnvelopeIndexStore(
+      config: config,
+      environment: environment
+    ).openDatabase(config: config)
     defer {
       database.close()
     }
-    let fileStore = FileStore(cacheRoot: config.storage.cacheDir.expandingTildeInMailReadServicePath)
+    let fileStore = FileStore(cacheRoot: config.storage.cacheDir.expandingTildeInMailReadServicePath(homeDirectory: homeDirectory))
     let fileResolver = FileSystemMailMessageFileResolver(mailRoot: paths.root, fileStore: fileStore)
     let service = MailEnvelopeIndexQueryService(
       database: database,
@@ -189,7 +214,10 @@ struct FileSystemMailMessageFileResolver: MailMessageFileResolving {
 }
 
 private extension String {
-  var expandingTildeInMailReadServicePath: String {
-    (self as NSString).expandingTildeInPath
+  func expandingTildeInMailReadServicePath(homeDirectory: URL) -> String {
+    guard self == "~" || hasPrefix("~/") else {
+      return self
+    }
+    return homeDirectory.appendingPathComponent(String(dropFirst(2))).path
   }
 }

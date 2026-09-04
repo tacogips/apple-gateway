@@ -49,7 +49,7 @@ public struct AppleGatewayCommand: Sendable {
       : nil
     let liveConfig = Self.initialLiveConfig(arguments: arguments, environment: environment)
     let liveNotesServices = notesReadService == nil || notesWriteService == nil || fileMaterializer == nil
-      ? NotesServiceFactory.liveServices(config: liveConfig)
+      ? NotesServiceFactory.liveServices(config: liveConfig, environment: environment)
       : nil
     self.arguments = arguments
     self.environment = environment
@@ -57,12 +57,17 @@ public struct AppleGatewayCommand: Sendable {
     self.permissionsProvider = permissionsProvider
     self.responsibleProcessDetector = responsibleProcessDetector
     self.fileMaterializer = fileMaterializer ?? DomainFileStoreMaterializer(
-      notes: liveNotesServices?.fileMaterializer ?? NotesServiceFactory.liveServices(config: liveConfig).fileMaterializer
+      notes: liveNotesServices?.fileMaterializer
+        ?? NotesServiceFactory.liveServices(config: liveConfig, environment: environment).fileMaterializer
     )
     self.calendarReadService = calendarReadService ?? liveServices?.readService ?? CalendarReminderServiceFactory.liveReadService()
     self.calendarWriteService = calendarWriteService ?? liveServices?.writeService ?? CalendarReminderServiceFactory.liveWriteService()
-    self.notesReadService = notesReadService ?? liveNotesServices?.readService ?? NotesServiceFactory.liveReadService()
-    self.notesWriteService = notesWriteService ?? liveNotesServices?.writeService ?? NotesServiceFactory.liveWriteService()
+    self.notesReadService = notesReadService
+      ?? liveNotesServices?.readService
+      ?? NotesServiceFactory.liveReadService(config: liveConfig, environment: environment)
+    self.notesWriteService = notesWriteService
+      ?? liveNotesServices?.writeService
+      ?? NotesServiceFactory.liveWriteService(config: liveConfig, environment: environment)
     self.mailReadService = mailReadService
     self.mailWriteService = mailWriteService
     self.notificationsService = notificationsService
@@ -339,6 +344,7 @@ public struct AppleGatewayCommand: Sendable {
   var serviceComposition: GraphQLServiceComposition {
     GraphQLServiceComposition(
       role: role,
+      environment: environment,
       permissionsProvider: permissionsProvider,
       calendarReadService: calendarReadService,
       calendarWriteService: calendarWriteService,

@@ -589,15 +589,16 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
   #expect(provider.noteIDBatchSizes == [2, 2])
 }
 
-@Test func notesReadServiceRejectsPageSizeAboveConfiguredMaximum() throws {
+@Test func notesReadServiceCapsPageSizeAtConfiguredMaximum() throws {
+  let provider = NotesTestProvider()
+  provider.notes = [note(id: "capped", folderId: "inbox", name: "Capped", modified: 1)]
   let service = NotesReadService(
-    provider: NotesTestProvider(),
+    provider: provider,
     limits: notesTestLimits(defaultPageSize: 1, maxPageSize: 1)
   )
 
-  #expect(throws: AppleGatewayError(code: .invalidArgument, message: "first must not exceed max page size")) {
-    _ = try service.notes(input: NoteSearchInput(first: 2))
-  }
+  let result = try service.notes(input: NoteSearchInput(first: 2))
+  #expect(result.edges.count == 1)
 }
 
 @Test func notesReadServiceRejectsUnknownScopeBeforeEnumeration() throws {

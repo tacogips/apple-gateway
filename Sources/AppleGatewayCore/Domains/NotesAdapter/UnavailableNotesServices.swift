@@ -1,8 +1,16 @@
 import Foundation
 
 public enum NotesServiceFactory {
-  public static func liveServices(config: AppleGatewayConfig = .defaultValue) -> NotesServices {
-    let adapter = LiveNotesAppleEventAdapter()
+  public static func liveServices(
+    config: AppleGatewayConfig = .defaultValue,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> NotesServices {
+    let adapter = LiveNotesAppleEventAdapter(
+      bridge: AppleEventBridge(
+        timeoutSeconds: TimeInterval(config.limits.appleEventTimeoutSeconds),
+        environment: environment
+      )
+    )
     let fileStore = FileStore(cacheRoot: config.storage.cacheDir)
     let attachmentExportStore = NotesAttachmentExportStore(cacheRoot: config.storage.cacheDir)
     return NotesServices(
@@ -26,12 +34,18 @@ public enum NotesServiceFactory {
     )
   }
 
-  public static func liveReadService() -> NotesReadService {
-    liveServices().readService
+  public static func liveReadService(
+    config: AppleGatewayConfig = .defaultValue,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> NotesReadService {
+    liveServices(config: config, environment: environment).readService
   }
 
-  public static func liveWriteService() -> NotesWriteService {
-    liveServices().writeService
+  public static func liveWriteService(
+    config: AppleGatewayConfig = .defaultValue,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> NotesWriteService {
+    liveServices(config: config, environment: environment).writeService
   }
 
   public static func unavailableReadService() -> NotesReadService {

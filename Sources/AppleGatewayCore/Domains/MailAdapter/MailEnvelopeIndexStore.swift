@@ -28,9 +28,19 @@ struct MailEnvelopeIndexStore: Sendable {
     self.sqliteOpener = sqliteOpener
   }
 
-  init(config: AppleGatewayConfig) {
-    let fileStore = FileStore(cacheRoot: config.storage.cacheDir.expandingTildeInMailPath)
-    self.init(snapshotter: FileStoreMailEnvelopeIndexSnapshotter(fileStore: fileStore))
+  init(
+    config: AppleGatewayConfig,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) {
+    let homeDirectory = URL(
+      fileURLWithPath: environment["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory(),
+      isDirectory: true
+    )
+    let fileStore = FileStore(cacheRoot: config.storage.cacheDir.expandingTildeInMailPath(homeDirectory: homeDirectory))
+    self.init(
+      rootResolver: MailRootResolver(homeDirectory: homeDirectory),
+      snapshotter: FileStoreMailEnvelopeIndexSnapshotter(fileStore: fileStore)
+    )
   }
 
   @discardableResult
@@ -71,7 +81,10 @@ struct MailEnvelopeIndexStore: Sendable {
 }
 
 private extension String {
-  var expandingTildeInMailPath: String {
-    (self as NSString).expandingTildeInPath
+  func expandingTildeInMailPath(homeDirectory: URL) -> String {
+    guard self == "~" || hasPrefix("~/") else {
+      return self
+    }
+    return homeDirectory.appendingPathComponent(String(dropFirst(2))).path
   }
 }
