@@ -164,6 +164,34 @@ import Testing
   #expect(!envelope.rawOutput.contains(ambientHome.replacingOccurrences(of: "/", with: "\\/")))
 }
 
+@Test func sdkConstructsDefaultNotesServicesFromEachExecutionEnvironment() async throws {
+  let firstHome = try SDKTestHome()
+  defer { firstHome.remove() }
+  let secondHome = try SDKTestHome()
+  defer { secondHome.remove() }
+  let factory = SDKNotesServicesFactoryProbe()
+  let sdk = AppleGatewaySDK(
+    permissionsProvider: SDKPermissionsProvider(),
+    notesServicesFactory: factory.makeServices(config:environment:)
+  )
+  let document = "{ notes(input: {}) { totalCount } }"
+  let firstEnvironment = firstHome.environment([
+    "APPLE_GATEWAY_LIMITS_DEFAULT_PAGE_SIZE": "1",
+    "APPLE_GATEWAY_LIMITS_MAX_PAGE_SIZE": "1"
+  ])
+  let secondEnvironment = secondHome.environment([
+    "APPLE_GATEWAY_LIMITS_DEFAULT_PAGE_SIZE": "3",
+    "APPLE_GATEWAY_LIMITS_MAX_PAGE_SIZE": "3"
+  ])
+
+  _ = await sdk.execute(document: document, variables: [:], environment: firstEnvironment)
+  _ = await sdk.execute(document: document, variables: [:], environment: secondEnvironment)
+
+  #expect(factory.calls.map(\.environment["HOME"]) == [firstHome.url.path, secondHome.url.path])
+  #expect(factory.calls.map(\.limits.defaultPageSize) == [1, 3])
+  #expect(factory.calls.map(\.limits.maxPageSize) == [1, 3])
+}
+
 @Test func sdkFailsClosedWhenSuppliedEnvironmentOmitsHome() async throws {
   let ambientHome = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
   let sdk = AppleGatewaySDK(permissionsProvider: SDKPermissionsProvider())
@@ -249,6 +277,24 @@ import Testing
   )
   #expect(outOfRange.errors.first?.code == "INVALID_ARGUMENT")
   #expect(outOfRange.errors.first?.message == "Integer variable is outside the supported range")
+}
+
+private final class SDKNotesServicesFactoryProbe: @unchecked Sendable {
+  struct Call: Equatable {
+    let environment: [String: String]
+    let limits: AppleGatewayConfig.Limits
+  }
+
+  private(set) var calls: [Call] = []
+
+  func makeServices(config: AppleGatewayConfig, environment: [String: String]) -> NotesServices {
+    calls.append(Call(environment: environment, limits: config.limits))
+    return NotesServices(
+      readService: NotesServiceFactory.unavailableReadService(),
+      writeService: NotesServiceFactory.unavailableWriteService(),
+      fileMaterializer: NotesFileMaterializer(provider: UnavailableNotesProvider())
+    )
+  }
 }
 
 private struct SDKPermissionsProvider: PermissionsProviding {

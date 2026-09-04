@@ -327,13 +327,12 @@ add small fakes (pattern: existing fakes in Tests/AppleGatewayCoreTests domain t
 - config error parity: point `APPLE_GATEWAY_CONFIG` to the same missing explicit path;
   assert SDK and CLI return `CONFIG_INVALID`, the same exit code, and request-ID-
   normalized byte-identical output.
-- config-sensitive default Notes parity: inject no Notes services; set
-  `APPLE_GATEWAY_LIMITS_DEFAULT_PAGE_SIZE=1` and
-  `APPLE_GATEWAY_LIMITS_MAX_PAGE_SIZE=1`; execute
-  `notes(input: { first: 2 }) { totalCount }` through SDK and CLI and assert the same
-  limit error plus request-ID-normalized byte-identical output. The resolver validates
-  the configured limit before calling the live provider, so the test is deterministic
-  and proves per-execute config-aware Notes construction.
+- config-sensitive default Notes construction: inject no Notes services and use the SDK's
+  deterministic internal Notes-services factory probe. Execute twice with different
+  temporary `HOME` values and configured default/max page-size pairs; assert the probe
+  receives each current environment and resolved limits. The production default remains
+  `NotesServiceFactory.liveServices(config:environment:)`. Oversized page requests are
+  capped at the configured maximum, as covered directly by `NotesReadServiceTests`.
 
 Note test env: always pass an explicit environment to both paths. Use an isolated
 temporary `HOME`; use the two limit overrides above for the config-sensitive test and a

@@ -1,6 +1,8 @@
 import Foundation
 import GatewaySDKKit
 
+typealias NotesServicesFactory = @Sendable (AppleGatewayConfig, [String: String]) -> NotesServices
+
 /// Public Swift façade over apple-gateway's internal GraphQL runtime.
 public struct AppleGatewaySDK: GatewaySDK {
   public let provider = "apple-gateway"
@@ -13,6 +15,7 @@ public struct AppleGatewaySDK: GatewaySDK {
   private let calendarWriteService: CalendarWriteService?
   private let notesReadService: NotesReadService?
   private let notesWriteService: NotesWriteService?
+  private let notesServicesFactory: NotesServicesFactory
   private let mailReadService: MailReadService?
   private let mailWriteService: MailWriteService?
   private let notificationsService: (any NotificationsProviding)?
@@ -34,6 +37,42 @@ public struct AppleGatewaySDK: GatewaySDK {
     clockAlarmsService: (any ClockAlarmsProviding)? = nil,
     phoneCallsService: (any PhoneCallsProviding)? = nil
   ) {
+    self.init(
+      role: role,
+      permissionsProvider: permissionsProvider,
+      responsibleProcessDetector: responsibleProcessDetector,
+      fileMaterializer: fileMaterializer,
+      calendarReadService: calendarReadService,
+      calendarWriteService: calendarWriteService,
+      notesReadService: notesReadService,
+      notesWriteService: notesWriteService,
+      mailReadService: mailReadService,
+      mailWriteService: mailWriteService,
+      notificationsService: notificationsService,
+      clockAlarmsService: clockAlarmsService,
+      phoneCallsService: phoneCallsService,
+      notesServicesFactory: { config, environment in
+        NotesServiceFactory.liveServices(config: config, environment: environment)
+      }
+    )
+  }
+
+  init(
+    role: AppleGatewayRole = .full,
+    permissionsProvider: any PermissionsProviding = LivePermissionsProvider(),
+    responsibleProcessDetector: any ResponsibleProcessDetecting = DefaultResponsibleProcessDetector(),
+    fileMaterializer: (any FileStoreMaterializing)? = nil,
+    calendarReadService: CalendarReadService? = nil,
+    calendarWriteService: CalendarWriteService? = nil,
+    notesReadService: NotesReadService? = nil,
+    notesWriteService: NotesWriteService? = nil,
+    mailReadService: MailReadService? = nil,
+    mailWriteService: MailWriteService? = nil,
+    notificationsService: (any NotificationsProviding)? = nil,
+    clockAlarmsService: (any ClockAlarmsProviding)? = nil,
+    phoneCallsService: (any PhoneCallsProviding)? = nil,
+    notesServicesFactory: @escaping NotesServicesFactory
+  ) {
     self.role = role
     tier = role == .full ? "full" : "reader"
     catalog = .apple(role: role)
@@ -42,6 +81,7 @@ public struct AppleGatewaySDK: GatewaySDK {
     self.calendarWriteService = calendarWriteService
     self.notesReadService = notesReadService
     self.notesWriteService = notesWriteService
+    self.notesServicesFactory = notesServicesFactory
     self.mailReadService = mailReadService
     self.mailWriteService = mailWriteService
     self.notificationsService = notificationsService
@@ -103,7 +143,7 @@ public struct AppleGatewaySDK: GatewaySDK {
       ? CalendarReminderServiceFactory.liveServices()
       : nil
     let notesServices = notesReadService == nil || notesWriteService == nil
-      ? NotesServiceFactory.liveServices(config: config, environment: environment)
+      ? notesServicesFactory(config, environment)
       : nil
     return GraphQLServiceComposition(
       role: role,
@@ -118,10 +158,10 @@ public struct AppleGatewaySDK: GatewaySDK {
         ?? CalendarReminderServiceFactory.liveWriteService(),
       notesReadService: notesReadService
         ?? notesServices?.readService
-        ?? NotesServiceFactory.liveReadService(config: config, environment: environment),
+        ?? notesServicesFactory(config, environment).readService,
       notesWriteService: notesWriteService
         ?? notesServices?.writeService
-        ?? NotesServiceFactory.liveWriteService(config: config, environment: environment),
+        ?? notesServicesFactory(config, environment).writeService,
       mailReadService: mailReadService,
       mailWriteService: mailWriteService,
       notificationsService: notificationsService,

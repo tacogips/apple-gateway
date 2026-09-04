@@ -316,12 +316,14 @@ domain tests / new small fakes alongside.
    - config failures: point `APPLE_GATEWAY_CONFIG` at the same missing explicit path
      for SDK and CLI, then assert matching `CONFIG_INVALID` code, exit code, and
      request-ID-normalized bytes.
-   - config-sensitive default Notes services: with no injected Notes service, pass
-     `APPLE_GATEWAY_LIMITS_DEFAULT_PAGE_SIZE=1` and
-     `APPLE_GATEWAY_LIMITS_MAX_PAGE_SIZE=1`, then execute a `notes(input: { first: 2 })`
-     document through SDK and CLI. Both must return the same limit error and
-     request-ID-normalized bytes. This proves the SDK constructs Notes services from
-     the current call's resolved environment rather than SDK initialization state.
+   - config-sensitive default Notes services: with no injected Notes service, execute
+     twice through an internal deterministic Notes-services factory probe using distinct
+     temporary `HOME` values and `APPLE_GATEWAY_LIMITS_DEFAULT_PAGE_SIZE` /
+     `APPLE_GATEWAY_LIMITS_MAX_PAGE_SIZE` pairs. Assert the probe receives each current
+     execution environment and resolved limit pair. The production default remains
+     `NotesServiceFactory.liveServices(config:environment:)`; the probe avoids live
+     AppleEvent access while proving per-execution construction. Oversized page requests
+     are capped at the configured maximum, with direct `NotesReadService` coverage.
 3. `CommandSDKSubcommandTests.swift`
    - `schema search` returns JSON matches (name filter, `--kinds`, `--limit`,
      `--role reader` excludes mutations), invalid kind/regex -> usage errors.
