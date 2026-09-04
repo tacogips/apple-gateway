@@ -63,11 +63,11 @@ Implementation status (2026-09-04):
 | --- | --- | --- |
 | 1 | complete | `Package.swift`; `SchemaRegistry.swift`. Verification: `arch -arm64 /bin/zsh -lc 'swift build && swift test && swift run AppleGatewaySmokeTests && swiftlint'` passed (269 tests; one operator-owned live EventKit test skipped; smoke tests; SwiftLint 0). Commit: `b247b75db045502957c0b0e9d897237fbc666d13`. |
 | 2 | complete | `SDK/AppleSchemaCatalogExporter.swift`; structural SDL parity asserts scalar absence, requiredness, and bidirectional result types. Verification: `arch -arm64 /bin/zsh -lc 'swift build && swift test && swift run AppleGatewaySmokeTests && swiftlint'` passed (269 tests; one operator-owned live EventKit test skipped; smoke tests; SwiftLint 0). Commits: `b247b75db045502957c0b0e9d897237fbc666d13`, `b92d4391a19789b270164837abd56dfe08293b77`, `3d06fecc08fac385fcfef7f6281b75163880a001`, `19a9b88c5d8067cdc47ed53e1bf3564761b902cf`. |
-| 3 | complete | `GraphQLServiceComposition.swift`; raw CLI and SDK share composition, while SDK composition suppresses account-derived notification paths. Verification: `arch -arm64 /bin/zsh -lc 'swift build && swift test && swift run AppleGatewaySmokeTests && swiftlint'` passed (271 tests; one operator-owned live EventKit test skipped; smoke tests; SwiftLint 0). Commits: `b247b75db045502957c0b0e9d897237fbc666d13`, `fd34e08c0254eaef94845a4fb0743ab129d80004`, `d3a2a3c65b9eac3c5922fb78a712ad944288438f`. |
-| 4 | complete | `SDK/AppleGatewaySDK.swift`; isolated HOME/config tests cover calendar, events, reminder, Notes, reader, parity, supplied-HOME mail resolution, absent-HOME rejection, notification path isolation, and unsafe doubles. Verification: `arch -arm64 /bin/zsh -lc 'swift build && swift test && swift run AppleGatewaySmokeTests && swiftlint'` passed (271 tests; one operator-owned live EventKit test skipped; smoke tests; SwiftLint 0). Commits: `b247b75db045502957c0b0e9d897237fbc666d13`, `b92d4391a19789b270164837abd56dfe08293b77`, `3d06fecc08fac385fcfef7f6281b75163880a001`, `19a9b88c5d8067cdc47ed53e1bf3564761b902cf`, `fd34e08c0254eaef94845a4fb0743ab129d80004`, `d3a2a3c65b9eac3c5922fb78a712ad944288438f`. |
+| 3 | complete | `GraphQLServiceComposition.swift`; raw CLI and SDK share composition, while SDK composition suppresses account-derived notification paths. Verification: `arch -arm64 /bin/zsh -lc 'swift build && swift test && swift run AppleGatewaySmokeTests && swiftlint'` passed (272 tests; one operator-owned live EventKit test skipped; smoke tests; SwiftLint 0). Commits: `b247b75db045502957c0b0e9d897237fbc666d13`, `fd34e08c0254eaef94845a4fb0743ab129d80004`, `d3a2a3c65b9eac3c5922fb78a712ad944288438f`, `1091cfae03396913a08cd81958bea07210781bc2`. |
+| 4 | complete | `SDK/AppleGatewaySDK.swift`, `Permissions/PermissionsProvider.swift`; isolated HOME/config tests cover calendar, events, reminder, Notes, reader, parity, supplied-HOME mail resolution, absent-HOME rejection, notification path isolation, unsafe doubles, and default permissions probes bound to the supplied HOME with account-derived Darwin paths excluded. Verification: `arch -arm64 /bin/zsh -lc 'swift build && swift test && swift run AppleGatewaySmokeTests && swiftlint'` passed (272 tests; one operator-owned live EventKit test skipped; smoke tests; SwiftLint 0). Commits: `b247b75db045502957c0b0e9d897237fbc666d13`, `b92d4391a19789b270164837abd56dfe08293b77`, `3d06fecc08fac385fcfef7f6281b75163880a001`, `19a9b88c5d8067cdc47ed53e1bf3564761b902cf`, `fd34e08c0254eaef94845a4fb0743ab129d80004`, `d3a2a3c65b9eac3c5922fb78a712ad944288438f`, `1091cfae03396913a08cd81958bea07210781bc2`. |
 | 5 | complete | `CLI/CommandSDKSubcommands.swift`; isolated HOME/config tests cover search, referenced types, operation parity, selections, inline/file variables, unknown operation, config, and help. Verification: `arch -arm64 /bin/zsh -lc 'swift build && swift test && swift run AppleGatewaySmokeTests && swiftlint'` passed (269 tests; one operator-owned live EventKit test skipped; smoke tests; SwiftLint 0). Commits: `b247b75db045502957c0b0e9d897237fbc666d13`, `b92d4391a19789b270164837abd56dfe08293b77`, `19a9b88c5d8067cdc47ed53e1bf3564761b902cf`, `fd34e08c0254eaef94845a4fb0743ab129d80004`. |
 | 6 | complete | `README.md`, accepted design, and plan documentation updated. Verification: `git diff --check` passed. Commits: `b247b75db045502957c0b0e9d897237fbc666d13`, `b92d4391a19789b270164837abd56dfe08293b77`. |
-| 7 | complete | Final verification: `arch -arm64 /bin/zsh -lc 'swift build && swift test && swift run AppleGatewaySmokeTests && swiftlint'` passed: build, 271 tests (one operator-owned live EventKit test skipped), smoke tests, SwiftLint 0. `git diff --check` passed. Resulting implementation commit: `d3a2a3c65b9eac3c5922fb78a712ad944288438f`. |
+| 7 | complete | Final verification: `arch -arm64 /bin/zsh -lc 'swift build && swift test && swift run AppleGatewaySmokeTests && swiftlint'` passed: build, 272 tests (one operator-owned live EventKit test skipped), smoke tests, SwiftLint 0. `git diff --check` passed. Resulting implementation commit: `1091cfae03396913a08cd81958bea07210781bc2`. |
 
 ## Implementation record (2026-09-04)
 
@@ -76,7 +76,8 @@ Implementation status (2026-09-04):
   `Sources/AppleGatewayCore/GraphQLRuntime/SchemaRegistry.swift`,
   `Sources/AppleGatewayCore/GraphQLRuntime/GraphQLServiceComposition.swift`,
   `Sources/AppleGatewayCore/SDK/AppleSchemaCatalogExporter.swift`,
-  `Sources/AppleGatewayCore/SDK/AppleGatewaySDK.swift`, and focused SDK tests.
+  `Sources/AppleGatewayCore/SDK/AppleGatewaySDK.swift`,
+  `Sources/AppleGatewayCore/Permissions/PermissionsProvider.swift`, and focused SDK tests.
 - Initial verification passed:
   `arch -arm64 /bin/zsh -lc 'swift build && swift test && swift run AppleGatewaySmokeTests && swiftlint'`.
   Swift test reported 261 passing tests (one operator-owned live integration test skipped);
@@ -86,14 +87,15 @@ Implementation status (2026-09-04):
   propagation, restored Notes page-size capping, rejected unsafe doubles before `Int`
   conversion, and added direct CLI variables and referenced-type search coverage. The latest
   self-review found and corrected SDK environment isolation gaps: SDK execution rejects
-  missing HOME and excludes account-derived Notification Center paths. The final arm64 gate
-  passed with 271 tests (one operator-owned live integration test skipped), smoke tests, and
-  0 SwiftLint violations in `d3a2a3c65b9eac3c5922fb78a712ad944288438f`.
+  missing HOME, excludes account-derived Notification Center paths, and constructs its default
+  permissions provider per execution from the supplied environment. The final arm64 gate
+  passed with 272 tests (one operator-owned live integration test skipped), smoke tests, and
+  0 SwiftLint violations in `1091cfae03396913a08cd81958bea07210781bc2`.
 - Design-aligned residual risk: the local `GatewaySDKKit` dependency remains read-only
   until its URL-pinned publication. SDK tests cover the public permission route, role
   boundaries, config envelopes, catalog export, search, and built operation flow. The
   corrective coverage also exercises calendar, Notes, and mutation injection seams.
-- Resulting implementation commit: `d3a2a3c65b9eac3c5922fb78a712ad944288438f`; this plan records exact task evidence locally.
+- Resulting implementation commit: `1091cfae03396913a08cd81958bea07210781bc2`; this plan records exact task evidence locally.
 
 ## Task 1 — Dependency + registry seams
 
