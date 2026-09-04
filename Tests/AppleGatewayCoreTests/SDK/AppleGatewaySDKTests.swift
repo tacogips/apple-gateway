@@ -285,10 +285,19 @@ private final class SDKNotesServicesFactoryProbe: @unchecked Sendable {
     let limits: AppleGatewayConfig.Limits
   }
 
-  private(set) var calls: [Call] = []
+  private let lock = NSLock()
+  private var recordedCalls: [Call] = []
+
+  var calls: [Call] {
+    lock.lock()
+    defer { lock.unlock() }
+    return recordedCalls
+  }
 
   func makeServices(config: AppleGatewayConfig, environment: [String: String]) -> NotesServices {
-    calls.append(Call(environment: environment, limits: config.limits))
+    lock.lock()
+    recordedCalls.append(Call(environment: environment, limits: config.limits))
+    lock.unlock()
     return NotesServices(
       readService: NotesServiceFactory.unavailableReadService(),
       writeService: NotesServiceFactory.unavailableWriteService(),
