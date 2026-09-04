@@ -125,7 +125,13 @@ private extension GatewayJSONValue {
     case .string(let text), .enumCase(let text): self = .string(text)
     case .bool(let flag): self = .bool(flag)
     case .null: self = .null
-    case .list(let values): self = .array(values.compactMap(GatewayJSONValue.init))
+    case .list(let values):
+      var converted: [GatewayJSONValue] = []
+      for value in values {
+        guard let value = GatewayJSONValue(value) else { return nil }
+        converted.append(value)
+      }
+      self = .array(converted)
     case .object(let values):
       var converted: [String: GatewayJSONValue] = [:]
       for (key, item) in values {

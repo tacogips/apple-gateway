@@ -29,6 +29,13 @@ same GraphQL runtime as the CLI. The package currently uses the local
 is published.
 
 ```swift
+dependencies: [
+  .package(path: "../../gateway-sdk-kit")
+]
+// Target dependency: .product(name: "GatewaySDKKit", package: "gateway-sdk-kit")
+```
+
+```swift
 import AppleGatewayCore
 import GatewaySDKKit
 
@@ -36,7 +43,11 @@ let sdk = AppleGatewaySDK()
 let catalog = sdk.catalog
 let matches = try sdk.searchSchema("reminder")
 let events = await sdk.invoke(
-  GatewayOperationRequest(operation: "events", variables: ["input": .object([:])])
+  GatewayOperationRequest(operation: "events", variables: ["input": .object([
+    "startDate": .string("2026-01-01T00:00:00Z"),
+    "endDate": .string("2026-01-01T01:00:00Z")
+  ])]),
+  environment: ["HOME": "/tmp"]
 )
 let raw = await sdk.execute(
   document: "{ permissions { calendars } }",
@@ -54,8 +65,14 @@ interpolating GraphQL strings:
 
 ```bash
 apple-gateway schema search reminder --kinds query,mutation --limit 10
-apple-gateway graphql operation events --variables '{"input":{"first":10}}'
+apple-gateway graphql operation events --variables '{"input":{"startDate":"2026-01-01T00:00:00Z","endDate":"2026-01-01T01:00:00Z","first":10}}'
 apple-gateway graphql operation permissions --select calendars,reminders
+```
+
+`schema search reminder` returns catalog definitions as JSON, for example:
+
+```json
+[{"kind":"query","name":"reminders","tier":"reader"}]
 ```
 
 ## Homebrew Formula

@@ -62,12 +62,12 @@ Implementation status (2026-09-04):
 | Task | Status | Evidence |
 | --- | --- | --- |
 | 1 | complete | `Package.swift`; `SchemaRegistry.swift`; arm64 `swift build` passed. |
-| 2 | complete | `SDK/AppleSchemaCatalogExporter.swift`; catalog validation and role/root parity tests passed. |
+| 2 | complete | `SDK/AppleSchemaCatalogExporter.swift`; validation, bidirectional structural SDL parity, requiredness, and role tests passed in the corrective arm64 full gate. |
 | 3 | complete | `GraphQLServiceComposition.swift`; CLI raw GraphQL routes through shared composition; full gate passed. |
-| 4 | complete | `SDK/AppleGatewaySDK.swift`; named/raw, reader mutation, and config-envelope tests passed. |
-| 5 | complete | `CLI/CommandSDKSubcommands.swift`; search, builder operation, error, role, and help tests passed. |
+| 4 | complete | `SDK/AppleGatewaySDK.swift`; calendar, events, reminder, Notes injection, reader, normalized CLI, config, and config-sensitive default-Notes tests passed in the corrective arm64 full gate. |
+| 5 | complete | `CLI/CommandSDKSubcommands.swift`; search/filter/pretty, operation/raw parity, selection, unknown-operation, config, and help tests passed in the corrective arm64 full gate. |
 | 6 | complete | `README.md`, accepted design, and this plan updated. |
-| 7 | complete | Arm64 full gate passed: build, 261 tests, smoke tests, and SwiftLint (0 violations). |
+| 7 | complete | Corrective arm64 full gate passed: build, 265 tests (one operator-owned live integration test skipped), smoke tests, and SwiftLint (0 violations). |
 
 ## Implementation record (2026-09-04)
 
@@ -77,15 +77,17 @@ Implementation status (2026-09-04):
   `Sources/AppleGatewayCore/GraphQLRuntime/GraphQLServiceComposition.swift`,
   `Sources/AppleGatewayCore/SDK/AppleSchemaCatalogExporter.swift`,
   `Sources/AppleGatewayCore/SDK/AppleGatewaySDK.swift`, and focused SDK tests.
-- Verification passed:
+- Initial verification passed:
   `arch -arm64 /bin/zsh -lc 'swift build && swift test && swift run AppleGatewaySmokeTests && swiftlint'`.
   Swift test reported 261 passing tests (one operator-owned live integration test skipped);
-  smoke tests passed; SwiftLint reported 0 violations.
+  smoke tests passed; SwiftLint reported 0 violations. A self-review then required expanded
+  exporter, SDK, CLI, and documentation coverage. The corrective arm64 gate passed with
+  265 tests (one operator-owned live integration test skipped), smoke tests, and 0
+  SwiftLint violations.
 - Design-aligned residual risk: the local `GatewaySDKKit` dependency remains read-only
   until its URL-pinned publication. SDK tests cover the public permission route, role
-  boundaries, config envelopes, catalog export, search, and built operation flow;
-  the established domain-runtime suite continues to cover calendar, Notes, and mutation
-  injection seams.
+  boundaries, config envelopes, catalog export, search, and built operation flow. The
+  corrective coverage also exercises calendar, Notes, and mutation injection seams.
 - Resulting commit: final handoff commit; its exact hash is recorded in workflow output.
 
 ## Task 1 — Dependency + registry seams
