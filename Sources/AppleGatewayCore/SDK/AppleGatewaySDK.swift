@@ -8,7 +8,7 @@ public struct AppleGatewaySDK: GatewaySDK {
   public let catalog: GatewaySchemaCatalog
 
   private let role: AppleGatewayRole
-  private let permissionsProvider: any PermissionsProviding
+  private let permissionsProvider: (any PermissionsProviding)?
   private let calendarReadService: CalendarReadService?
   private let calendarWriteService: CalendarWriteService?
   private let notesReadService: NotesReadService?
@@ -21,7 +21,7 @@ public struct AppleGatewaySDK: GatewaySDK {
 
   public init(
     role: AppleGatewayRole = .full,
-    permissionsProvider: any PermissionsProviding = LivePermissionsProvider(),
+    permissionsProvider: (any PermissionsProviding)? = nil,
     responsibleProcessDetector: any ResponsibleProcessDetecting = DefaultResponsibleProcessDetector(),
     fileMaterializer: (any FileStoreMaterializing)? = nil,
     calendarReadService: CalendarReadService? = nil,
@@ -109,7 +109,10 @@ public struct AppleGatewaySDK: GatewaySDK {
       role: role,
       environment: environment,
       isEnvironmentIsolated: true,
-      permissionsProvider: permissionsProvider,
+      permissionsProvider: permissionsProvider ?? LivePermissionsProvider(
+        environment: environment,
+        includeDarwinUserDirectory: false
+      ),
       calendarReadService: calendarReadService
         ?? calendarServices?.readService
         ?? CalendarReminderServiceFactory.liveReadService(),

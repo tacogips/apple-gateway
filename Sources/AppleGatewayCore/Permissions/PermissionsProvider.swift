@@ -121,8 +121,14 @@ public struct PermissionsService<Probe: PermissionStatusProbe, Requester: Permis
 public struct LivePermissionsProvider: PermissionsProviding {
   private let service: PermissionsService<LivePermissionProbe, LivePermissionRequester>
 
-  public init() {
-    let probe = LivePermissionProbe()
+  public init(
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    includeDarwinUserDirectory: Bool = true
+  ) {
+    let probe = LivePermissionProbe(
+      environment: environment,
+      includeDarwinUserDirectory: includeDarwinUserDirectory
+    )
     service = PermissionsService(probe: probe, requester: LivePermissionRequester(probe: probe))
   }
 
@@ -136,7 +142,19 @@ public struct LivePermissionsProvider: PermissionsProviding {
 }
 
 public struct LivePermissionProbe: PermissionStatusProbe {
-  public init() {}
+  private let homeDirectory: URL
+  private let darwinUserDirectory: String?
+
+  public init(
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    includeDarwinUserDirectory: Bool = true
+  ) {
+    let homePath = environment["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
+    homeDirectory = URL(fileURLWithPath: homePath, isDirectory: true)
+    darwinUserDirectory = includeDarwinUserDirectory
+      ? UsernotedDatabasePathResolver.defaultDarwinUserDirectory(environment: environment)
+      : nil
+  }
 
   public func calendarStatus() -> PermissionFieldStatus {
     eventKitStatus(entity: .event)
@@ -156,7 +174,7 @@ public struct LivePermissionProbe: PermissionStatusProbe {
 
   public func mailFullDiskAccessStatus(config: AppleGatewayConfig) -> PermissionFieldStatus {
     do {
-      let paths = try MailRootResolver().resolve(config: config)
+      let paths = try MailRootResolver(homeDirectory: homeDirectory).resolve(config: config)
       return readOnlyFileStatus(
         path: paths.envelopeIndex.path,
         unavailableReason: "Mail Full Disk Access probe file is unavailable"
@@ -172,7 +190,10 @@ public struct LivePermissionProbe: PermissionStatusProbe {
   }
 
   public func notificationDbFullDiskAccessStatus() -> PermissionFieldStatus {
-    let candidates = UsernotedDatabasePathResolver().candidatePaths()
+    let candidates = UsernotedDatabasePathResolver(
+      homeDirectory: homeDirectory.path,
+      darwinUserDirectory: darwinUserDirectory
+    ).candidatePaths()
     var deniedPath: String?
     for candidate in candidates {
       switch LiveUsernotedDatabaseAccessChecker().accessStatus(path: candidate) {

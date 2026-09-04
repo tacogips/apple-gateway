@@ -195,6 +195,40 @@ import Testing
   #expect(!envelope.rawOutput.contains(ambientDarwinDirectory.replacingOccurrences(of: "/", with: "\\/")))
 }
 
+@Test func sdkDefaultPermissionsProviderUsesSuppliedHomeAndExcludesAmbientDarwinDirectory() async throws {
+  let home = try SDKTestHome()
+  defer { home.remove() }
+  let mailData = home.url
+    .appendingPathComponent("Library/Mail/V11/MailData", isDirectory: true)
+  try FileManager.default.createDirectory(at: mailData, withIntermediateDirectories: true)
+  try Data("probe".utf8).write(to: mailData.appendingPathComponent("Envelope Index"))
+  let notificationDatabase = home.url
+    .appendingPathComponent("Library/Group Containers/group.com.apple.usernoted/db2", isDirectory: true)
+  try FileManager.default.createDirectory(at: notificationDatabase, withIntermediateDirectories: true)
+  try Data().write(to: notificationDatabase.appendingPathComponent("db"))
+
+  let ambientHome = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
+  let ambientDarwinDirectory = try #require(UsernotedDatabasePathResolver.defaultDarwinUserDirectory())
+  #expect(home.url.path != ambientHome)
+  #expect(home.url.path != ambientDarwinDirectory)
+  let environment = home.environment([
+    "APPLE_GATEWAY_DOMAINS_CALENDAR": "false",
+    "APPLE_GATEWAY_DOMAINS_REMINDERS": "false",
+    "APPLE_GATEWAY_DOMAINS_CLOCK_ALARMS": "false",
+    "APPLE_GATEWAY_DOMAINS_NOTES": "false",
+    "APPLE_GATEWAY_DOMAINS_PHONE_CALLS": "false"
+  ])
+  let envelope = await AppleGatewaySDK().execute(
+    document: "{ permissions { mailFullDiskAccess notificationDbFullDiskAccess } }",
+    variables: [:],
+    environment: environment
+  )
+
+  #expect(envelope.errors.isEmpty)
+  #expect(envelope.rawOutput.contains(#""mailFullDiskAccess":"GRANTED""#))
+  #expect(envelope.rawOutput.contains(#""notificationDbFullDiskAccess":"GRANTED""#))
+}
+
 @Test func sdkRawExecutionRejectsUnsafeDoubleVariables() async throws {
   let home = try SDKTestHome()
   defer { home.remove() }
