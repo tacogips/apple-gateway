@@ -77,7 +77,8 @@ Implementation status (2026-09-04):
   `Sources/AppleGatewayCore/GraphQLRuntime/GraphQLServiceComposition.swift`,
   `Sources/AppleGatewayCore/SDK/AppleSchemaCatalogExporter.swift`,
   `Sources/AppleGatewayCore/SDK/AppleGatewaySDK.swift`,
-  `Sources/AppleGatewayCore/Permissions/PermissionsProvider.swift`, and focused SDK tests.
+  `Sources/AppleGatewayCore/Permissions/PermissionsProvider.swift`,
+  `Tests/AppleGatewayCoreTests/NotesReadServiceTests.swift`, and focused SDK tests.
 - Initial verification passed:
   `arch -arm64 /bin/zsh -lc 'swift build && swift test && swift run AppleGatewaySmokeTests && swiftlint'`.
   Swift test reported 261 passing tests (one operator-owned live integration test skipped);
@@ -92,8 +93,9 @@ Implementation status (2026-09-04):
   initializer signature remains nonoptional and defaulted. A deterministic SDK Notes-factory
   probe now verifies that each execution supplies its own environment and resolved limits;
   configured page-size overages remain capped, as the two-note direct regression proves with
-  one returned edge, totalCount 2, a next page, and a deterministic first note. The named facade tests decode calendars,
-  events, createReminder, and Notes response data while asserting the full event window and
+  one returned edge, totalCount 2, a next page, and a deterministic first note. The named
+  facade tests decode calendars, events, createReminder, and Notes response data while
+  asserting the full event window and
   `first: 1` pagination effect. The final arm64 gate passed with 273 tests (one operator-owned
   live integration test skipped), smoke tests, and 0 SwiftLint violations in
   `83a4556311f14479e9a8d01a7865cc131f54df9f`.
