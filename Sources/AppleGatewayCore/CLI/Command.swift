@@ -345,6 +345,7 @@ public struct AppleGatewayCommand: Sendable {
     GraphQLServiceComposition(
       role: role,
       environment: environment,
+      isEnvironmentIsolated: false,
       permissionsProvider: permissionsProvider,
       calendarReadService: calendarReadService,
       calendarWriteService: calendarWriteService,

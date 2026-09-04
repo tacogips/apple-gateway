@@ -15,9 +15,14 @@ enum NotificationsServiceFactory {
 
   static func liveService(
     config: AppleGatewayConfig,
-    environment: [String: String] = ProcessInfo.processInfo.environment
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    includeDarwinUserDirectory: Bool = true
   ) -> any NotificationsProviding {
-    LiveNotificationsAdapter(config: config, environment: environment)
+    LiveNotificationsAdapter(
+      config: config,
+      environment: environment,
+      includeDarwinUserDirectory: includeDarwinUserDirectory
+    )
   }
 }
 

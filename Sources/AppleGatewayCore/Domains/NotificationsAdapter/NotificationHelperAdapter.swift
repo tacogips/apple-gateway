@@ -211,6 +211,7 @@ public struct OsascriptNotificationFallback: NotificationFallbackPosting {
 public struct LiveNotificationsAdapter: NotificationsProviding {
   private let config: AppleGatewayConfig
   private let environment: [String: String]
+  private let includeDarwinUserDirectory: Bool
   private let resolver: NotificationHelperResolver
   private let helperExecutor: NotificationHelperExecuting
   private let fallbackPoster: NotificationFallbackPosting
@@ -218,12 +219,14 @@ public struct LiveNotificationsAdapter: NotificationsProviding {
   public init(
     config: AppleGatewayConfig,
     environment: [String: String] = ProcessInfo.processInfo.environment,
+    includeDarwinUserDirectory: Bool = true,
     resolver: NotificationHelperResolver? = nil,
     helperExecutor: (any NotificationHelperExecuting)? = nil,
     fallbackPoster: (any NotificationFallbackPosting)? = nil
   ) {
     self.config = config
     self.environment = environment
+    self.includeDarwinUserDirectory = includeDarwinUserDirectory
     let homeDirectory = environment["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
     self.resolver = resolver ?? NotificationHelperResolver(homeDirectory: homeDirectory)
     self.helperExecutor = helperExecutor ?? SubprocessNotificationHelperExecutor(
@@ -241,7 +244,11 @@ public struct LiveNotificationsAdapter: NotificationsProviding {
     case .gatewayHelper:
       return try gatewayConnection(input: input)
     case .systemDb:
-      let database = try UsernotedNotificationStore(config: config, environment: environment).openDatabase()
+      let database = try UsernotedNotificationStore(
+        config: config,
+        environment: environment,
+        includeDarwinUserDirectory: includeDarwinUserDirectory
+      ).openDatabase()
       defer {
         database.close()
       }

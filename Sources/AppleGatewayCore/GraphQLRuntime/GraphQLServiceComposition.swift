@@ -4,6 +4,7 @@ import Foundation
 struct GraphQLServiceComposition: Sendable {
   let role: AppleGatewayRole
   let environment: [String: String]
+  let isEnvironmentIsolated: Bool
   let permissionsProvider: any PermissionsProviding
   let calendarReadService: CalendarReadService
   let calendarWriteService: CalendarWriteService
@@ -33,7 +34,11 @@ struct GraphQLServiceComposition: Sendable {
       notesWriteService: notesWriteService,
       mailReadService: mailReadService ?? MailServiceFactory.liveReadService(config: config, environment: environment),
       mailWriteService: mailWriteService ?? MailServiceFactory.liveWriteService(config: config, environment: environment),
-      notificationsService: notificationsService ?? NotificationsServiceFactory.liveService(config: config, environment: environment),
+      notificationsService: notificationsService ?? NotificationsServiceFactory.liveService(
+        config: config,
+        environment: environment,
+        includeDarwinUserDirectory: !isEnvironmentIsolated
+      ),
       clockAlarmsService: clockAlarmsService ?? ClockAlarmsServiceFactory.liveService(config: config, environment: environment),
       phoneCallsService: phoneCallsService ?? PhoneCallsServiceFactory.liveService(config: config, environment: environment),
       pretty: pretty

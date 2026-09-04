@@ -109,14 +109,17 @@ struct UsernotedNotificationStore: Sendable {
 
   init(
     config: AppleGatewayConfig,
-    environment: [String: String] = ProcessInfo.processInfo.environment
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    includeDarwinUserDirectory: Bool = true
   ) {
     let homeDirectory = environment["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
     let fileStore = FileStore(cacheRoot: config.storage.cacheDir.expandingTildeInUsernotedPath(homeDirectory: homeDirectory))
     self.init(
       pathResolver: UsernotedDatabasePathResolver(
         homeDirectory: homeDirectory,
-        darwinUserDirectory: UsernotedDatabasePathResolver.defaultDarwinUserDirectory(environment: environment)
+        darwinUserDirectory: includeDarwinUserDirectory
+          ? UsernotedDatabasePathResolver.defaultDarwinUserDirectory(environment: environment)
+          : nil
       ),
       snapshotter: FileStoreUsernotedSnapshotter(fileStore: fileStore)
     )

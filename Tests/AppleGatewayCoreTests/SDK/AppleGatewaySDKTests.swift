@@ -164,6 +164,37 @@ import Testing
   #expect(!envelope.rawOutput.contains(ambientHome.replacingOccurrences(of: "/", with: "\\/")))
 }
 
+@Test func sdkFailsClosedWhenSuppliedEnvironmentOmitsHome() async throws {
+  let ambientHome = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
+  let sdk = AppleGatewaySDK(permissionsProvider: SDKPermissionsProvider())
+  let envelope = await sdk.execute(
+    document: "{ permissions { calendars } }",
+    variables: [:],
+    environment: [:]
+  )
+
+  #expect(envelope.errors.first?.code == "CONFIG_INVALID")
+  #expect(envelope.errors.first?.message == "Invalid environment override HOME: A non-empty HOME is required for SDK execution")
+  #expect(!envelope.rawOutput.contains(ambientHome.replacingOccurrences(of: "/", with: "\\/")))
+}
+
+@Test func sdkNotificationDatabaseLookupExcludesAmbientDarwinDirectory() async throws {
+  let home = try SDKTestHome()
+  defer { home.remove() }
+  let ambientDarwinDirectory = try #require(UsernotedDatabasePathResolver.defaultDarwinUserDirectory())
+  #expect(ambientDarwinDirectory != home.url.path)
+  let sdk = AppleGatewaySDK(permissionsProvider: SDKPermissionsProvider())
+  let envelope = await sdk.execute(
+    document: "{ notifications(input: { source: SYSTEM_DB }) { totalCount } }",
+    variables: [:],
+    environment: home.environment()
+  )
+
+  #expect(envelope.errors.first?.code == "NOTIFICATION_DB_UNAVAILABLE")
+  #expect(envelope.rawOutput.contains(home.url.path.replacingOccurrences(of: "/", with: "\\/")))
+  #expect(!envelope.rawOutput.contains(ambientDarwinDirectory.replacingOccurrences(of: "/", with: "\\/")))
+}
+
 @Test func sdkRawExecutionRejectsUnsafeDoubleVariables() async throws {
   let home = try SDKTestHome()
   defer { home.remove() }

@@ -56,6 +56,12 @@ public struct AppleGatewaySDK: GatewaySDK {
     variables: [String: GatewayJSONValue],
     environment: [String: String]
   ) async -> GatewayEnvelope {
+    guard environment["HOME"]?.isEmpty == false else {
+      return configEnvelope(.environment(
+        name: "HOME",
+        message: "A non-empty HOME is required for SDK execution"
+      ))
+    }
     let config: AppleGatewayConfig
     do {
       config = try AppleGatewayConfigResolver().resolve(
@@ -102,6 +108,7 @@ public struct AppleGatewaySDK: GatewaySDK {
     return GraphQLServiceComposition(
       role: role,
       environment: environment,
+      isEnvironmentIsolated: true,
       permissionsProvider: permissionsProvider,
       calendarReadService: calendarReadService
         ?? calendarServices?.readService
