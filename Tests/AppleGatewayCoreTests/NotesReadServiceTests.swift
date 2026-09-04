@@ -591,7 +591,10 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
 
 @Test func notesReadServiceCapsPageSizeAtConfiguredMaximum() throws {
   let provider = NotesTestProvider()
-  provider.notes = [note(id: "capped", folderId: "inbox", name: "Capped", modified: 1)]
+  provider.notes = [
+    note(id: "first", folderId: "inbox", name: "First", modified: 2),
+    note(id: "second", folderId: "inbox", name: "Second", modified: 1)
+  ]
   let service = NotesReadService(
     provider: provider,
     limits: notesTestLimits(defaultPageSize: 1, maxPageSize: 1)
@@ -599,6 +602,9 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
 
   let result = try service.notes(input: NoteSearchInput(first: 2))
   #expect(result.edges.count == 1)
+  #expect(result.edges.map(\.node.id) == ["first"])
+  #expect(result.totalCount == 2)
+  #expect(result.pageInfo.hasNextPage)
 }
 
 @Test func notesReadServiceRejectsUnknownScopeBeforeEnumeration() throws {
