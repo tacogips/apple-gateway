@@ -8,7 +8,7 @@ public struct AppleGatewaySDK: GatewaySDK {
   public let catalog: GatewaySchemaCatalog
 
   private let role: AppleGatewayRole
-  private let permissionsProvider: (any PermissionsProviding)?
+  private let permissionsProvider: any PermissionsProviding
   private let calendarReadService: CalendarReadService?
   private let calendarWriteService: CalendarWriteService?
   private let notesReadService: NotesReadService?
@@ -21,7 +21,7 @@ public struct AppleGatewaySDK: GatewaySDK {
 
   public init(
     role: AppleGatewayRole = .full,
-    permissionsProvider: (any PermissionsProviding)? = nil,
+    permissionsProvider: any PermissionsProviding = LivePermissionsProvider(),
     responsibleProcessDetector: any ResponsibleProcessDetecting = DefaultResponsibleProcessDetector(),
     fileMaterializer: (any FileStoreMaterializing)? = nil,
     calendarReadService: CalendarReadService? = nil,
@@ -109,10 +109,7 @@ public struct AppleGatewaySDK: GatewaySDK {
       role: role,
       environment: environment,
       isEnvironmentIsolated: true,
-      permissionsProvider: permissionsProvider ?? LivePermissionsProvider(
-        environment: environment,
-        includeDarwinUserDirectory: false
-      ),
+      permissionsProvider: resolvedPermissionsProvider(environment: environment),
       calendarReadService: calendarReadService
         ?? calendarServices?.readService
         ?? CalendarReminderServiceFactory.liveReadService(),
@@ -131,6 +128,14 @@ public struct AppleGatewaySDK: GatewaySDK {
       clockAlarmsService: clockAlarmsService,
       phoneCallsService: phoneCallsService
     )
+  }
+
+  private func resolvedPermissionsProvider(environment: [String: String]) -> any PermissionsProviding {
+    guard let liveProvider = permissionsProvider as? LivePermissionsProvider,
+          liveProvider.usesAmbientEnvironment else {
+      return permissionsProvider
+    }
+    return LivePermissionsProvider(environment: environment, includeDarwinUserDirectory: false)
   }
 
   private func configEnvelope(_ error: AppleGatewayConfigError) -> GatewayEnvelope {

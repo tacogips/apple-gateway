@@ -119,25 +119,37 @@ public struct PermissionsService<Probe: PermissionStatusProbe, Requester: Permis
 }
 
 public struct LivePermissionsProvider: PermissionsProviding {
-  private let service: PermissionsService<LivePermissionProbe, LivePermissionRequester>
+  private let environment: [String: String]?
+  private let includeDarwinUserDirectory: Bool
 
-  public init(
-    environment: [String: String] = ProcessInfo.processInfo.environment,
-    includeDarwinUserDirectory: Bool = true
-  ) {
+  public init() {
+    environment = nil
+    includeDarwinUserDirectory = true
+  }
+
+  public init(environment: [String: String], includeDarwinUserDirectory: Bool = true) {
+    self.environment = environment
+    self.includeDarwinUserDirectory = includeDarwinUserDirectory
+  }
+
+  var usesAmbientEnvironment: Bool {
+    environment == nil
+  }
+
+  private func service() -> PermissionsService<LivePermissionProbe, LivePermissionRequester> {
     let probe = LivePermissionProbe(
-      environment: environment,
+      environment: environment ?? ProcessInfo.processInfo.environment,
       includeDarwinUserDirectory: includeDarwinUserDirectory
     )
-    service = PermissionsService(probe: probe, requester: LivePermissionRequester(probe: probe))
+    return PermissionsService(probe: probe, requester: LivePermissionRequester(probe: probe))
   }
 
   public func status(config: AppleGatewayConfig) -> PermissionsStatus {
-    service.status(config: config)
+    service().status(config: config)
   }
 
   public func request(domain: PermissionRequestDomain, config: AppleGatewayConfig) -> PermissionRequestResult {
-    service.request(domain: domain, config: config)
+    service().request(domain: domain, config: config)
   }
 }
 
