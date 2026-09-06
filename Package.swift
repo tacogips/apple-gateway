@@ -24,8 +24,7 @@ let package = Package(
     .executable(name: "AppleGatewaySmokeTests", targets: ["AppleGatewaySmokeTests"])
   ],
   dependencies: [
-    // The operator switches this path dependency to a URL pin when the kit is published.
-    .package(path: "../../gateway-sdk-kit")
+    .package(url: "https://github.com/tacogips/gateway-sdk-kit.git", exact: "0.1.0")
   ],
   targets: [
     .target(

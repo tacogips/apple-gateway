@@ -129,7 +129,7 @@ Files: `Package.swift`, `Sources/AppleGatewayCore/GraphQLRuntime/SchemaRegistry.
 1. `Package.swift`: add
    ```swift
    // The operator switches this path dependency to a URL pin when the kit is published.
-   .package(path: "../../gateway-sdk-kit")
+   .package(url: "https://github.com/tacogips/gateway-sdk-kit.git", exact: "0.1.0")
    ```
    under `dependencies:`, and `.product(name: "GatewaySDKKit", package: "gateway-sdk-kit")`
    to the `AppleGatewayCore` target's dependencies.

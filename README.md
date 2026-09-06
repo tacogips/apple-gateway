@@ -24,13 +24,12 @@ The package uses Swift Package Manager with:
 ## Client SDK (AppleGatewaySDK)
 
 `AppleGatewayCore` exposes `AppleGatewaySDK`, a Swift façade backed by the
-same GraphQL runtime as the CLI. The package currently uses the local
-`GatewaySDKKit` path dependency; operators switch it to a URL pin when the kit
-is published.
+same GraphQL runtime as the CLI. The package pins the public `GatewaySDKKit`
+release.
 
 ```swift
 dependencies: [
-  .package(path: "../../gateway-sdk-kit")
+  .package(url: "https://github.com/tacogips/gateway-sdk-kit.git", exact: "0.1.0")
 ]
 // Target dependency: .product(name: "GatewaySDKKit", package: "gateway-sdk-kit")
 ```
