@@ -5,7 +5,10 @@ import Testing
 @Test func notesJXATemplateBehaviorallyNormalizesAttachmentsAndSharedFallbacks() throws {
   let mockApplicationSource = """
   function mockProperty(value) {
-    return function() { return value; };
+    const property = function() { return value; };
+    // JXA object-specifier properties support invocation, but not Function.call.
+    property.call = function() { throw new Error("Can't convert types."); };
+    return property;
   }
   function unavailableProperty() {
     throw new Error('property unavailable');

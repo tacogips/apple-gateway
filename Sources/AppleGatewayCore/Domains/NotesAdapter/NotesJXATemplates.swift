@@ -159,7 +159,8 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
       if (property === null || property === undefined) {
         return null;
       }
-      return typeof property === 'function' ? property.call(object) : property;
+      // JXA object-specifier functions cannot be invoked through Function.call.
+      return typeof property === 'function' ? object[propertyName]() : property;
     } catch (error) {
       if (isNotesBridgeFailure(error)) {
         throw error;
