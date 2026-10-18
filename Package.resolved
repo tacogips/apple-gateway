@@ -1,13 +1,13 @@
 {
-  "originHash" : "9b10987fa8d4c68553ff95ab067536adb41fc94816682d1d4ec95302f87a2626",
+  "originHash" : "6c39a55b04f94f0a52f4904cee6421c8f4624fcc19aec427d5c422e8851a0db9",
   "pins" : [
     {
       "identity" : "gateway-sdk-kit",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tacogips/gateway-sdk-kit.git",
       "state" : {
-        "revision" : "4d4b56c686f6875defccb54f74e2276022eb524e",
-        "version" : "0.1.0"
+        "revision" : "b133fcaab52265dcd508df7e2c3f11a073d20d83",
+        "version" : "0.1.1"
       }
     }
   ],

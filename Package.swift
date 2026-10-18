@@ -24,7 +24,7 @@ let package = Package(
     .executable(name: "AppleGatewaySmokeTests", targets: ["AppleGatewaySmokeTests"])
   ],
   dependencies: [
-    .package(url: "https://github.com/tacogips/gateway-sdk-kit.git", exact: "0.1.0")
+    .package(url: "https://github.com/tacogips/gateway-sdk-kit.git", exact: "0.1.1")
   ],
   targets: [
     .target(
