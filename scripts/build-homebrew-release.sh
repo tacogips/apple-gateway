@@ -4,6 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 product="apple-gateway"
+products=("apple-gateway" "apple-gateway-reader" "AppleGatewayNotifier")
 artifact_name="apple-gateway"
 
 usage() {
@@ -155,7 +156,7 @@ swift_bin() {
 }
 
 swift_release_bin_path() {
-  local target swift_exe developer_dir sdkroot triple
+  local target swift_exe developer_dir sdkroot triple build_product
   target="$1"
   swift_exe="$(swift_bin)"
   developer_dir="${SWIFT_DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
@@ -164,8 +165,10 @@ swift_release_bin_path() {
 
   (
     cd "$repo_root"
-    DEVELOPER_DIR="$developer_dir" SDKROOT="$sdkroot" \
-      "$swift_exe" build -c release --product "$product" --triple "$triple" >/dev/null
+    for build_product in "${products[@]}"; do
+      DEVELOPER_DIR="$developer_dir" SDKROOT="$sdkroot" \
+        "$swift_exe" build -c release --product "$build_product" --triple "$triple" >/dev/null
+    done
     DEVELOPER_DIR="$developer_dir" SDKROOT="$sdkroot" \
       "$swift_exe" build -c release --product "$product" --triple "$triple" --show-bin-path
   )
@@ -185,11 +188,13 @@ print_plan() {
   assert_child_path "$release_dir" "$archive"
 
   printf 'Swift Homebrew archive plan\n'
-  printf '  product: %s\n' "$product"
+  printf '  products: %s\n' "${products[*]}"
   printf '  target: %s\n' "$target"
   printf '  swift triple: %s\n' "$triple"
   printf '  release bin path command: swift build -c release --product %s --triple %s --show-bin-path\n' "$product" "$triple"
   printf '  staged binary: %s\n' "$binary"
+  printf '  staged reader: %s/bin/apple-gateway-reader\n' "$work_dir"
+  printf '  staged notifier: %s/libexec/AppleGatewayNotifier.app\n' "$work_dir"
   printf '  archive: %s\n' "$archive"
   printf '  checksum: %s.sha256\n' "$archive"
   printf '  publish side effects: false\n'
@@ -213,6 +218,12 @@ build_target() {
   bin_path="$(swift_release_bin_path "$target" | tail -n 1)"
   cp "$bin_path/$product" "$binary"
   chmod 0755 "$binary"
+  cp "$bin_path/apple-gateway-reader" "$work_dir/bin/apple-gateway-reader"
+  chmod 0755 "$work_dir/bin/apple-gateway-reader"
+  mkdir -p "$work_dir/libexec"
+  "$script_dir/build-notifier-app.sh" --configuration release \
+    --executable "$bin_path/AppleGatewayNotifier" \
+    --output "$work_dir/libexec/AppleGatewayNotifier.app"
   cp "$repo_root/README.md" "$work_dir/README.md"
 
   tar -C "$work_dir" -czf "$archive" .

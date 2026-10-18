@@ -56,7 +56,7 @@ main() {
   version="$1"
   output="${2:-$repo_root/Formula/$artifact_name.rb}"
   release_dir="${RELEASE_DIR:-$repo_root/dist/homebrew}"
-  release_base_url="${RELEASE_BASE_URL:-https://github.com/user/repo/releases/download/v$version}"
+  release_base_url="${RELEASE_BASE_URL:-https://github.com/tacogips/apple-gateway/releases/download/v$version}"
 
   local darwin_arm64_sha darwin_x64_sha
   darwin_arm64_sha="$(sha_for_target "$version" darwin-arm64 "$release_dir")"
@@ -64,10 +64,9 @@ main() {
 
   mkdir -p "$(dirname "$output")"
   cat > "$output" <<EOF
-class App < Formula
-  desc "A Swift command line tool"
-  homepage "https://github.com/user/repo"
-  version "$version"
+class AppleGateway < Formula
+  desc "macOS CLI and GraphQL bridge for Apple apps"
+  homepage "https://github.com/tacogips/apple-gateway"
   license "MIT"
 
   livecheck do
@@ -87,10 +86,14 @@ class App < Formula
 
   def install
     bin.install "bin/$product"
+    bin.install "bin/apple-gateway-reader"
+    libexec.install "libexec/AppleGatewayNotifier.app"
   end
 
   test do
     assert_match "$version", shell_output("#{bin}/$product --version")
+    assert_match "$version", shell_output("#{bin}/apple-gateway-reader --version")
+    assert_path_exists libexec/"AppleGatewayNotifier.app"
   end
 end
 EOF
