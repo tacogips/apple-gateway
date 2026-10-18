@@ -52,21 +52,24 @@ kinko exec --env APPLE_SIGNING_IDENTITY,APPLE_ID,APPLE_PASSWORD,APPLE_TEAM_ID --
   mise run build:homebrew-cask -- darwin-arm64 darwin-x64
 ```
 
+The full Cask contains the signed CLI, reader, and notifier helper. Its distinct
+`apple-gateway-full` asset name avoids confusing it with historical CLI-only DMGs.
+
 Expected outputs:
 
 ```text
-dist/homebrew-cask/apple-gateway-<version>-darwin-arm64.dmg
-dist/homebrew-cask/apple-gateway-<version>-darwin-x64.dmg
+dist/homebrew-cask/apple-gateway-full-<version>-darwin-arm64.dmg
+dist/homebrew-cask/apple-gateway-full-<version>-darwin-x64.dmg
 ```
 
 Validate:
 
 ```bash
 version="$(tr -d '[:space:]' < VERSION)"
-/Applications/Xcode.app/Contents/Developer/usr/bin/stapler validate "dist/homebrew-cask/apple-gateway-${version}-darwin-arm64.dmg"
-/Applications/Xcode.app/Contents/Developer/usr/bin/stapler validate "dist/homebrew-cask/apple-gateway-${version}-darwin-x64.dmg"
-spctl --assess --type open --context context:primary-signature --verbose=4 "dist/homebrew-cask/apple-gateway-${version}-darwin-arm64.dmg"
-spctl --assess --type open --context context:primary-signature --verbose=4 "dist/homebrew-cask/apple-gateway-${version}-darwin-x64.dmg"
+/Applications/Xcode.app/Contents/Developer/usr/bin/stapler validate "dist/homebrew-cask/apple-gateway-full-${version}-darwin-arm64.dmg"
+/Applications/Xcode.app/Contents/Developer/usr/bin/stapler validate "dist/homebrew-cask/apple-gateway-full-${version}-darwin-x64.dmg"
+spctl --assess --type open --context context:primary-signature --verbose=4 "dist/homebrew-cask/apple-gateway-full-${version}-darwin-arm64.dmg"
+spctl --assess --type open --context context:primary-signature --verbose=4 "dist/homebrew-cask/apple-gateway-full-${version}-darwin-x64.dmg"
 ```
 
 ## Tagged Release
@@ -79,7 +82,7 @@ kinko exec --env APPLE_SIGNING_IDENTITY,APPLE_ID,APPLE_PASSWORD,APPLE_TEAM_ID --
 ```
 
 The wrapper checks the local and remote tag, verifies `VERSION`, uploads both
-DMGs to `user/repo`, and renders
+DMGs to `tacogips/apple-gateway`, and renders
 `../homebrew-tap/Casks/apple-gateway.rb`.
 
 After reviewing the rendered tap Cask:
