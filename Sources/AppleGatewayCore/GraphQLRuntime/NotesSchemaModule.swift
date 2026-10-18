@@ -73,6 +73,11 @@ private enum NotesSchema {
         inputField("first", int()),
         inputField("after", string())
       ]),
+      input("CreateNoteFolderInput", fields: [
+        inputField("accountId", idRequired()),
+        inputField("parentFolderId", id()),
+        inputField("name", stringRequired())
+      ]),
       input("CreateNoteAttachmentInput", fields: [
         inputField("noteId", idRequired()),
         inputField("filePath", stringRequired())
@@ -143,6 +148,19 @@ private enum NotesSchema {
 
   static var mutationFields: [GraphQLFieldDefinition] {
     [
+      GraphQLFieldDefinition(
+        name: "createNoteFolder",
+        type: nonNull(named("NoteFolder")),
+        arguments: [argument("input", nonNull(named("CreateNoteFolderInput")))],
+        resolver: { arguments, context in
+          let input = try arguments.notesRequired("input").notesObjectDictionary()
+          return try noteFolderValue(context.notesWriteService.createNoteFolder(CreateNoteFolderInput(
+            accountId: input.notesRequired("accountId").notesStringValue(),
+            parentFolderId: input["parentFolderId"]?.notesNilIfNull?.notesStringValue(),
+            name: input.notesRequired("name").notesStringValue()
+          )))
+        }
+      ),
       GraphQLFieldDefinition(
         name: "createNoteAttachment",
         type: nonNull(named("NoteAttachment")),

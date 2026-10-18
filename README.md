@@ -334,3 +334,9 @@ Only the requested representation is fetched. Large bodies return a `bodyFile` d
 The full gateway supports `createNoteAttachment(input: {noteId, filePath}) { id name contentIdentifier downloadKey }`. The native Notes command copies source bytes into Notes storage and appends an attachment without replacing the note body. Supply an explicit canonical absolute path to a readable regular file, from 1 byte through 64 MiB, with no symlink components. The attachment keeps the source filename. Reader mode rejects this mutation.
 
 The returned download key uses the existing best-effort attachment export path. Verify exported bytes when archival integrity matters. The mutation is not idempotent: callers must persist the returned attachment ID and reconcile existing attachments before retrying after uncertain completion. An HTML `file://` image source is not a substitute for native import.
+
+### Notes folder creation and uncertain writes
+
+The full gateway supports `createNoteFolder(input: {accountId, parentFolderId, name}) { id name accountId parentFolderId }`. Omit `parentFolderId` for an account root. Account IDs are explicit; a parent must belong to that account. Names are normalized to NFC and must be a single nonempty name without separators, control characters, surrounding whitespace, or more than 255 UTF-8 bytes. A unique existing name under the exact parent is returned; ambiguous matches fail. Newly created folder identity is verified by readback. This reuse check is not an atomic concurrency lock.
+
+Notes, Mail and Clock mutations are never automatically repeated after an Apple Event timeout: the application may already have completed the write. Reconcile the current state before retrying an uncertain mutation. Read operations retain the configured timeout retry policy.

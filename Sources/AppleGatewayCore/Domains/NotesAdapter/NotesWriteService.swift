@@ -22,6 +22,39 @@ public struct NotesWriteService: Sendable {
     )
   }
 
+  public func createNoteFolder(_ input: CreateNoteFolderInput) throws -> NoteFolder {
+    let name = input.name.precomposedStringWithCanonicalMapping
+    guard !name.isEmpty, name != ".", name != "..", name == name.trimmingCharacters(in: .whitespacesAndNewlines),
+          name.utf8.count <= 255, !name.contains("/"), !name.contains(":"),
+          name.rangeOfCharacter(from: .controlCharacters) == nil else {
+      throw AppleGatewayError(code: .invalidArgument, message: "Notes folder name must be a nonempty single name without separators or control characters")
+    }
+    guard try provider.accounts().contains(where: { $0.id == input.accountId }) else {
+      throw AppleGatewayError(code: .invalidArgument, message: "Unknown Notes account id")
+    }
+    let folders = try provider.folders(accountId: input.accountId)
+    if let parent = input.parentFolderId {
+      guard folders.contains(where: { $0.id == parent && $0.accountId == input.accountId }) else {
+        throw AppleGatewayError(code: .noteFolderNotFound, message: "Notes parent folder does not belong to the requested account")
+      }
+    }
+    let matches = folders.filter {
+      $0.accountId == input.accountId && $0.parentFolderId == input.parentFolderId
+        && $0.name.precomposedStringWithCanonicalMapping == name
+    }
+    guard matches.count <= 1 else {
+      throw AppleGatewayError(code: .invalidArgument, message: "Notes folder identity is ambiguous under the requested parent")
+    }
+    if let existing = matches.first { return existing }
+    let folderId = try writer.createNoteFolder(.init(accountId: input.accountId, parentFolderId: input.parentFolderId, name: name))
+    let created = try provider.folders(accountId: input.accountId).filter { $0.id == folderId }
+    guard created.count == 1, let folder = created.first, folder.accountId == input.accountId,
+          folder.parentFolderId == input.parentFolderId, folder.name.precomposedStringWithCanonicalMapping == name else {
+      throw AppleGatewayError(code: .unexpectedError, message: "Created Notes folder did not match its requested account, parent and name")
+    }
+    return folder
+  }
+
   public func createNoteAttachment(_ input: CreateNoteAttachmentInput) throws -> NoteAttachment {
     _ = try existingNote(noteId: input.noteId)
     guard input.filePath.hasPrefix("/") else {

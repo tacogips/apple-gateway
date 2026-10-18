@@ -84,7 +84,7 @@ public struct JXAClockAlarmUIAutomationExecutor: ClockAlarmUIAutomationExecuting
     }
 
     do {
-      let data = try bridge.runJXA(script: ClockAlarmJXATemplate.source, argumentsJSON: requestJSON)
+      let data = try bridge.runJXA(script: ClockAlarmJXATemplate.source, argumentsJSON: requestJSON, retryTimeouts: request.operation == .list)
       return try decoder.decode(Response.self, from: data)
     } catch let error as AppleGatewayError {
       throw error

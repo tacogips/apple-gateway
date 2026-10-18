@@ -185,6 +185,58 @@ import Testing
   }
 }
 
+@Test func notesMutationsDoNotRepeatAfterUncertainTimeout() throws {
+  let operations: [(LiveNotesAppleEventAdapter) throws -> Void] = [
+    { _ = try $0.createNote(.init(accountId: "a", folderId: "f", title: "n", bodyHtml: "body")) },
+    { _ = try $0.createNoteFolder(.init(accountId: "a", name: "folder")) },
+    { _ = try $0.createNoteAttachment(.init(noteId: "n", filePath: "/fixture.png")) },
+    { _ = try $0.replaceNoteBody(.init(noteId: "n", bodyHtml: "body")) },
+    { _ = try $0.deleteNote(noteId: "n") },
+    { _ = try $0.moveNote(.init(noteId: "n", accountId: "a", folderId: "f")) }
+  ]
+  for operation in operations {
+    let fixture = try StubOsascriptFixture(mode: "timeout-once")
+    let bridge = AppleEventBridge(osascriptPath: fixture.executablePath, environment: fixture.environment)
+    #expect(throws: AppleEventBridgeError.self) { try operation(LiveNotesAppleEventAdapter(bridge: bridge)) }
+    #expect(try fixture.invocationCount() == 1)
+  }
+}
+
+@Test func mailMutationsDoNotRepeatAfterUncertainTimeout() throws {
+  let target = MailMessageTarget(messageId: "m", storeRowId: 1, rfcMessageId: nil, accountName: "a", mailboxPath: "Inbox")
+  let operations: [(LiveMailAppleEventWriter) throws -> Void] = [
+    { try $0.setRead(target: target, isRead: true) },
+    { try $0.setFlagged(target: target, isFlagged: true) },
+    { try $0.move(target: target, destination: .init(mailboxId: "f", accountName: "a", mailboxPath: "Archive")) },
+    { try $0.delete(target: target) }
+  ]
+  for operation in operations {
+    let fixture = try StubOsascriptFixture(mode: "timeout-once")
+    let bridge = AppleEventBridge(osascriptPath: fixture.executablePath, environment: fixture.environment)
+    #expect(throws: AppleGatewayError.self) { try operation(LiveMailAppleEventWriter(bridge: bridge)) }
+    #expect(try fixture.invocationCount() == 1)
+  }
+}
+
+@Test func clockMutationsDoNotRepeatButListRetainsTimeoutRetry() throws {
+  let operations: [(JXAClockAlarmUIAutomationExecutor) throws -> Void] = [
+    { _ = try $0.createAlarm(.init(time: "07:30")) },
+    { _ = try $0.toggleAlarm(.init(label: "fixture")) },
+    { _ = try $0.updateAlarm(.init(label: "fixture", time: "08:00")) },
+    { try $0.deleteAlarm(.init(label: "fixture")) }
+  ]
+  for operation in operations {
+    let fixture = try StubOsascriptFixture(mode: "timeout-once")
+    let bridge = AppleEventBridge(osascriptPath: fixture.executablePath, environment: fixture.environment)
+    #expect(throws: AppleGatewayError.self) { try operation(JXAClockAlarmUIAutomationExecutor(bridge: bridge)) }
+    #expect(try fixture.invocationCount() == 1)
+  }
+  let fixture = try StubOsascriptFixture(mode: "timeout-once")
+  let executor = JXAClockAlarmUIAutomationExecutor(bridge: AppleEventBridge(osascriptPath: fixture.executablePath, environment: fixture.environment))
+  _ = try executor.listAlarms()
+  #expect(try fixture.invocationCount() == 2)
+}
+
 private struct StubOsascriptFixture {
   let root: URL
   let executablePath: String

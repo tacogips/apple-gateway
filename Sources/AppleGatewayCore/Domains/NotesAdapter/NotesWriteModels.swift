@@ -91,3 +91,15 @@ public struct CreateNoteAttachmentInput: Codable, Equatable, Sendable {
     self.filePath = filePath
   }
 }
+
+public struct CreateNoteFolderInput: Codable, Equatable, Sendable {
+  public var accountId: String
+  public var parentFolderId: String?
+  public var name: String
+
+  public init(accountId: String, parentFolderId: String? = nil, name: String) {
+    self.accountId = accountId
+    self.parentFolderId = parentFolderId
+    self.name = name
+  }
+}

@@ -168,6 +168,11 @@ public struct LiveNotesAppleEventAdapter: NotesProviding, NotesWriting {
     }
   }
 
+  public func createNoteFolder(_ input: CreateNoteFolderInput) throws -> String {
+    let payload: NotesFolderCreatePayload = try run(template: .createNoteFolder, arguments: input)
+    return payload.folderId
+  }
+
   public func createNoteAttachment(_ input: CreateNoteAttachmentInput) throws -> String {
     let payload: NotesAttachmentCreatePayload = try run(template: .createNoteAttachment, arguments: input)
     return payload.attachmentId
@@ -212,7 +217,7 @@ public struct LiveNotesAppleEventAdapter: NotesProviding, NotesWriting {
     guard let argumentsJSON = String(data: argumentsData, encoding: .utf8) else {
       throw AppleGatewayError(code: .unexpectedError, message: "Failed to encode Notes JXA arguments")
     }
-    let data = try bridge.runJXA(script: template.source, argumentsJSON: argumentsJSON)
+    let data = try bridge.runJXA(script: template.source, argumentsJSON: argumentsJSON, retryTimeouts: template.permitsTimeoutRetry)
     return try decoder.decode(Response.self, from: data)
   }
 }
@@ -303,4 +308,8 @@ private extension Array {
 
 private struct NotesAttachmentCreatePayload: Decodable {
   var attachmentId: String
+}
+
+private struct NotesFolderCreatePayload: Decodable {
+  var folderId: String
 }

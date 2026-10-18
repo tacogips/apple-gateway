@@ -380,6 +380,7 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
     .probeNoteVisibility,
     .fetchNoteBody,
     .exportAttachment,
+    .createNoteFolder,
     .createNoteAttachment // Covered by executable command-contract tests.
   ]
   for template in NotesJXATemplate.allCases where !metadataTemplates.contains(template) {

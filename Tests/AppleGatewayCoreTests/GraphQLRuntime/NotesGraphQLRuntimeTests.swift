@@ -14,6 +14,7 @@ import Testing
   #expect(!readerSchema.contains("createNote"))
 
   #expect(fullSchema.contains("type Mutation {"))
+  #expect(fullSchema.contains("  createNoteFolder(input: CreateNoteFolderInput!): NoteFolder!"))
   #expect(fullSchema.contains("  createNoteAttachment(input: CreateNoteAttachmentInput!): NoteAttachment!"))
   #expect(fullSchema.contains("  createNote(input: CreateNoteInput!): Note!"))
   #expect(fullSchema.contains("  updateNoteBody(input: UpdateNoteBodyInput!): Note!"))
@@ -207,6 +208,21 @@ import Testing
   let denied = try notesExecuteGraphQL(document, role: .reader, notesReadService: NotesReadService(provider: fake), notesWriteService: service)
   #expect(!denied.errors.isEmpty)
   #expect(fake.attachmentRequests.count == 1)
+}
+
+@Test func folderMutationMapsExplicitAccountAndIsUnavailableToReaders() throws {
+  let fake = GraphQLNotesFake()
+  let document = #"mutation { createNoteFolder(input: {accountId: "icloud", name: "Notes"}) { id accountId name parentFolderId } }"#
+  let read = NotesReadService(provider: fake)
+  let write = NotesWriteService(provider: fake, writer: fake)
+  let result = try notesExecuteGraphQL(document, notesReadService: read, notesWriteService: write)
+  #expect(result.errors.isEmpty)
+  let folder = try #require(result.data?["createNoteFolder"] as? [String: Any])
+  #expect(folder["id"] as? String == "inbox")
+  #expect(folder["accountId"] as? String == "icloud")
+  #expect(folder["parentFolderId"] is NSNull)
+  let denied = try notesExecuteGraphQL(document, role: .reader, notesReadService: read, notesWriteService: write)
+  #expect(!denied.errors.isEmpty)
 }
 
 private func notesExecuteGraphQL(

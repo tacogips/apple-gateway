@@ -12,9 +12,19 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
   case exportAttachment
   case createNote
   case createNoteAttachment
+  case createNoteFolder
   case replaceNoteBody
   case deleteNote
   case moveNote
+
+  var permitsTimeoutRetry: Bool {
+    switch self {
+    case .createNote, .createNoteAttachment, .createNoteFolder, .replaceNoteBody, .deleteNote, .moveNote:
+      false
+    default:
+      true
+    }
+  }
 
   public var source: String {
     switch self {
@@ -36,6 +46,8 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
       return Self.fetchNoteBodySource
     case .exportAttachment:
       return Self.exportAttachmentSource
+    case .createNoteFolder:
+      return Self.createNoteFolderSource
     case .createNoteAttachment:
       return Self.createNoteAttachmentSource
     case .createNote:
@@ -467,6 +479,25 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
       }
     }
     return JSON.stringify({ status: 'noteMissing', path: null });
+  }
+  """
+
+  private static let createNoteFolderSource = """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    for (const account of app.accounts()) {
+      if (String(account.id()) !== input.accountId) { continue; }
+      let parent = account;
+      if (input.parentFolderId) {
+        parent = account.folders().find(folder => String(folder.id()) === input.parentFolderId);
+        if (!parent) { throw new Error('Notes parent folder not found'); }
+      }
+      const folder = app.Folder({name: input.name});
+      parent.folders.push(folder);
+      return JSON.stringify({folderId: String(folder.id())});
+    }
+    throw new Error('Notes account not found');
   }
   """
 

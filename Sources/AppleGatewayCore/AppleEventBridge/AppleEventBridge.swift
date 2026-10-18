@@ -38,6 +38,10 @@ public struct AppleEventBridge: Sendable {
   }
 
   public func runJXA(script: String, argumentsJSON: String) throws -> Data {
+    try runJXA(script: script, argumentsJSON: argumentsJSON, retryTimeouts: true)
+  }
+
+  func runJXA(script: String, argumentsJSON: String, retryTimeouts: Bool) throws -> Data {
     guard !script.isEmpty else {
       throw AppleEventBridgeError.scriptFailure(message: "JXA script must not be empty")
     }
@@ -47,7 +51,7 @@ public struct AppleEventBridge: Sendable {
     while true {
       do {
         return try runOnce(script: script, argumentsJSON: argumentsJSON)
-      } catch AppleEventBridgeError.timeout where attempt < maxTimeoutRetries {
+      } catch AppleEventBridgeError.timeout where retryTimeouts && attempt < maxTimeoutRetries {
         attempt += 1
         continue
       }

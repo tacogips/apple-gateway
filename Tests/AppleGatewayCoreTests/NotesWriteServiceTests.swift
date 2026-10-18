@@ -176,6 +176,35 @@ import Testing
   #expect(fake.attachmentRequests.count == 1)
 }
 
+@Test func noteFolderCreationScopesIdentityAndReusesCanonicalNames() throws {
+  let fake = FakeNotesWriteBackend()
+  let service = NotesWriteService(provider: fake, writer: fake)
+  let root = try service.createNoteFolder(.init(accountId: "icloud", name: "Archive root"))
+  #expect(root.parentFolderId == nil)
+  let child = try service.createNoteFolder(.init(accountId: "icloud", parentFolderId: root.id, name: "Café"))
+  #expect(child.parentFolderId == root.id)
+  let reused = try service.createNoteFolder(.init(accountId: "icloud", parentFolderId: root.id, name: "Cafe\u{301}"))
+  #expect(reused.id == child.id)
+  #expect(fake.folderCreateRequests.count == 2)
+  let separate = try service.createNoteFolder(.init(accountId: "icloud", name: "Café"))
+  #expect(separate.id != child.id)
+  #expect(fake.folderCreateRequests.count == 3)
+  fake.foldersList.append(NoteFolder(id: "foreign", accountId: "other", name: "parent", noteCount: 0))
+  for input in [CreateNoteFolderInput(accountId: "missing", name: "x"),
+                .init(accountId: "icloud", parentFolderId: "foreign", name: "x"),
+                .init(accountId: "icloud", parentFolderId: "missing", name: "x")] {
+    #expect(throws: AppleGatewayError.self) { try service.createNoteFolder(input) }
+  }
+  for name in ["", " ", " leading", "trailing ", "a/b", "a:b", "a\nb", ".", "..", String(repeating: "x", count: 256)] {
+    #expect(throws: AppleGatewayError.self) { try service.createNoteFolder(.init(accountId: "icloud", name: name)) }
+  }
+  #expect(fake.folderCreateRequests.count == 3)
+  fake.foldersList.append(NoteFolder(id: "duplicate", accountId: "icloud", name: child.name, parentFolderId: root.id, noteCount: 0))
+  #expect(throws: AppleGatewayError.self) { try service.createNoteFolder(.init(accountId: "icloud", parentFolderId: root.id, name: "Café")) }
+  fake.folderReadbackParentOverride = "wrong-parent"
+  #expect(throws: AppleGatewayError.self) { try service.createNoteFolder(.init(accountId: "icloud", name: "wrong-readback")) }
+}
+
 private final class FakeNotesWriteBackend: NotesProviding, NotesWriting, @unchecked Sendable {
   var accountsList = [NoteAccount(id: "icloud", name: "iCloud", isDefault: true)]
   var foldersList = [
@@ -187,6 +216,8 @@ private final class FakeNotesWriteBackend: NotesProviding, NotesWriting, @unchec
   ]
   var createRequests: [NotesCreateRequest] = []
   var attachmentRequests: [CreateNoteAttachmentInput] = []
+  var folderCreateRequests: [CreateNoteFolderInput] = []
+  var folderReadbackParentOverride: String?
   var replaceRequests: [NotesBodyWriteRequest] = []
   var moveRequests: [NotesMoveRequest] = []
   var deletedNoteIds: [String] = []
@@ -256,6 +287,14 @@ private final class FakeNotesWriteBackend: NotesProviding, NotesWriting, @unchec
     to destination: URL
   ) throws -> NotesAttachmentExportResult {
     .unavailable
+  }
+
+  func createNoteFolder(_ input: CreateNoteFolderInput) throws -> String {
+    folderCreateRequests.append(input)
+    let id = "folder-created-\(folderCreateRequests.count)"
+    foldersList.append(NoteFolder(id: id, accountId: input.accountId, name: input.name,
+      parentFolderId: folderReadbackParentOverride ?? input.parentFolderId, noteCount: 0))
+    return id
   }
 
   func createNoteAttachment(_ input: CreateNoteAttachmentInput) throws -> String {
