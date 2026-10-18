@@ -3,8 +3,8 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
-artifact_name="apple-gateway"
-github_repository="user/repo"
+artifact_name="apple-gateway-full"
+github_repository="tacogips/apple-gateway"
 
 usage() {
   cat <<EOF
@@ -36,7 +36,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 release_tag="${1:-}"
-tap_cask_file="${2:-$repo_root/../homebrew-tap/Casks/$artifact_name.rb}"
+tap_cask_file="${2:-$repo_root/../homebrew-tap/Casks/apple-gateway.rb}"
 if [[ -z "$release_tag" ]]; then
   usage >&2
   exit 1

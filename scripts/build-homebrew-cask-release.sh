@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 product="apple-gateway"
-artifact_name="apple-gateway"
+artifact_name="apple-gateway-full"
 
 usage() {
   cat <<EOF
@@ -193,8 +193,10 @@ swift_release_bin_path() {
 
   (
     cd "$repo_root"
-    DEVELOPER_DIR="$developer_dir" SDKROOT="$sdkroot" \
-      "$swift_exe" build -c release --product "$product" --triple "$triple" >/dev/null
+    for build_product in apple-gateway apple-gateway-reader AppleGatewayNotifier; do
+      DEVELOPER_DIR="$developer_dir" SDKROOT="$sdkroot" \
+        "$swift_exe" build -c release --product "$build_product" --triple "$triple" >/dev/null
+    done
     DEVELOPER_DIR="$developer_dir" SDKROOT="$sdkroot" \
       "$swift_exe" build -c release --product "$product" --triple "$triple" --show-bin-path
   )
@@ -265,6 +267,16 @@ build_target() {
   cp "$bin_path/$product" "$staged_binary"
   chmod 0755 "$staged_binary"
 
+  cp "$bin_path/apple-gateway-reader" "$work_dir/apple-gateway-reader"
+  chmod 0755 "$work_dir/apple-gateway-reader"
+  mkdir -p "$work_dir/libexec"
+  "$script_dir/build-notifier-app.sh" --configuration release \
+    --executable "$bin_path/AppleGatewayNotifier" \
+    --output "$work_dir/libexec/AppleGatewayNotifier.app"
+  codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$work_dir/apple-gateway-reader"
+  codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$work_dir/libexec/AppleGatewayNotifier.app"
+  codesign --verify --strict "$work_dir/apple-gateway-reader"
+  codesign --verify --deep --strict "$work_dir/libexec/AppleGatewayNotifier.app"
   codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$staged_binary"
   codesign --verify --strict --verbose=2 "$staged_binary"
 

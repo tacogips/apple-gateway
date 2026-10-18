@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
-artifact_name="apple-gateway"
+artifact_name="apple-gateway-full"
 product="apple-gateway"
 
 usage() {
@@ -20,7 +20,7 @@ Environment:
 
 Example:
   scripts/build-homebrew-cask-release.sh darwin-arm64 darwin-x64
-  scripts/render-homebrew-cask.sh 0.1.0 ../homebrew-tap/Casks/$artifact_name.rb
+  scripts/render-homebrew-cask.sh 0.1.0 ../homebrew-tap/Casks/apple-gateway.rb
 
 This renderer expects signed, notarized, and stapled macOS .dmg artifacts.
 EOF
@@ -53,9 +53,9 @@ main() {
 
   local version output release_dir release_base_url
   version="$1"
-  output="${2:-$repo_root/Casks/$artifact_name.rb}"
+  output="${2:-$repo_root/Casks/apple-gateway.rb}"
   release_dir="${CASK_RELEASE_DIR:-$repo_root/dist/homebrew-cask}"
-  release_base_url="${CASK_RELEASE_BASE_URL:-https://github.com/user/repo/releases/download/v$version}"
+  release_base_url="${CASK_RELEASE_BASE_URL:-https://github.com/tacogips/apple-gateway/releases/download/v$version}"
 
   local darwin_arm64_sha darwin_x64_sha
   darwin_arm64_sha="$(sha_for_target "$version" darwin-arm64 "$release_dir")"
@@ -71,10 +71,10 @@ cask "apple-gateway" do
          intel: "$darwin_x64_sha"
 
   url "$release_base_url/$artifact_name-#{version}-#{arch}.dmg",
-      verified: "github.com/user/repo/releases/download/"
+      verified: "github.com/tacogips/apple-gateway/releases/download/"
   name "apple-gateway"
-  desc "A Swift command line tool"
-  homepage "https://github.com/user/repo"
+  desc "macOS CLI and GraphQL bridge for Apple apps"
+  homepage "https://github.com/tacogips/apple-gateway"
 
   livecheck do
     url :url
@@ -82,10 +82,12 @@ cask "apple-gateway" do
   end
 
   binary "$product"
+  binary "apple-gateway-reader"
+  artifact "libexec/AppleGatewayNotifier.app", target: "#{HOMEBREW_PREFIX}/libexec/AppleGatewayNotifier.app"
 
   caveats do
     <<~EOS
-      This cask installs the signed and notarized macOS command line tool.
+      This cask installs the signed and notarized macOS command line tools and notifier helper.
       Homebrew links $product into the native Homebrew prefix for this Mac.
     EOS
   end
