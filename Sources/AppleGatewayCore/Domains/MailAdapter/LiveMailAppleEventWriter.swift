@@ -36,21 +36,17 @@ public struct LiveMailAppleEventWriter: MailWriting {
       guard let argumentsJSON = String(data: argumentsData, encoding: .utf8) else {
         throw AppleGatewayError(code: .unexpectedError, message: "Failed to encode Mail JXA arguments")
       }
-      let data = try bridge.runJXA(script: template.source, argumentsJSON: argumentsJSON, retryTimeouts: false)
+      let data = try bridge.runWriteJXA(script: template.source, argumentsJSON: argumentsJSON, tracksDispatch: true)
       let result = try decoder.decode(MailJXAWriteResult.self, from: data)
       guard result.success else {
-        throw AppleGatewayError(code: .unexpectedError, message: "Mail automation did not confirm the update")
+        throw AppleWriteRetry.annotated(AppleGatewayError(code: .unexpectedError, message: "Mail automation did not confirm the update"), outcome: "unknown", attempts: 1)
       }
     } catch let error as AppleGatewayError {
       throw error
     } catch let error as AppleEventBridgeError {
       throw map(error)
     } catch {
-      throw AppleGatewayError(
-        code: .unexpectedError,
-        message: "Mail automation failed",
-        details: ["reason": String(describing: error)]
-      )
+      throw AppleWriteRetry.annotated(error, outcome: "unknown", attempts: 1)
     }
   }
 

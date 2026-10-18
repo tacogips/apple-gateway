@@ -217,8 +217,20 @@ public struct LiveNotesAppleEventAdapter: NotesProviding, NotesWriting {
     guard let argumentsJSON = String(data: argumentsData, encoding: .utf8) else {
       throw AppleGatewayError(code: .unexpectedError, message: "Failed to encode Notes JXA arguments")
     }
-    let data = try bridge.runJXA(script: template.source, argumentsJSON: argumentsJSON, retryTimeouts: template.permitsTimeoutRetry)
-    return try decoder.decode(Response.self, from: data)
+    let data: Data
+    if template.permitsTimeoutRetry {
+      data = try bridge.runJXA(script: template.source, argumentsJSON: argumentsJSON)
+    } else {
+      data = try bridge.runWriteJXA(script: template.source, argumentsJSON: argumentsJSON, tracksDispatch: true)
+    }
+    do {
+      return try decoder.decode(Response.self, from: data)
+    } catch {
+      if !template.permitsTimeoutRetry {
+        throw AppleWriteRetry.annotated(error, outcome: "unknown", attempts: 1)
+      }
+      throw error
+    }
   }
 }
 

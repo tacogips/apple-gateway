@@ -197,7 +197,14 @@ import Testing
   for operation in operations {
     let fixture = try StubOsascriptFixture(mode: "timeout-once")
     let bridge = AppleEventBridge(osascriptPath: fixture.executablePath, environment: fixture.environment)
-    #expect(throws: AppleEventBridgeError.self) { try operation(LiveNotesAppleEventAdapter(bridge: bridge)) }
+    do {
+      try operation(LiveNotesAppleEventAdapter(bridge: bridge))
+      Issue.record("Expected uncertain write failure")
+    } catch let error as AppleGatewayError {
+      #expect(error.code == .appleEventTimeout)
+      #expect(error.details?["writeOutcome"] == "unknown")
+      #expect(error.details?["retrySafe"] == "false")
+    }
     #expect(try fixture.invocationCount() == 1)
   }
 }

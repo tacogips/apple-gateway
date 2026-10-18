@@ -339,6 +339,18 @@ The returned download key uses the existing best-effort attachment export path. 
 
 The full gateway supports `createNoteFolder(input: {accountId, parentFolderId, name}) { id name accountId parentFolderId }`. Omit `parentFolderId` for an account root. Account IDs are explicit; a parent must belong to that account. Names are normalized to NFC and must be a single nonempty name without separators, control characters, surrounding whitespace, or more than 255 UTF-8 bytes. A unique existing name under the exact parent is returned; ambiguous matches fail. Newly created folder identity is verified by readback. This reuse check is not an atomic concurrency lock.
 
-Notes, Mail and Clock mutations are never automatically repeated after an Apple Event timeout: the application may already have completed the write. Reconcile the current state before retrying an uncertain mutation. Read operations retain the configured timeout retry policy.
+All write domains use a shared bounded retry policy. The default initial wait is 2 seconds with up to 3 retries after the initial attempt. Delays double (2, 4, 8 seconds by default), capped at 60 seconds. Set `max_retries = 0` to disable retries:
+
+```toml
+[write_retry]
+initial_wait_seconds = 2 # integer 1...60
+max_retries = 3          # integer 0...5, excluding the initial attempt
+```
+
+Environment overrides are `APPLE_GATEWAY_WRITE_RETRY_INITIAL_WAIT_SECONDS` and `APPLE_GATEWAY_WRITE_RETRY_MAX_RETRIES`. Swift configuration uses `AppleGatewayConfig(writeRetry: AppleWriteRetryPolicy(initialWaitSeconds: 2, maxRetries: 3))`. The policy is scoped to one GraphQL/SDK invocation; mutation aliases are never replayed as a group. Cancellation stops backoff before another attempt. Synchronous hosts can bound retries with `AppleWriteExecutionContext.withDeadline(deadline) { ... }`; nested scopes cannot extend an existing deadline. An in-flight native call may finish after the deadline, but another attempt will not start.
+
+Only proven pre-dispatch transient failures are retried: resource-exhausted process launch and controlled Notes/Mail preflight AppleEvent failures before the first mutation. A timeout without a completed outcome frame is ambiguous, even if it appears to happen during preflight. EventKit Calendar/Reminders, Clock, notifications and phone controls fail closed when their native transport cannot prove that the write was rejected before dispatch. Authorization and validation failures do not retry. No idempotency or reconciliation is inferred from error text.
+
+Write errors carry `details.writeOutcome` (`notDispatched`, `unknown`, or `confirmed`), `retrySafe: false`, and `writeAttempts`. Unknown writes require caller readback/reconciliation before any new mutation. Once Notes returns a stable ID, verification retries only the read; failed verification reports `confirmed`, `resourceId` and `readbackAttempts`, and never repeats create, append or attachment import. Ordinary read operations retain their existing timeout retry policy.
 
 `updateNoteBody(mode: APPEND)` rejects notes with native attachments before reading or rewriting their body. Notes-exported image HTML can duplicate or degrade native attachments when assigned back, so it is not a durable attachment-preserving representation. Text-only APPEND is supported. REPLACE explicitly replaces the complete body; applications that own that body must retain validated source bytes and restore attachments through `createNoteAttachment`, then verify exported bytes. Attachment IDs and names may change after a body replacement.

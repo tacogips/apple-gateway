@@ -281,11 +281,13 @@ enum EventOccurrenceSearchWindowPlanner {
 
 public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, CalendarWriting,
   RemindersProviding, RemindersWriting, @unchecked Sendable {
+  private let writeRetryPolicy: AppleWriteRetryPolicy?
   private let store: EKEventStore
   private let session: EventKitSession
   private let lock = NSRecursiveLock()
 
-  public init(store: EKEventStore = EKEventStore()) {
+  public init(store: EKEventStore = EKEventStore(), writeRetryPolicy: AppleWriteRetryPolicy? = nil) {
+    self.writeRetryPolicy = writeRetryPolicy
     self.store = store
     session = EventKitSession(access: LiveEventKitStoreAccess(store: store))
   }
@@ -330,7 +332,7 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
       let calendar = EKCalendar(for: .event, eventStore: store)
       calendar.title = input.title
       calendar.source = try source(entityType: .event, preferredTitle: input.sourceTitle)
-      try store.saveCalendar(calendar, commit: true)
+      try AppleWriteRetry(policy: writeRetryPolicy ?? AppleWriteRetryContext.policy).run { try store.saveCalendar(calendar, commit: true) }
       return EventKitCalendarReminderMapper.gatewayCalendar(
         calendar,
         entityType: .event,
@@ -342,7 +344,7 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
   public func deleteCalendar(calendarId: String) throws -> DeleteResult {
     try lock.withLock {
       let calendar = try calendarForDeletion(calendarId: calendarId)
-      try store.removeCalendar(calendar, commit: true)
+      try AppleWriteRetry(policy: writeRetryPolicy ?? AppleWriteRetryContext.policy).run { try store.removeCalendar(calendar, commit: true) }
       return DeleteResult(success: true)
     }
   }
@@ -353,7 +355,7 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
       let calendar = try eventCalendar(id: event.calendarId)
       let ekEvent = EKEvent(eventStore: store)
       try EventKitCalendarReminderMapper.apply(event, to: ekEvent, calendar: calendar)
-      try store.save(ekEvent, span: .thisEvent, commit: true)
+      try AppleWriteRetry(policy: writeRetryPolicy ?? AppleWriteRetryContext.policy).run { try store.save(ekEvent, span: .thisEvent, commit: true) }
       return EventKitCalendarReminderMapper.calendarEvent(ekEvent)
     }
   }
@@ -369,11 +371,11 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
         calendar: calendar,
         includeRecurrenceRules: request.updatesRecurrenceRules
       )
-      try store.save(
+      try AppleWriteRetry(policy: writeRetryPolicy ?? AppleWriteRetryContext.policy).run { try store.save(
         ekEvent,
         span: EventKitCalendarReminderMapper.ekSpan(request.span),
         commit: true
-      )
+      ) }
       return EventKitCalendarReminderMapper.calendarEvent(ekEvent)
     }
   }
@@ -382,11 +384,11 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
     try lock.withLock {
       try session.ensureReadAccess(for: .calendar)
       let ekEvent = try existingEvent(id: request.eventId, occurrenceDate: request.occurrenceDate)
-      try store.remove(
+      try AppleWriteRetry(policy: writeRetryPolicy ?? AppleWriteRetryContext.policy).run { try store.remove(
         ekEvent,
         span: EventKitCalendarReminderMapper.ekSpan(request.span),
         commit: true
-      )
+      ) }
       return DeleteResult(success: true)
     }
   }
@@ -419,7 +421,7 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
       let calendar = EKCalendar(for: .reminder, eventStore: store)
       calendar.title = input.title
       calendar.source = try source(entityType: .reminder, preferredTitle: input.sourceTitle)
-      try store.saveCalendar(calendar, commit: true)
+      try AppleWriteRetry(policy: writeRetryPolicy ?? AppleWriteRetryContext.policy).run { try store.saveCalendar(calendar, commit: true) }
       return EventKitCalendarReminderMapper.gatewayCalendar(
         calendar,
         entityType: .reminder,
@@ -434,7 +436,7 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
       let calendar = try reminderCalendar(id: reminder.listId)
       let ekReminder = EKReminder(eventStore: store)
       try EventKitCalendarReminderMapper.apply(reminder, to: ekReminder, calendar: calendar)
-      try store.save(ekReminder, commit: true)
+      try AppleWriteRetry(policy: writeRetryPolicy ?? AppleWriteRetryContext.policy).run { try store.save(ekReminder, commit: true) }
       return EventKitCalendarReminderMapper.reminder(ekReminder)
     }
   }
@@ -445,7 +447,7 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
       let ekReminder = try existingReminder(id: reminder.id)
       let calendar = try reminderCalendar(id: reminder.listId)
       try EventKitCalendarReminderMapper.apply(reminder, to: ekReminder, calendar: calendar)
-      try store.save(ekReminder, commit: true)
+      try AppleWriteRetry(policy: writeRetryPolicy ?? AppleWriteRetryContext.policy).run { try store.save(ekReminder, commit: true) }
       return EventKitCalendarReminderMapper.reminder(ekReminder)
     }
   }
@@ -454,7 +456,7 @@ public final class LiveEventKitCalendarReminderAdapter: CalendarProviding, Calen
     try lock.withLock {
       try session.ensureReadAccess(for: .reminders)
       let ekReminder = try existingReminder(id: reminderId)
-      try store.remove(ekReminder, commit: true)
+      try AppleWriteRetry(policy: writeRetryPolicy ?? AppleWriteRetryContext.policy).run { try store.remove(ekReminder, commit: true) }
       return DeleteResult(success: true)
     }
   }

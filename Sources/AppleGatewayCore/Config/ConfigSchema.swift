@@ -16,6 +16,7 @@ struct ParsedConfigFile: Equatable, Sendable {
 
 enum ConfigSchema {
   static let sections: Set<String> = [
+    "write_retry",
     "storage",
     "limits",
     "domains",
@@ -25,6 +26,7 @@ enum ConfigSchema {
   ]
 
   static let keysBySection: [String: Set<String>] = [
+    "write_retry": ["initial_wait_seconds", "max_retries"],
     "storage": ["cache_dir"],
     "limits": [
       "default_page_size",
@@ -51,6 +53,8 @@ enum ConfigSchema {
   ]
 
   static let envOverrides: [String: (section: String, key: String)] = [
+    "APPLE_GATEWAY_WRITE_RETRY_INITIAL_WAIT_SECONDS": ("write_retry", "initial_wait_seconds"),
+    "APPLE_GATEWAY_WRITE_RETRY_MAX_RETRIES": ("write_retry", "max_retries"),
     "APPLE_GATEWAY_STORAGE_CACHE_DIR": ("storage", "cache_dir"),
     "APPLE_GATEWAY_LIMITS_DEFAULT_PAGE_SIZE": ("limits", "default_page_size"),
     "APPLE_GATEWAY_LIMITS_MAX_PAGE_SIZE": ("limits", "max_page_size"),
@@ -71,6 +75,7 @@ enum ConfigSchema {
   ]
 
   static let envSectionPrefixes = [
+    "APPLE_GATEWAY_WRITE_RETRY_",
     "APPLE_GATEWAY_STORAGE_",
     "APPLE_GATEWAY_LIMITS_",
     "APPLE_GATEWAY_DOMAINS_",
@@ -91,7 +96,7 @@ enum ConfigSchema {
          ("phone_calls", "virtual_audio_device_uid"),
          ("phone_calls", "capture_audio_device_uid"):
       .string
-    case ("limits", _):
+    case ("limits", _), ("write_retry", _):
       .integer
     case ("domains", _):
       .boolean

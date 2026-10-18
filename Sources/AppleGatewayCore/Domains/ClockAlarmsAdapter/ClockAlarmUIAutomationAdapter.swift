@@ -70,9 +70,9 @@ public struct JXAClockAlarmUIAutomationExecutor: ClockAlarmUIAutomationExecuting
       ClockAlarmAutomationRequest(operation: .delete, label: input.label)
     )
     guard response.success == true else {
-      throw AppleGatewayError(
-        code: .unexpectedError,
-        message: "Clock UI automation did not confirm alarm deletion"
+      throw AppleWriteRetry.annotated(
+        AppleGatewayError(code: .unexpectedError, message: "Clock UI automation did not confirm alarm deletion"),
+        outcome: "unknown", attempts: 1
       )
     }
   }
@@ -84,13 +84,18 @@ public struct JXAClockAlarmUIAutomationExecutor: ClockAlarmUIAutomationExecuting
     }
 
     do {
-      let data = try bridge.runJXA(script: ClockAlarmJXATemplate.source, argumentsJSON: requestJSON, retryTimeouts: request.operation == .list)
+      let data = try request.operation == .list
+        ? bridge.runJXA(script: ClockAlarmJXATemplate.source, argumentsJSON: requestJSON)
+        : bridge.runWriteJXA(script: ClockAlarmJXATemplate.source, argumentsJSON: requestJSON)
       return try decoder.decode(Response.self, from: data)
     } catch let error as AppleGatewayError {
       throw error
     } catch let error as AppleEventBridgeError {
       throw map(error)
     } catch {
+      if request.operation != .list {
+        throw AppleWriteRetry.annotated(error, outcome: "unknown", attempts: 1)
+      }
       throw AppleGatewayError(
         code: .unexpectedError,
         message: "Clock UI automation returned an invalid response",
@@ -101,9 +106,9 @@ public struct JXAClockAlarmUIAutomationExecutor: ClockAlarmUIAutomationExecuting
 
   private func requireAlarm(from response: ClockAlarmAutomationResponse) throws -> ClockAlarm {
     guard let alarm = response.alarm else {
-      throw AppleGatewayError(
-        code: .unexpectedError,
-        message: "Clock UI automation did not return the affected alarm"
+      throw AppleWriteRetry.annotated(
+        AppleGatewayError(code: .unexpectedError, message: "Clock UI automation did not return the affected alarm"),
+        outcome: "unknown", attempts: 1
       )
     }
     return alarm
@@ -150,7 +155,8 @@ public struct LiveClockAlarmsAdapter: ClockAlarmsProviding {
     self.executor = executor ?? JXAClockAlarmUIAutomationExecutor(
       bridge: AppleEventBridge(
         timeoutSeconds: TimeInterval(config.limits.appleEventTimeoutSeconds),
-        environment: environment
+        environment: environment,
+        writeRetryPolicy: config.writeRetry
       )
     )
   }

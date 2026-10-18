@@ -8,7 +8,8 @@ public enum NotesServiceFactory {
     let adapter = LiveNotesAppleEventAdapter(
       bridge: AppleEventBridge(
         timeoutSeconds: TimeInterval(config.limits.appleEventTimeoutSeconds),
-        environment: environment
+        environment: environment,
+        writeRetryPolicy: config.writeRetry
       )
     )
     let fileStore = FileStore(cacheRoot: config.storage.cacheDir)
@@ -25,7 +26,8 @@ public enum NotesServiceFactory {
         writer: adapter,
         limits: config.limits,
         fileStore: fileStore,
-        attachmentExportStore: attachmentExportStore
+        attachmentExportStore: attachmentExportStore,
+        writeRetryPolicy: config.writeRetry
       ),
       fileMaterializer: NotesFileMaterializer(
         provider: adapter,

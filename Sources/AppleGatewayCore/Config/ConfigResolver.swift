@@ -118,6 +118,10 @@ public struct AppleGatewayConfigResolver {
     typeMessage: (String) -> String
   ) throws {
     switch (section, key, scalar) {
+    case ("write_retry", "initial_wait_seconds", .integer(let value)):
+      config.writeRetry.initialWaitSeconds = value
+    case ("write_retry", "max_retries", .integer(let value)):
+      config.writeRetry.maxRetries = value
     case ("storage", "cache_dir", .string(let value)):
       config.storage.cacheDir = value
     case ("limits", "default_page_size", .integer(let value)):
@@ -182,6 +186,7 @@ public struct AppleGatewayConfigResolver {
   }
 
   private func validate(_ config: AppleGatewayConfig) throws {
+    try config.writeRetry.validate()
     guard !config.storage.cacheDir.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       throw AppleGatewayConfigError.validation(message: "storage.cache_dir must not be empty")
     }

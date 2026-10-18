@@ -3,6 +3,7 @@ import Foundation
 // swiftlint:disable nesting
 
 public struct AppleGatewayConfig: Codable, Equatable, Sendable {
+  public var writeRetry: AppleWriteRetryPolicy
   public var storage: Storage
   public var limits: Limits
   public var domains: Domains
@@ -16,8 +17,10 @@ public struct AppleGatewayConfig: Codable, Equatable, Sendable {
     domains: Domains = .defaultValue,
     mail: Mail = .defaultValue,
     notifications: Notifications = .defaultValue,
-    phoneCalls: PhoneCalls = .defaultValue
+    phoneCalls: PhoneCalls = .defaultValue,
+    writeRetry: AppleWriteRetryPolicy = .defaultValue
   ) {
+    self.writeRetry = writeRetry
     self.storage = storage
     self.limits = limits
     self.domains = domains
@@ -26,9 +29,21 @@ public struct AppleGatewayConfig: Codable, Equatable, Sendable {
     self.phoneCalls = phoneCalls
   }
 
+  public init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    storage = try values.decode(Storage.self, forKey: .storage)
+    limits = try values.decode(Limits.self, forKey: .limits)
+    domains = try values.decode(Domains.self, forKey: .domains)
+    mail = try values.decode(Mail.self, forKey: .mail)
+    notifications = try values.decode(Notifications.self, forKey: .notifications)
+    phoneCalls = try values.decode(PhoneCalls.self, forKey: .phoneCalls)
+    writeRetry = try values.decodeIfPresent(AppleWriteRetryPolicy.self, forKey: .writeRetry) ?? .defaultValue
+  }
+
   public static let defaultValue = AppleGatewayConfig()
 
   enum CodingKeys: String, CodingKey {
+    case writeRetry = "write_retry"
     case storage
     case limits
     case domains

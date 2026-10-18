@@ -493,6 +493,7 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
         parent = account.folders().find(folder => String(folder.id()) === input.parentFolderId);
         if (!parent) { throw new Error('Notes parent folder not found'); }
       }
+      if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
       const folder = app.Folder({name: input.name});
       parent.folders.push(folder);
       return JSON.stringify({folderId: String(folder.id())});
@@ -512,6 +513,7 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
           if (note.passwordProtected && note.passwordProtected()) {
             throw new Error('Note is password protected');
           }
+          if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
           const attachment = app.make({new: 'attachment', at: note, withData: Path(input.filePath)});
           return JSON.stringify({attachmentId: String(attachment.id())});
         }
@@ -533,6 +535,7 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
         if (String(folder.id()) !== input.folderId) {
           continue;
         }
+        if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
         const note = app.Note({
           name: input.title,
           body: input.bodyHtml
@@ -558,6 +561,7 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
           if (note.passwordProtected && note.passwordProtected()) {
             throw new Error('Note is password protected');
           }
+          if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
           note.body = input.bodyHtml;
           return JSON.stringify({ noteId: String(note.id()) });
         }
@@ -580,6 +584,7 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
           if (note.passwordProtected && note.passwordProtected()) {
             throw new Error('Note is password protected');
           }
+          if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
           note.delete();
           return JSON.stringify({ success: true });
         }
@@ -617,6 +622,7 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
           if (note.passwordProtected && note.passwordProtected()) {
             throw new Error('Note is password protected');
           }
+          if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
           note.move({ to: targetFolder });
           return JSON.stringify({ noteId: input.noteId });
         }

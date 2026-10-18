@@ -104,6 +104,9 @@ public struct SubprocessNotificationHelperExecutor: NotificationHelperExecuting 
     do {
       try process.run()
     } catch {
+      if request.operation != .list {
+        throw AppleWriteRetry.launchFailure(error, message: "Could not launch AppleGatewayNotifier", code: .notifierHelperMissing)
+      }
       throw AppleGatewayError(
         code: .notifierHelperMissing,
         message: "Could not launch AppleGatewayNotifier",
@@ -183,11 +186,7 @@ public struct OsascriptNotificationFallback: NotificationFallbackPosting {
     do {
       try process.run()
     } catch {
-      throw AppleGatewayError(
-        code: .unexpectedError,
-        message: "Could not launch osascript notification fallback",
-        details: ["underlyingError": String(describing: error)]
-      )
+      throw AppleWriteRetry.launchFailure(error, message: "Could not launch osascript notification fallback")
     }
 
     let timedOut = !process.waitUntilExit(timeout: timeoutSeconds)
@@ -268,18 +267,21 @@ public struct LiveNotificationsAdapter: NotificationsProviding {
       waitSeconds: input.waitSeconds
     ))
     do {
-      let response = try helperExecutor.execute(request, bundle: try resolver.resolve(config: config))
-      let posted = try requireResponse(response).posted
-      guard let posted else {
-        throw AppleGatewayError(code: .unexpectedError, message: "Notification helper response is missing posted result")
+      let bundle = try resolver.resolve(config: config)
+      return try AppleWriteRetry(policy: config.writeRetry).run {
+        let response = try helperExecutor.execute(request, bundle: bundle)
+        let posted = try requireResponse(response).posted
+        guard let posted else {
+          throw AppleGatewayError(code: .unexpectedError, message: "Notification helper response is missing posted result")
+        }
+        return PostedNotification(
+          id: posted.id,
+          delivered: posted.delivered,
+          usedFallback: false,
+          activation: posted.activation.map(NotificationActivation.init(helperActivation:))
+        )
       }
-      return PostedNotification(
-        id: posted.id,
-        delivered: posted.delivered,
-        usedFallback: false,
-        activation: posted.activation.map(NotificationActivation.init(helperActivation:))
-      )
-    } catch let error as AppleGatewayError where error.code == .notifierHelperMissing {
+    } catch let error as AppleGatewayError where error.code == .notifierHelperMissing && error.details?["writeOutcome"] != "unknown" {
       return try postWithFallbackIfAllowed(input, missingHelperError: error)
     }
   }
@@ -303,19 +305,20 @@ public struct LiveNotificationsAdapter: NotificationsProviding {
   }
 
   public func dismissNotifications(ids: [String]) throws -> DismissResult {
-    let response = try helperExecutor.execute(
-      try validatedRequest(NotificationHelperRequest(operation: .dismiss, ids: ids)),
-      bundle: try resolver.resolve(config: config)
-    )
-    return DismissResult(dismissedCount: try requireDismissedCount(response))
+    let request = try validatedRequest(NotificationHelperRequest(operation: .dismiss, ids: ids))
+    let bundle = try resolver.resolve(config: config)
+    return try AppleWriteRetry(policy: config.writeRetry).run {
+      let response = try helperExecutor.execute(request, bundle: bundle)
+      return DismissResult(dismissedCount: try requireDismissedCount(response))
+    }
   }
 
   public func dismissAllGatewayNotifications() throws -> DismissResult {
-    let response = try helperExecutor.execute(
-      NotificationHelperRequest(operation: .dismissAll),
-      bundle: try resolver.resolve(config: config)
-    )
-    return DismissResult(dismissedCount: try requireDismissedCount(response))
+    let bundle = try resolver.resolve(config: config)
+    return try AppleWriteRetry(policy: config.writeRetry).run {
+      let response = try helperExecutor.execute(NotificationHelperRequest(operation: .dismissAll), bundle: bundle)
+      return DismissResult(dismissedCount: try requireDismissedCount(response))
+    }
   }
 
   private func postWithFallbackIfAllowed(
@@ -331,7 +334,7 @@ public struct LiveNotificationsAdapter: NotificationsProviding {
         message: "osascript notification fallback does not support actions, replies, or activation waiting"
       )
     }
-    try fallbackPoster.post(input)
+    try AppleWriteRetry(policy: config.writeRetry).run { try fallbackPoster.post(input) }
     return PostedNotification(id: UUID().uuidString, delivered: true, usedFallback: true)
   }
 

@@ -1,6 +1,7 @@
 import Foundation
 
 public struct NotesWriteService: Sendable {
+  private let writeRetryPolicy: AppleWriteRetryPolicy?
   private let provider: any NotesProviding
   private let writer: any NotesWriting
   private let readService: NotesReadService
@@ -10,8 +11,10 @@ public struct NotesWriteService: Sendable {
     writer: any NotesWriting,
     limits: AppleGatewayConfig.Limits = .defaultValue,
     fileStore: FileStore = FileStore(cacheRoot: AppleGatewayConfig.Storage.defaultValue.cacheDir),
-    attachmentExportStore: NotesAttachmentExportStore? = nil
+    attachmentExportStore: NotesAttachmentExportStore? = nil,
+    writeRetryPolicy: AppleWriteRetryPolicy? = nil
   ) {
+    self.writeRetryPolicy = writeRetryPolicy
     self.provider = provider
     self.writer = writer
     readService = NotesReadService(
@@ -47,10 +50,15 @@ public struct NotesWriteService: Sendable {
     }
     if let existing = matches.first { return existing }
     let folderId = try writer.createNoteFolder(.init(accountId: input.accountId, parentFolderId: input.parentFolderId, name: name))
-    let created = try provider.folders(accountId: input.accountId).filter { $0.id == folderId }
+    let created = try AppleWriteRetry(policy: writeRetryPolicy ?? AppleWriteRetryContext.policy).readback(id: folderId) {
+      try provider.folders(accountId: input.accountId).filter { $0.id == folderId }
+    }
     guard created.count == 1, let folder = created.first, folder.accountId == input.accountId,
           folder.parentFolderId == input.parentFolderId, folder.name.precomposedStringWithCanonicalMapping == name else {
-      throw AppleGatewayError(code: .unexpectedError, message: "Created Notes folder did not match its requested account, parent and name")
+      throw AppleWriteRetry.annotated(
+        AppleGatewayError(code: .unexpectedError, message: "Created Notes folder did not match its requested account, parent and name", details: ["resourceId": folderId]),
+        outcome: "confirmed", attempts: 1
+      )
     }
     return folder
   }
@@ -71,7 +79,7 @@ public struct NotesWriteService: Sendable {
     let attachmentId = try writer.createNoteAttachment(CreateNoteAttachmentInput(noteId: input.noteId, filePath: file.path))
     let note = try refetchNote(noteId: input.noteId, bodyKind: .html)
     guard let attachment = note.attachments.first(where: { $0.id == attachmentId }) else {
-      throw AppleGatewayError(code: .unexpectedError, message: "Created attachment was not present on note readback")
+      throw AppleWriteRetry.annotated(AppleGatewayError(code: .unexpectedError, message: "Created attachment was not present on note readback", details: ["resourceId": attachmentId]), outcome: "confirmed", attempts: 1)
     }
     return attachment
   }
@@ -146,10 +154,12 @@ public struct NotesWriteService: Sendable {
   }
 
   private func refetchNote(noteId: String, bodyKind: NoteBodyKind) throws -> Note {
-    guard let note = try readService.note(noteId: noteId, bodyKind: bodyKind) else {
-      throw noteNotFound(noteId: noteId)
+    try AppleWriteRetry(policy: writeRetryPolicy ?? AppleWriteRetryContext.policy).readback(id: noteId) {
+      guard let note = try readService.note(noteId: noteId, bodyKind: bodyKind) else {
+        throw noteNotFound(noteId: noteId)
+      }
+      return note
     }
-    return note
   }
 
   private func targetFolder(accountId: String?, folderId: String?) throws -> NoteFolder {

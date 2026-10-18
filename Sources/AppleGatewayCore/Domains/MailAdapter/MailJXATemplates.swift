@@ -18,6 +18,7 @@ public enum MailJXATemplate: String, CaseIterable, Sendable {
         const input = JSON.parse(argv[0]);
         const app = Application('Mail');
         const message = findTargetMessage(app, input.target);
+        if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
         message.readStatus = input.value;
         return JSON.stringify({ success: true });
       }
@@ -28,6 +29,7 @@ public enum MailJXATemplate: String, CaseIterable, Sendable {
         const input = JSON.parse(argv[0]);
         const app = Application('Mail');
         const message = findTargetMessage(app, input.target);
+        if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
         message.flaggedStatus = input.value;
         return JSON.stringify({ success: true });
       }
@@ -39,6 +41,7 @@ public enum MailJXATemplate: String, CaseIterable, Sendable {
         const app = Application('Mail');
         const message = findTargetMessage(app, input.target);
         const destination = findMailbox(app, input.destination);
+        if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
         app.move(message, { to: destination });
         return JSON.stringify({ success: true });
       }
@@ -49,6 +52,7 @@ public enum MailJXATemplate: String, CaseIterable, Sendable {
         const input = JSON.parse(argv[0]);
         const app = Application('Mail');
         const message = findTargetMessage(app, input.target);
+        if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
         app.delete(message);
         return JSON.stringify({ success: true });
       }

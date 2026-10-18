@@ -14,6 +14,7 @@ public enum AppleEventBridgeError: Error, Equatable, Sendable {
 }
 
 public struct AppleEventBridge: Sendable {
+  private let writeRetryPolicy: AppleWriteRetryPolicy?
   private let osascriptPath: String
   private let timeoutSeconds: TimeInterval
   private let environment: [String: String]
@@ -27,8 +28,10 @@ public struct AppleEventBridge: Sendable {
     environment: [String: String] = ProcessInfo.processInfo.environment,
     maxTimeoutRetries: Int = 1,
     terminationGraceSeconds: TimeInterval = 1,
-    temporaryDirectory: URL = FileManager.default.temporaryDirectory
+    temporaryDirectory: URL = FileManager.default.temporaryDirectory,
+    writeRetryPolicy: AppleWriteRetryPolicy? = nil
   ) {
+    self.writeRetryPolicy = writeRetryPolicy
     self.osascriptPath = osascriptPath
     self.timeoutSeconds = timeoutSeconds
     self.environment = environment
@@ -39,6 +42,15 @@ public struct AppleEventBridge: Sendable {
 
   public func runJXA(script: String, argumentsJSON: String) throws -> Data {
     try runJXA(script: script, argumentsJSON: argumentsJSON, retryTimeouts: true)
+  }
+
+  func runWriteJXA(script: String, argumentsJSON: String, tracksDispatch: Bool = false, retry: AppleWriteRetry? = nil) throws -> Data {
+    try validateArgumentsJSON(argumentsJSON)
+    return try (retry ?? AppleWriteRetry(policy: writeRetryPolicy ?? AppleWriteRetryContext.policy)).run {
+      let data = try runOnce(script: AppleWriteJXA.source(script, tracksDispatch: tracksDispatch), argumentsJSON: argumentsJSON, writeAttempt: true)
+      try AppleWriteJXA.validate(data)
+      return data
+    }
   }
 
   func runJXA(script: String, argumentsJSON: String, retryTimeouts: Bool) throws -> Data {
@@ -69,7 +81,7 @@ public struct AppleEventBridge: Sendable {
     }
   }
 
-  private func runOnce(script: String, argumentsJSON: String) throws -> Data {
+  private func runOnce(script: String, argumentsJSON: String, writeAttempt: Bool = false) throws -> Data {
     let process = Process()
     let fileManager = FileManager.default
     let captureId = UUID().uuidString
@@ -82,6 +94,7 @@ public struct AppleEventBridge: Sendable {
         attributes: [.posixPermissions: 0o700]
       )
     } catch {
+      if writeAttempt { throw AppleWriteRetry.launchFailure(error, message: "Could not create osascript output capture directory") }
       throw AppleEventBridgeError.appUnavailable(message: "Could not create osascript output capture directory")
     }
     defer {
@@ -93,6 +106,9 @@ public struct AppleEventBridge: Sendable {
     let privateFileAttributes: [FileAttributeKey: Any] = [.posixPermissions: 0o600]
     guard fileManager.createFile(atPath: stdoutURL.path, contents: nil, attributes: privateFileAttributes),
           fileManager.createFile(atPath: stderrURL.path, contents: nil, attributes: privateFileAttributes) else {
+      if writeAttempt {
+        throw AppleWriteAttemptFailure(error: .init(code: .fileOperationFailed, message: "Could not create osascript output capture files"), definitelyNotDispatched: true, transient: false)
+      }
       throw AppleEventBridgeError.appUnavailable(message: "Could not create osascript output capture files")
     }
     let stdout = try FileHandle(forWritingTo: stdoutURL)
@@ -111,6 +127,9 @@ public struct AppleEventBridge: Sendable {
     do {
       try process.run()
     } catch {
+      if writeAttempt {
+        throw AppleWriteRetry.launchFailure(error, message: "Could not launch osascript")
+      }
       throw AppleEventBridgeError.appUnavailable(
         message: "Could not launch osascript: \(String(describing: error))"
       )

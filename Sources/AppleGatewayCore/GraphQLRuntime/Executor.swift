@@ -37,7 +37,9 @@ struct GraphQLExecutor {
           variables: variableValues,
           variableDefinitions: operation.variableDefinitions
         )
-        let resolved = try definition.resolver?(arguments, context) ?? .null
+        let resolved = try AppleWriteRetryContext.$policy.withValue(context.config.writeRetry) {
+          try definition.resolver?(arguments, context) ?? .null
+        }
         rootObject[responseKey] = GraphQLProjection.project(
           resolved,
           selectionSet: field.selectionSet

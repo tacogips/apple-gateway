@@ -37,7 +37,8 @@ public enum MailServiceFactory {
         writer: LiveMailAppleEventWriter(
           bridge: AppleEventBridge(
             timeoutSeconds: TimeInterval(config.limits.appleEventTimeoutSeconds),
-            environment: environment
+            environment: environment,
+        writeRetryPolicy: config.writeRetry
           )
         )
       )

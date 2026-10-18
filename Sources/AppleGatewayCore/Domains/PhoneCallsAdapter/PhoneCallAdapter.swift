@@ -1,6 +1,7 @@
 import Foundation
 
 public struct LivePhoneCallsAdapter: PhoneCallsProviding {
+  private let writeRetryPolicy: AppleWriteRetryPolicy
   private let contactResolver: any PhoneContactResolving
   private let controller: any PhoneCallUIControlling
   private let audioController: any PhoneAudioControlling
@@ -15,6 +16,7 @@ public struct LivePhoneCallsAdapter: PhoneCallsProviding {
     listeningController: (any PhoneCallListeningControlling)? = nil,
     environment: [String: String] = ProcessInfo.processInfo.environment
   ) {
+    self.writeRetryPolicy = config.writeRetry
     let audioConfiguration = PhoneCallAudioConfiguration(config: config)
     self.contactResolver = contactResolver
     self.controller = controller
@@ -65,23 +67,23 @@ public struct LivePhoneCallsAdapter: PhoneCallsProviding {
       throw AppleGatewayError(code: .invalidArgument, message: "A phone target is required")
     }
     let normalized = try normalize(phoneNumber: target.phoneNumber)
-    return try controller.openCall(
+    return try AppleWriteRetry(policy: writeRetryPolicy).run { try controller.openCall(
       phoneNumber: normalized,
       displayName: target.displayName,
       autoConfirm: input.autoConfirm
-    )
+    ) }
   }
 
   public func answerPhoneCall() throws -> PhoneCallActionResult {
-    try controller.perform(.answer)
+    try AppleWriteRetry(policy: writeRetryPolicy).run { try controller.perform(.answer) }
   }
 
   public func declinePhoneCall() throws -> PhoneCallActionResult {
-    try controller.perform(.decline)
+    try AppleWriteRetry(policy: writeRetryPolicy).run { try controller.perform(.decline) }
   }
 
   public func endPhoneCall() throws -> PhoneCallActionResult {
-    try controller.perform(.end)
+    try AppleWriteRetry(policy: writeRetryPolicy).run { try controller.perform(.end) }
   }
 
   public func playAudioToPhoneCall(_ input: PlayPhoneCallAudioInput) throws -> PhoneCallAudioResult {
@@ -89,11 +91,11 @@ public struct LivePhoneCallsAdapter: PhoneCallsProviding {
     guard !path.isEmpty else {
       throw AppleGatewayError(code: .invalidArgument, message: "filePath must not be empty")
     }
-    return try audioController.play(filePath: path)
+    return try AppleWriteRetry(policy: writeRetryPolicy).run { try audioController.play(filePath: path) }
   }
 
   public func stopPhoneCallAudio() throws -> PhoneCallAudioResult {
-    try audioController.stop()
+    try AppleWriteRetry(policy: writeRetryPolicy).run { try audioController.stop() }
   }
 
   public func phoneCallListeningStatus() throws -> PhoneCallListeningStatus {
@@ -118,11 +120,11 @@ public struct LivePhoneCallsAdapter: PhoneCallsProviding {
         message: "chunkDurationSeconds must be between 1 and 30"
       )
     }
-    return try listeningController.start(chunkDurationSeconds: input.chunkDurationSeconds)
+    return try AppleWriteRetry(policy: writeRetryPolicy).run { try listeningController.start(chunkDurationSeconds: input.chunkDurationSeconds) }
   }
 
   public func stopPhoneCallListening() throws -> PhoneCallListeningStatus {
-    try listeningController.stop()
+    try AppleWriteRetry(policy: writeRetryPolicy).run { try listeningController.stop() }
   }
 
   private func normalize(phoneNumber: String) throws -> String {
