@@ -61,9 +61,10 @@ public struct AppleEventBridge: Sendable {
 
     var attempt = 0
     while true {
+      try checkExecutionBudget()
       do {
         return try runOnce(script: script, argumentsJSON: argumentsJSON)
-      } catch AppleEventBridgeError.timeout where retryTimeouts && attempt < maxTimeoutRetries {
+      } catch AppleEventBridgeError.timeout where retryTimeouts && attempt < maxTimeoutRetries && !AppleWriteExecutionContext.stopped {
         attempt += 1
         continue
       }
@@ -82,6 +83,8 @@ public struct AppleEventBridge: Sendable {
   }
 
   private func runOnce(script: String, argumentsJSON: String, writeAttempt: Bool = false) throws -> Data {
+    try checkExecutionBudget()
+    let waitBudget = AppleEventProcessBudget(timeout: timeoutSeconds, deadline: AppleWriteExecutionContext.deadline)
     let process = Process()
     let fileManager = FileManager.default
     let captureId = UUID().uuidString
@@ -124,6 +127,7 @@ public struct AppleEventBridge: Sendable {
     process.standardOutput = stdout
     process.standardError = stderr
 
+    try checkExecutionBudget()
     do {
       try process.run()
     } catch {
@@ -135,14 +139,13 @@ public struct AppleEventBridge: Sendable {
       )
     }
 
-    let timedOut = !process.waitUntilExit(timeout: timeoutSeconds)
-    if timedOut {
-      process.terminate()
-      if !process.waitUntilExit(timeout: terminationGraceSeconds) {
-        process.forceTerminate()
-        _ = process.waitUntilExit(timeout: terminationGraceSeconds)
-      }
-      throw AppleEventBridgeError.timeout(message: "osascript timed out")
+    // Only this owned child is signalled. Stopping its interpreter cannot undo
+    // an AppleEvent already delivered; write callers retain an unknown outcome.
+    let result = process.waitForGatewayExit(budget: waitBudget)
+    if result != .exited {
+      process.stopGatewayChild(graceSeconds: terminationGraceSeconds)
+      if result == .cancelled { throw CancellationError() }
+      throw AppleEventBridgeError.timeout(message: "osascript exceeded its execution budget")
     }
 
     try? stdout.synchronize()
@@ -163,6 +166,13 @@ public struct AppleEventBridge: Sendable {
       throw AppleEventBridgeError.scriptFailure(message: "osascript returned non-JSON output")
     }
     return outputData
+  }
+
+  private func checkExecutionBudget() throws {
+    if Task.isCancelled { throw CancellationError() }
+    if AppleWriteExecutionContext.deadline.map({ $0.timeIntervalSinceNow <= 0 }) == true {
+      throw AppleEventBridgeError.timeout(message: "osascript execution deadline expired before launch")
+    }
   }
 
   private func classifyFailure(status: Int32, stderr: String) -> AppleEventBridgeError {
@@ -194,34 +204,5 @@ public struct AppleEventBridge: Sendable {
   private func trimmed(_ value: String, fallback: String) -> String {
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? fallback : trimmed
-  }
-}
-
-private extension Process {
-  func waitUntilExit(timeout seconds: TimeInterval) -> Bool {
-    guard seconds > 0 else {
-      waitUntilExit()
-      return true
-    }
-
-    let deadline = Date().addingTimeInterval(seconds)
-    while isRunning {
-      if Date() >= deadline {
-        return false
-      }
-      Thread.sleep(forTimeInterval: 0.01)
-    }
-    return true
-  }
-
-  func forceTerminate() {
-    guard isRunning else {
-      return
-    }
-#if canImport(Darwin)
-    _ = Darwin.kill(processIdentifier, SIGKILL)
-#elseif canImport(Glibc)
-    _ = Glibc.kill(processIdentifier, SIGKILL)
-#endif
   }
 }
