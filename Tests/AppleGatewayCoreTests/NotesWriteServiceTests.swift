@@ -142,6 +142,40 @@ import Testing
   #expect(commandSpec.contains("Notes HTML round-tripping is lossy"))
 }
 
+@Test func attachmentImportValidatesLocalFileAndPreservesExistingBody() throws {
+  let fake = FakeNotesWriteBackend()
+  let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    .appendingPathComponent("tmp/attachment-service-\(UUID().uuidString)")
+  try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let source = root.appendingPathComponent("fixture.png")
+  try Data([1, 2, 3]).write(to: source)
+  let service = NotesWriteService(provider: fake, writer: fake)
+  let previous = fake.notes["note-1"]?.bodyHtml
+  let attachment = try service.createNoteAttachment(.init(noteId: "note-1", filePath: source.path))
+  #expect(attachment.id == "imported-1")
+  #expect(attachment.name == "fixture.png")
+  #expect(fake.notes["note-1"]?.bodyHtml == previous)
+  #expect(fake.replaceRequests.isEmpty)
+  #expect(fake.attachmentRequests == [.init(noteId: "note-1", filePath: source.path)])
+  let link = root.appendingPathComponent("link.png")
+  try FileManager.default.createSymbolicLink(at: link, withDestinationURL: source)
+  let empty = root.appendingPathComponent("empty")
+  try Data().write(to: empty)
+  let oversized = root.appendingPathComponent("oversized")
+  FileManager.default.createFile(atPath: oversized.path, contents: nil)
+  let handle = try FileHandle(forWritingTo: oversized)
+  try handle.truncate(atOffset: 64 * 1024 * 1024 + 1)
+  try handle.close()
+  for path in ["relative.png", root.path, root.appendingPathComponent("missing").path, link.path, empty.path, oversized.path] {
+    #expect(throws: AppleGatewayError.self) { try service.createNoteAttachment(.init(noteId: "note-1", filePath: path)) }
+  }
+  #expect(throws: AppleGatewayError.self) { try service.createNoteAttachment(.init(noteId: "missing", filePath: source.path)) }
+  fake.notes["note-1"]?.isPasswordProtected = true
+  #expect(throws: AppleGatewayError.self) { try service.createNoteAttachment(.init(noteId: "note-1", filePath: source.path)) }
+  #expect(fake.attachmentRequests.count == 1)
+}
+
 private final class FakeNotesWriteBackend: NotesProviding, NotesWriting, @unchecked Sendable {
   var accountsList = [NoteAccount(id: "icloud", name: "iCloud", isDefault: true)]
   var foldersList = [
@@ -152,6 +186,7 @@ private final class FakeNotesWriteBackend: NotesProviding, NotesWriting, @unchec
     "note-1": noteWriteFixture(id: "note-1", folderId: "inbox", bodyHtml: "<div>Original</div>")
   ]
   var createRequests: [NotesCreateRequest] = []
+  var attachmentRequests: [CreateNoteAttachmentInput] = []
   var replaceRequests: [NotesBodyWriteRequest] = []
   var moveRequests: [NotesMoveRequest] = []
   var deletedNoteIds: [String] = []
@@ -196,6 +231,7 @@ private final class FakeNotesWriteBackend: NotesProviding, NotesWriting, @unchec
     guard let note = notes[noteId] else {
       return .missing
     }
+    if note.isPasswordProtected { return .locked }
     return .found(note)
   }
 
@@ -220,6 +256,12 @@ private final class FakeNotesWriteBackend: NotesProviding, NotesWriting, @unchec
     to destination: URL
   ) throws -> NotesAttachmentExportResult {
     .unavailable
+  }
+
+  func createNoteAttachment(_ input: CreateNoteAttachmentInput) throws -> String {
+    attachmentRequests.append(input)
+    notes[input.noteId]?.attachments.append(NoteAttachment(id: "imported-1", name: URL(fileURLWithPath: input.filePath).lastPathComponent, downloadKey: "fixture-key"))
+    return "imported-1"
   }
 
   func createNote(_ request: NotesCreateRequest) throws -> String {

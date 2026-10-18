@@ -168,6 +168,11 @@ public struct LiveNotesAppleEventAdapter: NotesProviding, NotesWriting {
     }
   }
 
+  public func createNoteAttachment(_ input: CreateNoteAttachmentInput) throws -> String {
+    let payload: NotesAttachmentCreatePayload = try run(template: .createNoteAttachment, arguments: input)
+    return payload.attachmentId
+  }
+
   public func createNote(_ request: NotesCreateRequest) throws -> String {
     let payload: NotesWritePayload = try run(
       template: .createNote,
@@ -294,4 +299,8 @@ private extension Array {
       Array(self[start..<Swift.min(start + size, count)])
     }
   }
+}
+
+private struct NotesAttachmentCreatePayload: Decodable {
+  var attachmentId: String
 }

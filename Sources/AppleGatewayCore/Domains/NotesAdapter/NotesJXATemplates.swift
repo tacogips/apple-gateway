@@ -11,6 +11,7 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
   case fetchNoteBody
   case exportAttachment
   case createNote
+  case createNoteAttachment
   case replaceNoteBody
   case deleteNote
   case moveNote
@@ -35,6 +36,8 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
       return Self.fetchNoteBodySource
     case .exportAttachment:
       return Self.exportAttachmentSource
+    case .createNoteAttachment:
+      return Self.createNoteAttachmentSource
     case .createNote:
       return Self.createNoteSource
     case .replaceNoteBody:
@@ -464,6 +467,26 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
       }
     }
     return JSON.stringify({ status: 'noteMissing', path: null });
+  }
+  """
+
+  private static let createNoteAttachmentSource = """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    for (const account of app.accounts()) {
+      for (const folder of account.folders()) {
+        for (const note of folder.notes()) {
+          if (String(note.id()) !== input.noteId) { continue; }
+          if (note.passwordProtected && note.passwordProtected()) {
+            throw new Error('Note is password protected');
+          }
+          const attachment = app.make({new: 'attachment', at: note, withData: Path(input.filePath)});
+          return JSON.stringify({attachmentId: String(attachment.id())});
+        }
+      }
+    }
+    throw new Error('Note not found');
   }
   """
 

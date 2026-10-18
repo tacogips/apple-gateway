@@ -328,3 +328,9 @@ The `note` query defaults to `bodyKind: PLAINTEXT`. Request `bodyKind: HTML` to 
 ```
 
 Only the requested representation is fetched. Large bodies return a `bodyFile` descriptor with the matching `HTML` or `PLAINTEXT` kind instead of an inline body. `noteFolders.parentFolderId` identifies the containing folder; top-level folders have a null parent.
+
+### Import a Notes attachment
+
+The full gateway supports `createNoteAttachment(input: {noteId, filePath}) { id name contentIdentifier downloadKey }`. The native Notes command copies source bytes into Notes storage and appends an attachment without replacing the note body. Supply an explicit canonical absolute path to a readable regular file, from 1 byte through 64 MiB, with no symlink components. The attachment keeps the source filename. Reader mode rejects this mutation.
+
+The returned download key uses the existing best-effort attachment export path. Verify exported bytes when archival integrity matters. The mutation is not idempotent: callers must persist the returned attachment ID and reconcile existing attachments before retrying after uncertain completion. An HTML `file://` image source is not a substitute for native import.

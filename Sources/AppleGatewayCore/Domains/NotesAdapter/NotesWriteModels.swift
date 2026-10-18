@@ -81,3 +81,13 @@ public struct NotesMoveRequest: Codable, Equatable, Sendable {
     self.folderId = folderId
   }
 }
+
+public struct CreateNoteAttachmentInput: Codable, Equatable, Sendable {
+  public var noteId: String
+  public var filePath: String
+
+  public init(noteId: String, filePath: String) {
+    self.noteId = noteId
+    self.filePath = filePath
+  }
+}

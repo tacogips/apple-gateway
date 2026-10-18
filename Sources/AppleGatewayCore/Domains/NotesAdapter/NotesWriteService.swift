@@ -22,6 +22,27 @@ public struct NotesWriteService: Sendable {
     )
   }
 
+  public func createNoteAttachment(_ input: CreateNoteAttachmentInput) throws -> NoteAttachment {
+    _ = try existingNote(noteId: input.noteId)
+    guard input.filePath.hasPrefix("/") else {
+      throw AppleGatewayError(code: .invalidArgument, message: "Attachment filePath must be absolute")
+    }
+    let file = URL(fileURLWithPath: input.filePath).standardizedFileURL
+    guard file.path == file.resolvingSymlinksInPath().path,
+          let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
+          values.isRegularFile == true, values.isSymbolicLink != true,
+          let size = values.fileSize, size > 0, size <= 64 * 1024 * 1024,
+          FileManager.default.isReadableFile(atPath: file.path) else {
+      throw AppleGatewayError(code: .invalidArgument, message: "Attachment filePath must be a readable regular file of 1 byte through 64 MiB without symlink components")
+    }
+    let attachmentId = try writer.createNoteAttachment(CreateNoteAttachmentInput(noteId: input.noteId, filePath: file.path))
+    let note = try refetchNote(noteId: input.noteId, bodyKind: .html)
+    guard let attachment = note.attachments.first(where: { $0.id == attachmentId }) else {
+      throw AppleGatewayError(code: .unexpectedError, message: "Created attachment was not present on note readback")
+    }
+    return attachment
+  }
+
   public func createNote(_ input: CreateNoteInput) throws -> Note {
     let bodyHtml = try resolvedBodyHtml(bodyHtml: input.bodyHtml, bodyText: input.bodyText)
     let folder = try targetFolder(accountId: input.accountId, folderId: input.folderId)

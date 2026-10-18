@@ -14,6 +14,7 @@ import Testing
   #expect(!readerSchema.contains("createNote"))
 
   #expect(fullSchema.contains("type Mutation {"))
+  #expect(fullSchema.contains("  createNoteAttachment(input: CreateNoteAttachmentInput!): NoteAttachment!"))
   #expect(fullSchema.contains("  createNote(input: CreateNoteInput!): Note!"))
   #expect(fullSchema.contains("  updateNoteBody(input: UpdateNoteBodyInput!): Note!"))
   #expect(fullSchema.contains("  deleteNote(noteId: ID!): DeleteResult!"))
@@ -186,6 +187,28 @@ import Testing
   #expect(fake.createRequests.count == 1)
 }
 
+@Test func attachmentMutationMapsInputAndIsDisabledForReaders() throws {
+  let fake = GraphQLNotesFake()
+  let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+    .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("tmp/attachment-graphql-\(UUID().uuidString)")
+  try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let source = root.appendingPathComponent("fixture.png")
+  try Data([1, 2, 3]).write(to: source)
+  let encodedPath = try #require(String(data: JSONEncoder().encode(source.path), encoding: .utf8))
+  let document = "mutation { createNoteAttachment(input: {noteId: \"note-1\", filePath: \(encodedPath)}) { id name downloadKey } }"
+  let service = NotesWriteService(provider: fake, writer: fake)
+  let result = try notesExecuteGraphQL(document, notesReadService: NotesReadService(provider: fake), notesWriteService: service)
+  #expect(result.errors.isEmpty)
+  let attachment = try #require(result.data?["createNoteAttachment"] as? [String: Any])
+  #expect(attachment["id"] as? String == "imported-attachment")
+  #expect(attachment["downloadKey"] as? String == "fixture-key")
+  #expect(fake.attachmentRequests == [.init(noteId: "note-1", filePath: source.path)])
+  let denied = try notesExecuteGraphQL(document, role: .reader, notesReadService: NotesReadService(provider: fake), notesWriteService: service)
+  #expect(!denied.errors.isEmpty)
+  #expect(fake.attachmentRequests.count == 1)
+}
+
 private func notesExecuteGraphQL(
   _ query: String,
   role: AppleGatewayRole = .full,
@@ -243,6 +266,7 @@ private struct NotesGraphQLPermissionsProvider: PermissionsStatusProviding {
 private final class GraphQLNotesFake: NotesProviding, NotesWriting, @unchecked Sendable {
   var notes: [String: Note]
   var createRequests: [NotesCreateRequest] = []
+  var attachmentRequests: [CreateNoteAttachmentInput] = []
   var deletedNoteIds: [String] = []
   var requestedBodyKinds: [NoteBodyKind] = []
 
@@ -326,6 +350,12 @@ private final class GraphQLNotesFake: NotesProviding, NotesWriting, @unchecked S
     to destination: URL
   ) throws -> NotesAttachmentExportResult {
     .unavailable
+  }
+
+  func createNoteAttachment(_ input: CreateNoteAttachmentInput) throws -> String {
+    attachmentRequests.append(input)
+    notes[input.noteId]?.attachments.append(NoteAttachment(id: "imported-attachment", name: "fixture.png", downloadKey: "fixture-key"))
+    return "imported-attachment"
   }
 
   func createNote(_ request: NotesCreateRequest) throws -> String {

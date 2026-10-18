@@ -379,7 +379,8 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
     .fetchNoteMetadataBatch,
     .probeNoteVisibility,
     .fetchNoteBody,
-    .exportAttachment
+    .exportAttachment,
+    .createNoteAttachment // Covered by executable command-contract tests.
   ]
   for template in NotesJXATemplate.allCases where !metadataTemplates.contains(template) {
     #expect(template.source == noteTemplateGoldens[template])
