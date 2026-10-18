@@ -7,11 +7,14 @@ import Testing
     .replacingOccurrences(of: "Application('Notes')", with: "mockApplication()")
     .replacingOccurrences(of: "Path(input.filePath)", with: "mockPath(input.filePath)")
   let fixture = """
-  const fixtureNote = {id: () => 'target', passwordProtected: () => false};
+  const account = {id: () => 'account'};
+  const folder = {id: () => 'folder', container: () => account};
+  const fixtureNote = {id: () => 'target', passwordProtected: () => false, container: () => folder};
   function mockPath(path) { return {filePath: path}; }
   function mockApplication() {
     return {
-      accounts: () => [{folders: () => [{notes: () => [{id: () => 'other'}, fixtureNote]}]}],
+      accounts: {id: () => ['account']},
+      notes: {byId: id => fixtureNote},
       make: command => {
         if (command.new !== 'attachment' || command.at !== fixtureNote || command.withData.filePath !== '/fixture/quoted"name.png') {
           throw new Error('Incorrect native attachment command');

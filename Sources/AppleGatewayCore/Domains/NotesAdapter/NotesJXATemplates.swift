@@ -472,24 +472,19 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
   }
   """
 
-  private static let createNoteAttachmentSource = """
+  private static let createNoteAttachmentSource = noteMetadataHelpersSource + "\n\n" + """
   function run(argv) {
     const input = JSON.parse(argv[0]);
     const app = Application('Notes');
-    for (const account of app.accounts()) {
-      for (const folder of account.folders()) {
-        for (const note of folder.notes()) {
-          if (String(note.id()) !== input.noteId) { continue; }
-          if (note.passwordProtected && note.passwordProtected()) {
-            throw new Error('Note is password protected');
-          }
-          if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
-          const attachment = app.make({new: 'attachment', at: note, withData: Path(input.filePath)});
-          return JSON.stringify({attachmentId: String(attachment.id())});
-        }
-      }
+    const note = notesById(app, input.noteId);
+    if (!note) { throw new Error('Note not found'); }
+    if (note.passwordProtected && note.passwordProtected()) {
+      throw new Error('Note is password protected');
     }
-    throw new Error('Note not found');
+    notesLocation(app, note);
+    if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
+    const attachment = app.make({new: 'attachment', at: note, withData: Path(input.filePath)});
+    return JSON.stringify({attachmentId: String(attachment.id())});
   }
   """
 
@@ -518,87 +513,56 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
   }
   """
 
-  private static let replaceNoteBodySource = """
+  private static let replaceNoteBodySource = noteMetadataHelpersSource + "\n\n" + """
   function run(argv) {
     const input = JSON.parse(argv[0]);
     const app = Application('Notes');
-    for (const account of app.accounts()) {
-      for (const folder of account.folders()) {
-        for (const note of folder.notes()) {
-          if (String(note.id()) !== input.noteId) {
-            continue;
-          }
-          if (note.passwordProtected && note.passwordProtected()) {
-            throw new Error('Note is password protected');
-          }
-          if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
-          note.body = input.bodyHtml;
-          return JSON.stringify({ noteId: String(note.id()) });
-        }
-      }
+    const note = notesById(app, input.noteId);
+    if (!note) { throw new Error('Note not found'); }
+    if (note.passwordProtected && note.passwordProtected()) {
+      throw new Error('Note is password protected');
     }
-    throw new Error('Note not found');
+    notesLocation(app, note);
+    if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
+    note.body = input.bodyHtml;
+    return JSON.stringify({ noteId: String(note.id()) });
   }
   """
 
-  private static let deleteNoteSource = """
+  private static let deleteNoteSource = noteMetadataHelpersSource + "\n\n" + """
   function run(argv) {
     const input = JSON.parse(argv[0]);
     const app = Application('Notes');
-    for (const account of app.accounts()) {
-      for (const folder of account.folders()) {
-        for (const note of folder.notes()) {
-          if (String(note.id()) !== input.noteId) {
-            continue;
-          }
-          if (note.passwordProtected && note.passwordProtected()) {
-            throw new Error('Note is password protected');
-          }
-          if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
-          note.delete();
-          return JSON.stringify({ success: true });
-        }
-      }
+    const note = notesById(app, input.noteId);
+    if (!note) { throw new Error('Note not found'); }
+    if (note.passwordProtected && note.passwordProtected()) {
+      throw new Error('Note is password protected');
     }
-    throw new Error('Note not found');
+    notesLocation(app, note);
+    if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
+    note.delete();
+    return JSON.stringify({ success: true });
   }
   """
 
-  private static let moveNoteSource = """
+  private static let moveNoteSource = noteMetadataHelpersSource + "\n\n" + """
   function run(argv) {
     const input = JSON.parse(argv[0]);
     const app = Application('Notes');
-    let targetFolder = null;
-    for (const account of app.accounts()) {
-      if (String(account.id()) !== input.accountId) {
-        continue;
-      }
-      for (const folder of account.folders()) {
-        if (String(folder.id()) === input.folderId) {
-          targetFolder = folder;
-          break;
-        }
-      }
+    const note = notesById(app, input.noteId);
+    if (!note) { throw new Error('Note not found'); }
+    if (note.passwordProtected && note.passwordProtected()) {
+      throw new Error('Note is password protected');
     }
-    if (!targetFolder) {
-      throw new Error('Notes folder not found');
+    notesLocation(app, note);
+    const targetFolder = app.folders.byId(input.folderId);
+    if (String(targetFolder.id()) !== input.folderId) { throw new Error('Notes folder identity mismatch'); }
+    if (notesLocation(app, targetFolder).accountId !== input.accountId) {
+      throw new Error('Notes folder belongs to another account');
     }
-    for (const account of app.accounts()) {
-      for (const folder of account.folders()) {
-        for (const note of folder.notes()) {
-          if (String(note.id()) !== input.noteId) {
-            continue;
-          }
-          if (note.passwordProtected && note.passwordProtected()) {
-            throw new Error('Note is password protected');
-          }
-          if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
-          note.move({ to: targetFolder });
-          return JSON.stringify({ noteId: input.noteId });
-        }
-      }
-    }
-    throw new Error('Note not found');
+    if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
+    note.move({ to: targetFolder });
+    return JSON.stringify({ noteId: input.noteId });
   }
   """
 }

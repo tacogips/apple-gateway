@@ -9,7 +9,10 @@ import Testing
     .fetchNoteBody,
     .exportAttachment,
     .createNoteFolder,
-    .createNoteAttachment // Covered by executable command-contract tests.
+    .createNoteAttachment,
+    .replaceNoteBody,
+    .deleteNote,
+    .moveNote // Covered by executable command-contract tests.
   ]
   for template in NotesJXATemplate.allCases where !metadataTemplates.contains(template) {
     #expect(template.source == noteTemplateGoldens[template])
