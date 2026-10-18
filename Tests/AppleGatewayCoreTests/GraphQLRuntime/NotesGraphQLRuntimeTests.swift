@@ -18,6 +18,9 @@ import Testing
   #expect(fullSchema.contains("  createNoteAttachment(input: CreateNoteAttachmentInput!): NoteAttachment!"))
   #expect(fullSchema.contains("  createNote(input: CreateNoteInput!): Note!"))
   #expect(fullSchema.contains("  updateNoteBody(input: UpdateNoteBodyInput!): Note!"))
+  #expect(fullSchema.contains("  deleteNoteFolder(input: DeleteNoteFolderInput!): DeleteResult!"))
+  #expect(fullSchema.contains("  allowNonEmpty: Boolean"))
+  #expect(!readerSchema.contains("deleteNoteFolder"))
   #expect(fullSchema.contains("  deleteNote(noteId: ID!): DeleteResult!"))
   #expect(fullSchema.contains("  moveNote(noteId: ID!, folderId: ID!): Note!"))
 }
@@ -297,11 +300,37 @@ private struct NotesGraphQLPermissionsProvider: PermissionsStatusProviding {
   }
 }
 
+@Test func notesFolderDeletionGraphQLDefaultsAndExplicitConsentReachWriter() throws {
+  let fake = GraphQLNotesFake()
+  let service = NotesWriteService(provider: fake, writer: fake)
+  for document in [
+    "mutation { deleteNoteFolder(input: { accountId: \"icloud\", folderId: \"archive\" }) { success } }",
+    "mutation { deleteNoteFolder(input: { accountId: \"icloud\", folderId: \"inbox\", allowNonEmpty: true }) { success } }"
+  ] {
+    let result = try notesExecuteGraphQL(document, notesReadService: NotesReadService(provider: fake), notesWriteService: service)
+    #expect(result.errors.isEmpty)
+    let value = try #require(result.data?["deleteNoteFolder"] as? [String: Any])
+    #expect(value["success"] as? Bool == true)
+  }
+  #expect(fake.folderDeleteRequests == [.init(accountId: "icloud", folderId: "archive"),
+                                       .init(accountId: "icloud", folderId: "inbox", allowNonEmpty: true)])
+  for document in [
+    "mutation { deleteNoteFolder(input: { accountId: \"icloud\", folderId: \"inbox\" }) { success } }",
+    "mutation { deleteNoteFolder(input: { accountId: \"wrong\", folderId: \"archive\" }) { success } }",
+    "mutation { deleteNoteFolder(input: { folderId: \"archive\" }) { success } }"
+  ] {
+    let result = try notesExecuteGraphQL(document, notesReadService: NotesReadService(provider: fake), notesWriteService: service)
+    #expect(!result.errors.isEmpty)
+  }
+  #expect(fake.folderDeleteRequests.count == 2)
+}
+
 private final class GraphQLNotesFake: NotesProviding, NotesWriting, @unchecked Sendable {
   var notes: [String: Note]
   var createRequests: [NotesCreateRequest] = []
   var attachmentRequests: [CreateNoteAttachmentInput] = []
   var deletedNoteIds: [String] = []
+  var folderDeleteRequests: [DeleteNoteFolderInput] = []
   var requestedBodyKinds: [NoteBodyKind] = []
   var requestedAttachmentMetadata: [Bool] = []
   var exportedAttachmentIds: [String] = []
@@ -422,6 +451,11 @@ private final class GraphQLNotesFake: NotesProviding, NotesWriting, @unchecked S
     note.bodyHtml = request.bodyHtml
     notes[request.noteId] = note
     return request.noteId
+  }
+
+  func deleteNoteFolder(_ input: DeleteNoteFolderInput) throws -> DeleteResult {
+    folderDeleteRequests.append(input)
+    return DeleteResult(success: true)
   }
 
   func deleteNote(noteId: String) throws -> DeleteResult {

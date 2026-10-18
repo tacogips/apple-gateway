@@ -82,6 +82,11 @@ private enum NotesSchema {
         inputField("noteId", idRequired()),
         inputField("filePath", stringRequired())
       ]),
+      input("DeleteNoteFolderInput", fields: [
+        inputField("accountId", idRequired()),
+        inputField("folderId", idRequired()),
+        inputField("allowNonEmpty", named("Boolean"), defaultValue: .bool(false))
+      ]),
       input("CreateNoteInput", fields: [
         inputField("accountId", id()),
         inputField("folderId", id()),
@@ -192,6 +197,25 @@ private enum NotesSchema {
           try noteValue(context.notesWriteService.updateNoteBody(
             arguments.notesRequired("input").updateNoteBodyInputValue()
           ))
+        }
+      ),
+      GraphQLFieldDefinition(
+        name: "deleteNoteFolder",
+        type: nonNull(named("DeleteResult")),
+        arguments: [argument("input", nonNull(named("DeleteNoteFolderInput")))],
+        resolver: { arguments, context in
+          let input = try arguments.notesRequired("input").notesObjectDictionary()
+          let allowNonEmpty: Bool
+          switch input["allowNonEmpty"] {
+          case .bool(let value): allowNonEmpty = value
+          case nil, .null: allowNonEmpty = false
+          default: throw AppleGatewayError(code: .invalidArgument, message: "Expected boolean")
+          }
+          return try deleteResultValue(context.notesWriteService.deleteNoteFolder(.init(
+            accountId: input.notesRequired("accountId").notesStringValue(),
+            folderId: input.notesRequired("folderId").notesStringValue(),
+            allowNonEmpty: allowNonEmpty
+          )))
         }
       ),
       GraphQLFieldDefinition(

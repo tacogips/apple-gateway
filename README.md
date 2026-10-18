@@ -354,3 +354,18 @@ Only proven pre-dispatch transient failures are retried: resource-exhausted proc
 Write errors carry `details.writeOutcome` (`notDispatched`, `unknown`, or `confirmed`), `retrySafe: false`, and `writeAttempts`. Unknown writes require caller readback/reconciliation before any new mutation. Once Notes returns a stable ID, verification retries only the read; failed verification reports `confirmed`, `resourceId` and `readbackAttempts`, and never repeats create, append or attachment import. Ordinary read operations retain their timeout retry policy only while the invocation deadline remains valid; cancellation prevents further read attempts.
 
 `updateNoteBody(mode: APPEND)` rejects notes with native attachments before reading or rewriting their body. Notes-exported image HTML can duplicate or degrade native attachments when assigned back, so it is not a durable attachment-preserving representation. Text-only APPEND is supported. REPLACE explicitly replaces the complete body; applications that own that body must retain validated source bytes and restore attachments through `createNoteAttachment`, then verify exported bytes. Attachment IDs and names may change after a body replacement.
+
+### Delete a Notes folder
+
+The full SDK/GraphQL interface exposes `deleteNoteFolder(input: DeleteNoteFolderInput!): DeleteResult!`:
+
+```graphql
+mutation {
+  deleteNoteFolder(input: {accountId: "ACCOUNT_ID", folderId: "FOLDER_ID"}) { success }
+}
+```
+
+The Swift SDK uses `NotesWriteService.deleteNoteFolder(DeleteNoteFolderInput(accountId:folderId:allowNonEmpty:))`.
+Both account and folder IDs are required; names are never deletion identities. By default the folder must contain no notes or child folders. Set `allowNonEmpty: true` explicitly to delete its complete native subtree, including descendant folders and their notes. The live bridge repeats ownership and emptiness checks immediately before one native `folder.delete()` operation. Concurrent edits by other Notes clients are not covered by a cross-process transaction.
+
+This uses normal Notes deletion only: no purge, empty-trash or permanent-delete operation is issued. Notes/account/macOS policy determines whether contained notes enter Recently Deleted and how long they remain recoverable; folder hierarchy restoration is not guaranteed. `success` confirms the native delete returned, not trash placement or recovery verification. Timeout/cancellation after dispatch has unknown outcome and is never automatically replayed; reconcile before retrying. The reader role cannot invoke this mutation. Validation and command-contract tests use injected providers/JXA fixtures and do not delete actual Notes data.

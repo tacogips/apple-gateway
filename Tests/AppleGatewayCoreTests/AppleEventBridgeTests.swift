@@ -192,6 +192,7 @@ import Testing
     { _ = try $0.createNoteAttachment(.init(noteId: "n", filePath: "/fixture.png")) },
     { _ = try $0.replaceNoteBody(.init(noteId: "n", bodyHtml: "body")) },
     { _ = try $0.deleteNote(noteId: "n") },
+    { _ = try $0.deleteNoteFolder(.init(accountId: "a", folderId: "f")) },
     { _ = try $0.moveNote(.init(noteId: "n", accountId: "a", folderId: "f")) }
   ]
   for operation in operations {

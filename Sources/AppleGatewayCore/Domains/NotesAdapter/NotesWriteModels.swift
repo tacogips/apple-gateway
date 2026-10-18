@@ -103,3 +103,17 @@ public struct CreateNoteFolderInput: Codable, Equatable, Sendable {
     self.name = name
   }
 }
+
+/// Normal Notes folder deletion, never a permanent purge. Nonempty subtrees
+/// require explicit consent; recovery depends on Notes and the account provider.
+public struct DeleteNoteFolderInput: Codable, Equatable, Sendable {
+  public var accountId: String
+  public var folderId: String
+  public var allowNonEmpty: Bool
+
+  public init(accountId: String, folderId: String, allowNonEmpty: Bool = false) {
+    self.accountId = accountId
+    self.folderId = folderId
+    self.allowNonEmpty = allowNonEmpty
+  }
+}

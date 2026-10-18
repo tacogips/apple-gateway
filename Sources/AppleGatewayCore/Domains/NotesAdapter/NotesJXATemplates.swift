@@ -15,11 +15,12 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
   case createNoteFolder
   case replaceNoteBody
   case deleteNote
+  case deleteNoteFolder
   case moveNote
 
   var permitsTimeoutRetry: Bool {
     switch self {
-    case .createNote, .createNoteAttachment, .createNoteFolder, .replaceNoteBody, .deleteNote, .moveNote:
+    case .createNote, .createNoteAttachment, .createNoteFolder, .replaceNoteBody, .deleteNote, .deleteNoteFolder, .moveNote:
       false
     default:
       true
@@ -54,6 +55,8 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
       return Self.createNoteSource
     case .replaceNoteBody:
       return Self.replaceNoteBodySource
+    case .deleteNoteFolder:
+      return Self.deleteNoteFolderSource
     case .deleteNote:
       return Self.deleteNoteSource
     case .moveNote:
@@ -526,6 +529,26 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
     if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
     note.body = input.bodyHtml;
     return JSON.stringify({ noteId: String(note.id()) });
+  }
+  """
+
+  private static let deleteNoteFolderSource = noteMetadataHelpersSource + "\n\n" + """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    if (typeof input.accountId !== 'string' || !input.accountId ||
+        typeof input.folderId !== 'string' || !input.folderId ||
+        typeof input.allowNonEmpty !== 'boolean') { throw new Error('Invalid Notes folder deletion input'); }
+    if (app.accounts.id().map(String).indexOf(input.accountId) === -1) { throw new Error('Notes account not found'); }
+    const folder = app.folders.byId(input.folderId);
+    if (String(folder.id()) !== input.folderId) { throw new Error('Notes folder identity mismatch'); }
+    if (notesLocation(app, folder).accountId !== input.accountId) { throw new Error('Notes folder belongs to another account'); }
+    if (!input.allowNonEmpty && (folder.notes().length !== 0 || folder.folders().length !== 0)) {
+      throw new Error('Deleting a nonempty Notes folder requires allowNonEmpty');
+    }
+    if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
+    folder.delete();
+    return JSON.stringify({success: true});
   }
   """
 

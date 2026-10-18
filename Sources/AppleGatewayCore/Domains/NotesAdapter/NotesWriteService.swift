@@ -117,6 +117,26 @@ public struct NotesWriteService: Sendable {
     return try refetchNote(noteId: noteId, bodyKind: .html)
   }
 
+  public func deleteNoteFolder(_ input: DeleteNoteFolderInput) throws -> DeleteResult {
+    guard !input.accountId.isEmpty, !input.folderId.isEmpty,
+          try provider.accounts().contains(where: { $0.id == input.accountId }) else {
+      throw AppleGatewayError(code: .invalidArgument, message: "Unknown Notes account id or empty folder id")
+    }
+    let folders = try provider.folders(accountId: input.accountId)
+    let matches = folders.filter { $0.id == input.folderId && $0.accountId == input.accountId }
+    guard matches.count == 1, let folder = matches.first else {
+      throw AppleGatewayError(code: .noteFolderNotFound, message: "Notes folder does not uniquely belong to the requested account")
+    }
+    if !input.allowNonEmpty {
+      guard folder.noteCount == 0,
+            !folders.contains(where: { $0.parentFolderId == folder.id && $0.accountId == input.accountId }) else {
+        throw AppleGatewayError(code: .invalidArgument, message: "Deleting a nonempty Notes folder requires allowNonEmpty")
+      }
+    }
+    // The live writer revalidates identity and emptiness immediately before dispatch.
+    return try writer.deleteNoteFolder(input)
+  }
+
   public func deleteNote(noteId: String) throws -> DeleteResult {
     _ = try existingNote(noteId: noteId)
     return try writer.deleteNote(noteId: noteId)

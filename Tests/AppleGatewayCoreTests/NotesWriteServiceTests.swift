@@ -223,6 +223,28 @@ import Testing
   #expect(throws: AppleGatewayError.self) { try service.createNoteFolder(.init(accountId: "icloud", name: "wrong-readback")) }
 }
 
+@Test func noteFolderDeletionRequiresExactAccountAndExplicitNonemptyConsent() throws {
+  let fake = FakeNotesWriteBackend()
+  let service = NotesWriteService(provider: fake, writer: fake)
+  for input in [DeleteNoteFolderInput(accountId: "missing", folderId: "archive"),
+                .init(accountId: "icloud", folderId: "missing"),
+                .init(accountId: "icloud", folderId: ""),
+                .init(accountId: "icloud", folderId: "inbox")] {
+    #expect(throws: AppleGatewayError.self) { try service.deleteNoteFolder(input) }
+  }
+  fake.foldersList.append(NoteFolder(id: "child", accountId: "icloud", name: "Child", parentFolderId: "archive", noteCount: 0))
+  #expect(throws: AppleGatewayError.self) { try service.deleteNoteFolder(.init(accountId: "icloud", folderId: "archive")) }
+  fake.foldersList.append(NoteFolder(id: "foreign", accountId: "other", name: "Foreign", noteCount: 0))
+  #expect(throws: AppleGatewayError.self) { try service.deleteNoteFolder(.init(accountId: "icloud", folderId: "foreign", allowNonEmpty: true)) }
+  fake.foldersList.append(NoteFolder(id: "archive", accountId: "icloud", name: "Duplicate identity", noteCount: 0))
+  #expect(throws: AppleGatewayError.self) { try service.deleteNoteFolder(.init(accountId: "icloud", folderId: "archive", allowNonEmpty: true)) }
+  fake.foldersList.removeLast()
+  #expect(fake.folderDeleteRequests.isEmpty)
+  #expect(try service.deleteNoteFolder(.init(accountId: "icloud", folderId: "archive", allowNonEmpty: true)).success)
+  #expect(fake.folderDeleteRequests == [.init(accountId: "icloud", folderId: "archive", allowNonEmpty: true)])
+  #expect(try service.deleteNoteFolder(.init(accountId: "icloud", folderId: "child")).success)
+}
+
 private final class FakeNotesWriteBackend: NotesProviding, NotesWriting, @unchecked Sendable {
   var accountsList = [NoteAccount(id: "icloud", name: "iCloud", isDefault: true)]
   var foldersList = [
@@ -235,6 +257,7 @@ private final class FakeNotesWriteBackend: NotesProviding, NotesWriting, @unchec
   var createRequests: [NotesCreateRequest] = []
   var attachmentRequests: [CreateNoteAttachmentInput] = []
   var folderCreateRequests: [CreateNoteFolderInput] = []
+  var folderDeleteRequests: [DeleteNoteFolderInput] = []
   var folderReadbackParentOverride: String?
   var replaceRequests: [NotesBodyWriteRequest] = []
   var moveRequests: [NotesMoveRequest] = []
@@ -341,6 +364,11 @@ private final class FakeNotesWriteBackend: NotesProviding, NotesWriting, @unchec
     note.bodyHtml = request.bodyHtml
     notes[request.noteId] = note
     return request.noteId
+  }
+
+  func deleteNoteFolder(_ input: DeleteNoteFolderInput) throws -> DeleteResult {
+    folderDeleteRequests.append(input)
+    return DeleteResult(success: true)
   }
 
   func deleteNote(noteId: String) throws -> DeleteResult {

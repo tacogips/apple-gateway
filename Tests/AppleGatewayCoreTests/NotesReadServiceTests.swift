@@ -12,6 +12,7 @@ import Testing
     .createNoteAttachment,
     .replaceNoteBody,
     .deleteNote,
+    .deleteNoteFolder,
     .moveNote // Covered by executable command-contract tests.
   ]
   for template in NotesJXATemplate.allCases where !metadataTemplates.contains(template) {

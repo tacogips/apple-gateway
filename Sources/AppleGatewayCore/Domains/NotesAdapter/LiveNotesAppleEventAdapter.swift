@@ -198,6 +198,10 @@ public struct LiveNotesAppleEventAdapter: NotesProviding, NotesWriting {
     return payload.noteId
   }
 
+  public func deleteNoteFolder(_ input: DeleteNoteFolderInput) throws -> DeleteResult {
+    try run(template: .deleteNoteFolder, arguments: input)
+  }
+
   public func deleteNote(noteId: String) throws -> DeleteResult {
     try run(
       template: .deleteNote,
