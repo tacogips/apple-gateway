@@ -122,10 +122,14 @@ private enum NotesSchema {
       GraphQLFieldDefinition(
         name: "note",
         type: named("Note"),
-        arguments: [argument("noteId", idRequired())],
+        arguments: [
+          argument("noteId", idRequired()),
+          argument("bodyKind", named("NoteBodyKind"), defaultValue: .enumCase("PLAINTEXT"))
+        ],
         resolver: { arguments, context in
           let note = try context.notesReadService.note(
-            noteId: arguments.notesRequired("noteId").notesStringValue()
+            noteId: arguments.notesRequired("noteId").notesStringValue(),
+            bodyKind: arguments["bodyKind"]?.notesNilIfNull?.noteBodyKindValue() ?? .plaintext
           )
           return note.map(noteValue) ?? .null
         }
@@ -315,6 +319,14 @@ private extension GraphQLValue {
       return nil
     }
     return try EventKitDateTime.parse(value.notesStringValue())
+  }
+
+  func noteBodyKindValue() throws -> NoteBodyKind {
+    let rawValue = try notesStringValue()
+    guard let kind = NoteBodyKind(rawValue: rawValue) else {
+      throw notesInvalidValue("Invalid NoteBodyKind \(rawValue)")
+    }
+    return kind
   }
 
   func noteBodyUpdateModeValue() throws -> NoteBodyUpdateMode {

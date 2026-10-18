@@ -70,11 +70,12 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
         return;
       }
       account.folders().forEach(folder => {
+        const containerId = String(folder.container().id());
         output.push({
           id: String(folder.id()),
           accountId: accountId,
           name: String(folder.name()),
-          parentFolderId: null,
+          parentFolderId: containerId === accountId ? null : containerId,
           noteCount: folder.notes().length
         });
       });

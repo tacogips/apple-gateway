@@ -222,7 +222,7 @@ type Query {
   noteAccounts: [NoteAccount!]!
   noteFolders(accountId: ID): [NoteFolder!]!
   notes(input: NoteSearchInput!): NoteConnection!
-  note(noteId: ID!): Note
+  note(noteId: ID!, bodyKind: NoteBodyKind = PLAINTEXT): Note
 
   # Mail (read-only domain)
   mailAccounts: [MailAccount!]!

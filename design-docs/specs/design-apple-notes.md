@@ -455,7 +455,7 @@ The registered query surface is:
 - `noteAccounts: [NoteAccount!]!`
 - `noteFolders(accountId: ID): [NoteFolder!]!`
 - `notes(input: NoteSearchInput!): NoteConnection!`
-- `note(noteId: ID!): Note`
+- `note(noteId: ID!, bodyKind: NoteBodyKind = PLAINTEXT): Note`
 
 The registered mutation surface is:
 

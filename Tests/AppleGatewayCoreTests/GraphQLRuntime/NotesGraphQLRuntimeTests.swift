@@ -9,7 +9,7 @@ import Testing
   #expect(readerSchema.contains("  noteAccounts: [NoteAccount!]!"))
   #expect(readerSchema.contains("  noteFolders(accountId: ID): [NoteFolder!]!"))
   #expect(readerSchema.contains("  notes(input: NoteSearchInput!): NoteConnection!"))
-  #expect(readerSchema.contains("  note(noteId: ID!): Note"))
+  #expect(readerSchema.contains("  note(noteId: ID!, bodyKind: NoteBodyKind): Note"))
   #expect(!readerSchema.contains("type Mutation"))
   #expect(!readerSchema.contains("createNote"))
 
@@ -62,6 +62,60 @@ import Testing
   #expect(edgeNode["bodyFile"] is NSNull)
   #expect(note["plaintext"] as? String == "Release checklist")
   #expect(attachments.first?["downloadKey"] as? String == "attachment-key")
+}
+
+@Test func noteBodyKindSelectsProviderRepresentationAndPreservesPlaintextDefault() throws {
+  let fake = GraphQLNotesFake()
+  let readService = NotesReadService(provider: fake)
+  let writeService = NotesWriteService(provider: fake, writer: fake)
+  let html = try notesExecuteGraphQL(
+    #"{ note(noteId: "note-1", bodyKind: HTML) { plaintext bodyHtml bodyFile { kind } } }"#,
+    notesReadService: readService, notesWriteService: writeService
+  )
+  let htmlNote = try #require(html.data?["note"] as? [String: Any])
+  #expect(html.errors.isEmpty)
+  #expect(htmlNote["bodyHtml"] as? String == "<div>Release checklist</div>")
+  #expect(htmlNote["plaintext"] is NSNull)
+  #expect(fake.requestedBodyKinds == [.html])
+
+  let plain = try notesExecuteGraphQL(
+    #"{ note(noteId: "note-1") { plaintext bodyHtml } }"#,
+    notesReadService: readService, notesWriteService: writeService
+  )
+  let plainNote = try #require(plain.data?["note"] as? [String: Any])
+  #expect(plain.errors.isEmpty)
+  #expect(plainNote["plaintext"] as? String == "Release checklist")
+  #expect(plainNote["bodyHtml"] is NSNull)
+  #expect(fake.requestedBodyKinds == [.html, .plaintext])
+
+  let invalid = try notesExecuteGraphQL(
+    #"{ note(noteId: "note-1", bodyKind: MARKDOWN) { id } }"#,
+    notesReadService: readService, notesWriteService: writeService
+  )
+  #expect(!invalid.errors.isEmpty)
+  #expect(fake.requestedBodyKinds == [.html, .plaintext])
+}
+
+@Test func oversizedHTMLNoteReturnsHTMLFileDescriptor() throws {
+  let fake = GraphQLNotesFake()
+  var limits = AppleGatewayConfig.Limits.defaultValue
+  limits.maxInlineBodyBytes = 8
+  let root = FileManager.default.temporaryDirectory.appendingPathComponent("apple-notes-html-" + UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let store = FileStore(cacheRoot: root.path, secret: Data(repeating: 7, count: 32))
+  let envelope = try notesExecuteGraphQL(
+    #"{ note(noteId: "note-1", bodyKind: HTML) { bodyHtml bodyFile { kind byteSize downloadKey } } }"#,
+    notesReadService: NotesReadService(provider: fake, limits: limits, fileStore: store),
+    notesWriteService: NotesWriteService(provider: fake, writer: fake)
+  )
+  let note = try #require(envelope.data?["note"] as? [String: Any])
+  let file = try #require(note["bodyFile"] as? [String: Any])
+  #expect(envelope.errors.isEmpty)
+  #expect(note["bodyHtml"] is NSNull)
+  #expect(file["kind"] as? String == "HTML")
+  #expect(file["byteSize"] as? Int == "<div>Release checklist</div>".utf8.count)
+  #expect(!(file["downloadKey"] as? String ?? "").isEmpty)
+  #expect(fake.requestedBodyKinds == [.html])
 }
 
 @Test func notesMutationsUseInjectedServicesAndReaderRejectsNotesMutation() throws {
@@ -190,6 +244,7 @@ private final class GraphQLNotesFake: NotesProviding, NotesWriting, @unchecked S
   var notes: [String: Note]
   var createRequests: [NotesCreateRequest] = []
   var deletedNoteIds: [String] = []
+  var requestedBodyKinds: [NoteBodyKind] = []
 
   init() {
     notes = [
@@ -251,6 +306,7 @@ private final class GraphQLNotesFake: NotesProviding, NotesWriting, @unchecked S
   }
 
   func noteBody(noteId: String, kind: NoteBodyKind) throws -> NoteBodyLookupResult {
+    requestedBodyKinds.append(kind)
     guard let note = notes[noteId] else {
       return .missing
     }

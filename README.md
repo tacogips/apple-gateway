@@ -314,3 +314,17 @@ raw-number use, status checks, and the Codex integration boundary.
 ```bash
 apple-gateway permissions status --json
 ```
+
+### Notes body representations
+
+The `note` query defaults to `bodyKind: PLAINTEXT`. Request `bodyKind: HTML` to read Notes HTML, including headings and lists:
+
+```graphql
+{
+  note(noteId: "note-id", bodyKind: HTML) {
+    id bodyHtml bodyFile { downloadKey kind byteSize }
+  }
+}
+```
+
+Only the requested representation is fetched. Large bodies return a `bodyFile` descriptor with the matching `HTML` or `PLAINTEXT` kind instead of an inline body. `noteFolders.parentFolderId` identifies the containing folder; top-level folders have a null parent.
