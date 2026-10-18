@@ -119,9 +119,13 @@ public struct LiveNotesAppleEventAdapter: NotesProviding, NotesWriting {
   }
 
   public func noteBody(noteId: String, kind: NoteBodyKind) throws -> NoteBodyLookupResult {
+    try noteBody(noteId: noteId, kind: kind, includeAttachments: true)
+  }
+
+  public func noteBody(noteId: String, kind: NoteBodyKind, includeAttachments: Bool) throws -> NoteBodyLookupResult {
     let payload: NotesBodyPayload = try run(
       template: .fetchNoteBody,
-      arguments: NotesBodyArguments(noteId: noteId, kind: kind)
+      arguments: NotesBodyArguments(noteId: noteId, kind: kind, includeAttachments: includeAttachments)
     )
     switch payload.status {
     case "found":
@@ -272,6 +276,7 @@ private struct NotesLookupArguments: Encodable {
 private struct NotesBodyArguments: Encodable {
   var noteId: String
   var kind: NoteBodyKind
+  var includeAttachments: Bool
 }
 
 private struct NotesAttachmentExportArguments: Encodable {

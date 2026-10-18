@@ -39,10 +39,15 @@ public struct NotesReadService: Sendable {
     }
   }
 
-  public func note(noteId: String, bodyKind: NoteBodyKind = .plaintext) throws -> Note? {
-    switch try provider.noteBody(noteId: noteId, kind: bodyKind) {
+  public func note(
+    noteId: String,
+    bodyKind: NoteBodyKind = .plaintext,
+    includeAttachments: Bool = true,
+    prepareAttachmentDownloads: Bool = true
+  ) throws -> Note? {
+    switch try provider.noteBody(noteId: noteId, kind: bodyKind, includeAttachments: includeAttachments) {
     case .found(let result):
-      return try note(from: result)
+      return try note(from: result, prepareAttachmentDownloads: prepareAttachmentDownloads)
     case .locked:
       throw AppleGatewayError(code: .noteLocked, message: "Note is password protected")
     case .missing:
@@ -139,9 +144,12 @@ public struct NotesReadService: Sendable {
     return attachments.filter { $0.id.isEmpty || seen.insert($0.id).inserted }
   }
 
-  private func note(from result: NoteBodyFetchResult) throws -> Note {
+  private func note(from result: NoteBodyFetchResult, prepareAttachmentDownloads: Bool) throws -> Note {
     var note = result.note.withoutBodies()
-    note.attachments = try Self.uniqueAttachments(note.attachments).map { try attachmentWithBestEffortKey($0, noteId: note.id) }
+    note.attachments = Self.uniqueAttachments(note.attachments)
+    if prepareAttachmentDownloads {
+      note.attachments = try note.attachments.map { try attachmentWithBestEffortKey($0, noteId: note.id) }
+    }
     let byteSize = Data(result.body.utf8).count
     if byteSize <= limits.maxInlineBodyBytes {
       switch result.kind {

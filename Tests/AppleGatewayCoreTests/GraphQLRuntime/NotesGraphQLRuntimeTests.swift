@@ -120,6 +120,24 @@ import Testing
   #expect(fake.requestedBodyKinds == [.html])
 }
 
+@Test func noteGraphQLSkipsUnrequestedAttachmentMetadataAndExportsIncludingAliases() throws {
+  let fake = GraphQLNotesFake()
+  fake.notes["note-1"]?.attachments[0].downloadKey = nil
+  let cache = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: cache) }
+  let service = NotesReadService(provider: fake, attachmentExportStore: NotesAttachmentExportStore(cacheRoot: cache.path))
+  for query in [
+    #"{ n: note(noteId: "note-1") { id plaintext } }"#,
+    #"{ n: note(noteId: "note-1") { a: attachments { id name } } }"#,
+    #"{ n: note(noteId: "note-1") { a: attachments { k: downloadKey } } }"#
+  ] {
+    let envelope = try notesExecuteGraphQL(query, notesReadService: service, notesWriteService: NotesWriteService(provider: fake, writer: fake))
+    #expect(envelope.errors.isEmpty)
+  }
+  #expect(fake.requestedAttachmentMetadata == [false, true, true])
+  #expect(fake.exportedAttachmentIds == ["attachment-1"])
+}
+
 @Test func notesMutationsUseInjectedServicesAndReaderRejectsNotesMutation() throws {
   let fake = GraphQLNotesFake()
   let readService = NotesReadService(provider: fake)
@@ -285,6 +303,8 @@ private final class GraphQLNotesFake: NotesProviding, NotesWriting, @unchecked S
   var attachmentRequests: [CreateNoteAttachmentInput] = []
   var deletedNoteIds: [String] = []
   var requestedBodyKinds: [NoteBodyKind] = []
+  var requestedAttachmentMetadata: [Bool] = []
+  var exportedAttachmentIds: [String] = []
 
   init() {
     notes = [
@@ -360,12 +380,21 @@ private final class GraphQLNotesFake: NotesProviding, NotesWriting, @unchecked S
     return .found(NoteBodyFetchResult(note: note, kind: kind, body: body))
   }
 
+  func noteBody(noteId: String, kind: NoteBodyKind, includeAttachments: Bool) throws -> NoteBodyLookupResult {
+    requestedAttachmentMetadata.append(includeAttachments)
+    let result = try noteBody(noteId: noteId, kind: kind)
+    guard !includeAttachments, case .found(var body) = result else { return result }
+    body.note.attachments = []
+    return .found(body)
+  }
+
   func exportAttachment(
     noteId: String,
     attachmentId: String,
     to destination: URL
   ) throws -> NotesAttachmentExportResult {
-    .unavailable
+    exportedAttachmentIds.append(attachmentId)
+    return .unavailable
   }
 
   func createNoteAttachment(_ input: CreateNoteAttachmentInput) throws -> String {

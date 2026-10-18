@@ -185,6 +185,35 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
     }
   }
 
+  // Resolve one ID without materializing every note in the user's library.
+  // Missing-object errors alone mean absence; permission/timeout failures propagate.
+  function notesById(app, noteId) {
+    try {
+      const note = app.notes.byId(noteId);
+      if (String(note.id()) !== noteId) { throw new Error('Notes lookup identity mismatch'); }
+      return note;
+    } catch (error) {
+      const number = error && (error.errorNumber || error.number);
+      if (number === -1728 || number === -1719) { return null; }
+      throw error;
+    }
+  }
+
+  function notesLocation(app, note) {
+    let container = note.container();
+    const folderId = String(container.id());
+    const accountIds = app.accounts.id().map(String);
+    const seen = {};
+    for (let depth = 0; depth < 64; depth++) {
+      const id = String(container.id());
+      if (accountIds.indexOf(id) !== -1) { return {accountId: id, folderId: folderId}; }
+      if (seen[id]) { break; }
+      seen[id] = true;
+      container = container.container();
+    }
+    throw new Error('Notes container does not resolve to an account');
+  }
+
   function notesAttachmentMetadata(note, preloadedAttachments) {
     try {
       let attachments;
@@ -357,41 +386,19 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
   function run(argv) {
     const input = JSON.parse(argv[0]);
     const app = Application('Notes');
-    let lockedCandidate = false;
-    for (const account of app.accounts()) {
-      const accountId = String(account.id());
-      for (const folder of account.folders()) {
-        const folderId = String(folder.id());
-        for (const note of folder.notes()) {
-          if (String(note.id()) !== input.noteId) {
-            continue;
-          }
-          if (note.passwordProtected && note.passwordProtected()) {
-            lockedCandidate = true;
-            continue;
-          }
-          return JSON.stringify({
-            status: 'found',
-            note: {
-              id: String(note.id()),
-              accountId: accountId,
-              folderId: folderId,
-              name: String(note.name()),
-              snippet: '',
-              plaintext: null,
-              bodyHtml: null,
-              bodyFile: null,
-              isPasswordProtected: false,
-              isShared: notesSharedState(note),
-              creationDate: note.creationDate().toISOString(),
-              modificationDate: note.modificationDate().toISOString(),
-              attachments: notesAttachmentMetadata(note)
-            }
-          });
-        }
-      }
+    const note = notesById(app, input.noteId);
+    if (!note) { return JSON.stringify({status: 'missing', note: null}); }
+    if (note.passwordProtected && note.passwordProtected()) {
+      return JSON.stringify({status: 'locked', note: null});
     }
-    return JSON.stringify({ status: lockedCandidate ? 'locked' : 'missing', note: null });
+    const location = notesLocation(app, note);
+    return JSON.stringify({status: 'found', note: {
+      id: String(note.id()), accountId: location.accountId, folderId: location.folderId,
+      name: String(note.name()), snippet: '', plaintext: null, bodyHtml: null, bodyFile: null,
+      isPasswordProtected: false, isShared: notesSharedState(note),
+      creationDate: note.creationDate().toISOString(), modificationDate: note.modificationDate().toISOString(),
+      attachments: notesAttachmentMetadata(note)
+    }});
   }
   """
 
@@ -399,44 +406,22 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
   function run(argv) {
     const input = JSON.parse(argv[0]);
     const app = Application('Notes');
-    for (const account of app.accounts()) {
-      const accountId = String(account.id());
-      for (const folder of account.folders()) {
-        const folderId = String(folder.id());
-        for (const note of folder.notes()) {
-          if (String(note.id()) !== input.noteId) {
-            continue;
-          }
-          if (note.passwordProtected && note.passwordProtected()) {
-            return JSON.stringify({ status: 'locked', note: null, kind: input.kind, body: '' });
-          }
-          const body = input.kind === 'HTML'
-            ? String(note.body ? note.body() : '')
-            : String(note.plaintext ? note.plaintext() : '');
-          return JSON.stringify({
-            status: 'found',
-            kind: input.kind,
-            body: body,
-            note: {
-              id: String(note.id()),
-              accountId: accountId,
-              folderId: folderId,
-              name: String(note.name()),
-              snippet: '',
-              plaintext: null,
-              bodyHtml: null,
-              bodyFile: null,
-              isPasswordProtected: false,
-              isShared: notesSharedState(note),
-              creationDate: note.creationDate().toISOString(),
-              modificationDate: note.modificationDate().toISOString(),
-              attachments: notesAttachmentMetadata(note)
-            }
-          });
-        }
-      }
+    const note = notesById(app, input.noteId);
+    if (!note) { return JSON.stringify({status: 'missing', note: null, kind: input.kind, body: ''}); }
+    if (note.passwordProtected && note.passwordProtected()) {
+      return JSON.stringify({status: 'locked', note: null, kind: input.kind, body: ''});
     }
-    return JSON.stringify({ status: 'missing', note: null, kind: input.kind, body: '' });
+    const location = notesLocation(app, note);
+    const body = input.kind === 'HTML'
+      ? String(note.body ? note.body() : '')
+      : String(note.plaintext ? note.plaintext() : '');
+    return JSON.stringify({status: 'found', kind: input.kind, body: body, note: {
+      id: String(note.id()), accountId: location.accountId, folderId: location.folderId,
+      name: String(note.name()), snippet: '', plaintext: null, bodyHtml: null, bodyFile: null,
+      isPasswordProtected: false, isShared: notesSharedState(note),
+      creationDate: note.creationDate().toISOString(), modificationDate: note.modificationDate().toISOString(),
+      attachments: input.includeAttachments === false ? [] : notesAttachmentMetadata(note)
+    }});
   }
   """
 
@@ -444,41 +429,26 @@ public enum NotesJXATemplate: String, CaseIterable, Sendable {
   function run(argv) {
     const input = JSON.parse(argv[0]);
     const app = Application('Notes');
-    for (const account of app.accounts()) {
-      for (const folder of account.folders()) {
-        for (const note of folder.notes()) {
-          if (String(note.id()) !== input.noteId) {
-            continue;
-          }
-          let attachments;
-          try {
-            attachments = note.attachments();
-          } catch (error) {
-            if (error && (error.number === -1743 || error.number === -1712)) {
-              throw error;
-            }
-            return JSON.stringify({ status: 'unavailable', path: null });
-          }
-          for (const attachment of attachments) {
-            const attachmentId = normalizedNotesValue(guardedNotesProperty(attachment, 'id'));
-            if (attachmentId !== input.attachmentId) {
-              continue;
-            }
-            try {
-              app.save(attachment, { in: Path(input.destinationPath) });
-              return JSON.stringify({ status: 'exported', path: input.destinationPath });
-            } catch (error) {
-              if (error && (error.number === -1743 || error.number === -1712)) {
-                throw error;
-              }
-              return JSON.stringify({ status: 'unavailable', path: null });
-            }
-          }
-          return JSON.stringify({ status: 'attachmentMissing', path: null });
-        }
+    const note = notesById(app, input.noteId);
+    if (!note) { return JSON.stringify({status: 'noteMissing', path: null}); }
+    let attachments;
+    try {
+      attachments = note.attachments();
+    } catch (error) {
+      if (isNotesBridgeFailure(error)) { throw error; }
+      return JSON.stringify({status: 'unavailable', path: null});
+    }
+    for (const attachment of attachments) {
+      if (normalizedNotesValue(guardedNotesProperty(attachment, 'id')) !== input.attachmentId) { continue; }
+      try {
+        app.save(attachment, {in: Path(input.destinationPath)});
+        return JSON.stringify({status: 'exported', path: input.destinationPath});
+      } catch (error) {
+        if (isNotesBridgeFailure(error)) { throw error; }
+        return JSON.stringify({status: 'unavailable', path: null});
       }
     }
-    return JSON.stringify({ status: 'noteMissing', path: null });
+    return JSON.stringify({status: 'attachmentMissing', path: null});
   }
   """
 

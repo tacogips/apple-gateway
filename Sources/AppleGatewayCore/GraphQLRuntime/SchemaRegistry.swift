@@ -51,6 +51,7 @@ typealias GraphQLResolvedArguments = [String: GraphQLValue]
 typealias GraphQLResolver = (GraphQLResolvedArguments, GraphQLExecutionContext) throws -> GraphQLValue
 
 struct GraphQLExecutionContext {
+  var selectionSet: [GraphQLField] = []
   var config: AppleGatewayConfig
   var role: AppleGatewayRole
   var permissionsProvider: any PermissionsStatusProviding

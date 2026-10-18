@@ -136,9 +136,12 @@ private enum NotesSchema {
           argument("bodyKind", named("NoteBodyKind"), defaultValue: .enumCase("PLAINTEXT"))
         ],
         resolver: { arguments, context in
+          let attachments = context.selectionSet.filter { $0.name == "attachments" }
           let note = try context.notesReadService.note(
             noteId: arguments.notesRequired("noteId").notesStringValue(),
-            bodyKind: arguments["bodyKind"]?.notesNilIfNull?.noteBodyKindValue() ?? .plaintext
+            bodyKind: arguments["bodyKind"]?.notesNilIfNull?.noteBodyKindValue() ?? .plaintext,
+            includeAttachments: !attachments.isEmpty,
+            prepareAttachmentDownloads: attachments.contains { $0.selectionSet.contains { $0.name == "downloadKey" } }
           )
           return note.map(noteValue) ?? .null
         }

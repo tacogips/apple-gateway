@@ -46,15 +46,13 @@ import Testing
     mockNote('explicit-false', mockProperty(false), mockProperty(true)),
     mockNote('fallback-false', unavailableProperty, mockProperty('true'))
   ];
+  const account = {id: mockProperty('icloud')};
+  const folder = {id: mockProperty('inbox'), container: mockProperty(account)};
+  mockNotes.forEach(note => { note.container = mockProperty(folder); });
   function mockApplication(name) {
     return {
-      accounts: mockProperty([{
-        id: mockProperty('icloud'),
-        folders: mockProperty([{
-          id: mockProperty('inbox'),
-          notes: mockProperty(mockNotes)
-        }])
-      }])
+      accounts: {id: mockProperty(['icloud'])},
+      notes: {byId: id => mockNotes.find(note => note.id() === id)}
     };
   }
   """

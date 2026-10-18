@@ -202,8 +202,12 @@ Single-note data flow:
 
 1. `note(noteId:)` calls the provider's explicit note lookup. Missing notes
    return `null`; locked or inaccessible notes return `NOTE_LOCKED`.
-2. The provider fetches one note body at a time. It does not batch body
-   reads, and it does not broaden lookup by account, folder, title, or query.
+2. The live provider resolves the exact ID through `app.notes.byId`, checks
+   the returned identity, and fetches one body. It does not enumerate library
+   notes. Folder identity comes from the note's actual container; account
+   identity is checked against account IDs through a cycle-checked container
+   chain bounded to 64 levels. Only missing-object/index errors mean absence;
+   permissions, timeout, identity and location failures remain errors.
 3. The service measures body size using the UTF-8 byte count of the exact
    string that would be returned to the caller.
 4. A body whose byte count is less than or equal to
@@ -230,6 +234,13 @@ Plaintext is the default body representation; HTML uses the same cutoff and
 FileStore path when the resolver or domain caller requests the HTML body
 case. A future schema change may expose multiple body files, but TASK-003
 does not add that schema surface.
+
+GraphQL `note` fetches attachment metadata only when `attachments` is selected,
+and prepares exports only when its `downloadKey` is selected (aliases included).
+`NotesReadService.note` keeps both enabled by default for Swift SDK callers;
+its explicit `includeAttachments` and `prepareAttachmentDownloads` flags let
+callers request a body or metadata without export work. Custom providers keep
+source compatibility through the default attachment-aware body-fetch overload.
 
 Attachment handling is read-only and best-effort. `note(noteId:)` lists
 attachment ids, display names, and content identifiers when Notes.app

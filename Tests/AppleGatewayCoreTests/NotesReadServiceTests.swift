@@ -41,48 +41,6 @@ import Testing
     #expect(!template.source.contains("attachments: []"))
   }
 
-  let expectedExportRun = """
-  function run(argv) {
-    const input = JSON.parse(argv[0]);
-    const app = Application('Notes');
-    for (const account of app.accounts()) {
-      for (const folder of account.folders()) {
-        for (const note of folder.notes()) {
-          if (String(note.id()) !== input.noteId) {
-            continue;
-          }
-          let attachments;
-          try {
-            attachments = note.attachments();
-          } catch (error) {
-            if (error && (error.number === -1743 || error.number === -1712)) {
-              throw error;
-            }
-            return JSON.stringify({ status: 'unavailable', path: null });
-          }
-          for (const attachment of attachments) {
-            const attachmentId = normalizedNotesValue(guardedNotesProperty(attachment, 'id'));
-            if (attachmentId !== input.attachmentId) {
-              continue;
-            }
-            try {
-              app.save(attachment, { in: Path(input.destinationPath) });
-              return JSON.stringify({ status: 'exported', path: input.destinationPath });
-            } catch (error) {
-              if (error && (error.number === -1743 || error.number === -1712)) {
-                throw error;
-              }
-              return JSON.stringify({ status: 'unavailable', path: null });
-            }
-          }
-          return JSON.stringify({ status: 'attachmentMissing', path: null });
-        }
-      }
-    }
-    return JSON.stringify({ status: 'noteMissing', path: null });
-  }
-  """
-  #expect(NotesJXATemplate.exportAttachment.source == helperPrefix + "\n\n" + expectedExportRun)
 }
 
 @Test func liveNotesAdapterDecodesAttachmentsAndKeepsExportArgumentsOutOfSource() throws {
