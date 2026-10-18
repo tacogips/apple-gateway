@@ -97,6 +97,9 @@ public struct NotesWriteService: Sendable {
     case .replace:
       updatedBody = bodyHtml
     case .append:
+      guard try existingNote(noteId: input.noteId).attachments.isEmpty else {
+        throw AppleGatewayError(code: .invalidArgument, message: "APPEND cannot preserve native Notes attachments; use explicit REPLACE only when you own the full body and can restore attachment bytes")
+      }
       updatedBody = try currentBodyHtml(noteId: input.noteId) + bodyHtml
     }
 

@@ -7,3 +7,5 @@ Add bounded createNoteFolder(input:{accountId,parentFolderId?,name}):NoteFolder.
 Run full Swift tests, smoke, lint; release Apple0.1.11 both macOS architectures, tap verification. Riela integration follows frozen0.2.8 completion in0.2.9 with Apple container private exec transport.
 
 Validation: all 287 tests plus smoke passed; SwiftLint reports zero violations in 141 files. The first full run under concurrent optimized release compilation timed out in two existing notifier stub tests (2-second budget); the rerun passed without test or production changes. Retry regressions prove one attempt for each mutation family and retained retries for reads. Folder tests cover actual JXA collection insertion with a mock Notes application, canonical name reuse, explicit ownership and readback mismatch.
+
+Completed v0.1.11 at06845a15d8bb03aa1bdadc5da7d38a4ed9aef929; both architecture archives/full+reader versions/notifier/checksums verified and four public assets. Tapf100b26 metadata workflow39118140545 succeeded; audit/fetch/upgrade/test passed.

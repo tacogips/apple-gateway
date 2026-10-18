@@ -81,6 +81,24 @@ import Testing
   #expect(fake.bodyLookups.map(\.kind) == [.html, .html])
 }
 
+@Test func updateNoteBodyAppendWithAttachmentsFailsBeforeReadingOrWritingBody() throws {
+  let fake = FakeNotesWriteBackend()
+  fake.notes["note-1"]?.attachments = [NoteAttachment(id: "native-image", name: "image.png")]
+  let service = NotesWriteService(provider: fake, writer: fake)
+  do {
+    _ = try service.updateNoteBody(.init(noteId: "note-1", mode: .append, bodyHtml: "<div>More</div>"))
+    Issue.record("Expected attachment-preservation failure")
+  } catch let error as AppleGatewayError {
+    #expect(error.code == .invalidArgument)
+    #expect(error.message.contains("APPEND cannot preserve"))
+  }
+  #expect(fake.replaceRequests.isEmpty)
+  #expect(fake.bodyLookups.isEmpty)
+  #expect(fake.notes["note-1"]?.attachments.map(\.id) == ["native-image"])
+  _ = try service.updateNoteBody(.init(noteId: "note-1", mode: .replace, bodyText: "Explicit replacement"))
+  #expect(fake.replaceRequests.count == 1)
+}
+
 @Test func updateNoteBodyRequiresExactlyOneBodySource() throws {
   let fake = FakeNotesWriteBackend()
   let service = NotesWriteService(provider: fake, writer: fake)
