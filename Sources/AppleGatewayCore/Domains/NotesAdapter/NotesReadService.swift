@@ -29,7 +29,9 @@ public struct NotesReadService: Sendable {
   public func noteMetadata(noteId: String) throws -> Note? {
     switch try provider.noteMetadata(noteId: noteId) {
     case .found(let note):
-      return note.withoutBodies()
+      var result = note.withoutBodies()
+      result.attachments = Self.uniqueAttachments(result.attachments)
+      return result
     case .locked:
       throw AppleGatewayError(code: .noteLocked, message: "Note is password protected")
     case .missing:
@@ -102,7 +104,7 @@ public struct NotesReadService: Sendable {
       }
       var note = edge.node
       note.isShared = details.isShared
-      note.attachments = details.attachments
+      note.attachments = Self.uniqueAttachments(details.attachments)
       return NoteEdge(cursor: edge.cursor, node: note)
     }
     return connection
@@ -132,9 +134,14 @@ public struct NotesReadService: Sendable {
     return min(value, limits.maxPageSize)
   }
 
+  private static func uniqueAttachments(_ attachments: [NoteAttachment]) -> [NoteAttachment] {
+    var seen = Set<String>()
+    return attachments.filter { $0.id.isEmpty || seen.insert($0.id).inserted }
+  }
+
   private func note(from result: NoteBodyFetchResult) throws -> Note {
     var note = result.note.withoutBodies()
-    note.attachments = try note.attachments.map { try attachmentWithBestEffortKey($0, noteId: note.id) }
+    note.attachments = try Self.uniqueAttachments(note.attachments).map { try attachmentWithBestEffortKey($0, noteId: note.id) }
     let byteSize = Data(result.body.utf8).count
     if byteSize <= limits.maxInlineBodyBytes {
       switch result.kind {

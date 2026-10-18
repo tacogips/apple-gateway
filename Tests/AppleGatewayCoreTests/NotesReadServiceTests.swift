@@ -533,6 +533,18 @@ private let noteTemplateGoldens: [NotesJXATemplate: String] = [
   #expect(argumentsJSON.contains("destinationPath"))
 }
 
+@Test func duplicateAttachmentIDsAreRemovedAcrossReadRepresentationsAndListHydration() throws {
+  let provider = NotesTestProvider()
+  let first = NoteAttachment(id: "attachment-1", name: "same.png", downloadKey: "key-1")
+  let second = NoteAttachment(id: "attachment-2", name: "same.png", downloadKey: "key-2")
+  provider.notes = [note(id: "note-1", name: "fixture", modified: 10, attachments: [first, first, second, second])]
+  let service = NotesReadService(provider: provider)
+  #expect(try service.noteMetadata(noteId: "note-1")?.attachments == [first, second])
+  #expect(try service.note(noteId: "note-1", bodyKind: .html)?.attachments == [first, second])
+  #expect(try service.notes(input: NoteSearchInput()).edges.first?.node.attachments == [first, second])
+  #expect(provider.attachmentExportDestinations.isEmpty)
+}
+
 @Test func notesReadServiceSearchesNamesAndBodiesWithoutReturningBodies() throws {
   let provider = NotesTestProvider()
   provider.notes = [
