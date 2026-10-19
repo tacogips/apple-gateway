@@ -39,6 +39,15 @@ public struct NotesReadService: Sendable {
     }
   }
 
+  func attachment(noteId: String, attachmentId: String, prepareDownload: Bool) throws -> NoteAttachment? {
+    guard let note = try noteMetadata(noteId: noteId) else { return nil }
+    guard note.id == noteId else {
+      throw AppleGatewayError(code: .unexpectedError, message: "Notes attachment readback returned a different note")
+    }
+    guard let attachment = note.attachments.first(where: { $0.id == attachmentId }) else { return nil }
+    return prepareDownload ? try attachmentWithBestEffortKey(attachment, noteId: noteId) : attachment
+  }
+
   public func note(
     noteId: String,
     bodyKind: NoteBodyKind = .plaintext,

@@ -178,7 +178,7 @@ private enum NotesSchema {
           return try noteAttachmentValue(context.notesWriteService.createNoteAttachment(CreateNoteAttachmentInput(
             noteId: input.notesRequired("noteId").notesStringValue(),
             filePath: input.notesRequired("filePath").notesStringValue()
-          )))
+          ), prepareAttachmentDownload: context.selectionSet.contains { $0.name == "downloadKey" }))
         }
       ),
       GraphQLFieldDefinition(

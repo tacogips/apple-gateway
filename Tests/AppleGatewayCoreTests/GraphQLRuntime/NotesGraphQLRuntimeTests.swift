@@ -231,6 +231,46 @@ import Testing
   #expect(fake.attachmentRequests.count == 1)
 }
 
+@Test func attachmentReadbackSkipsBodyAndUnselectedExportsAndNeverReplaysWrite() throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let source = directory.appendingPathComponent("image.png")
+  try Data([1, 2, 3]).write(to: source)
+  let encoded = try #require(String(data: JSONEncoder().encode(source.path), encoding: .utf8))
+  for selection in ["id", "id key:downloadKey"] {
+    let fake = GraphQLNotesFake(); fake.importedDownloadKey = nil
+    fake.notes["note-1"]?.attachments = [NoteAttachment(id: "older-unprepared-image", name: "old.png")]
+    let service = NotesWriteService(provider: fake, writer: fake)
+    let result = try notesExecuteGraphQL(
+      "mutation { created:createNoteAttachment(input:{noteId:\"note-1\",filePath:\(encoded)}) { \(selection) } }",
+      notesReadService: NotesReadService(provider: fake), notesWriteService: service
+    )
+    #expect(result.errors.isEmpty)
+    #expect(fake.requestedBodyKinds.isEmpty)
+    #expect(fake.attachmentRequests.count == 1)
+    #expect(fake.exportedAttachmentIds == (selection == "id" ? [] : ["imported-attachment"]))
+  }
+  for failure in ["missing", "readback-timeout", "uncertain-write"] {
+    let fake = GraphQLNotesFake()
+    fake.omitImportedAttachment = failure == "missing"
+    fake.readbackTimeouts = failure == "readback-timeout" ? 1 : 0
+    fake.failAfterImport = failure == "uncertain-write"
+    let service = NotesWriteService(provider: fake, writer: fake,
+      writeRetryPolicy: AppleWriteRetryPolicy(initialWaitSeconds: 1, maxRetries: 2))
+    if failure == "readback-timeout" {
+      let result = try service.createNoteAttachment(.init(noteId: "note-1", filePath: source.path), prepareAttachmentDownload: false)
+      #expect(result.id == "imported-attachment")
+    } else {
+      #expect(throws: (any Error).self) {
+        try service.createNoteAttachment(.init(noteId: "note-1", filePath: source.path), prepareAttachmentDownload: false)
+      }
+    }
+    #expect(fake.attachmentRequests.count == 1)
+    #expect(fake.requestedBodyKinds.isEmpty)
+  }
+}
+
 @Test func folderMutationMapsExplicitAccountAndIsUnavailableToReaders() throws {
   let fake = GraphQLNotesFake()
   let document = #"mutation { createNoteFolder(input: {accountId: "icloud", name: "Notes"}) { id accountId name parentFolderId } }"#
@@ -334,6 +374,10 @@ private final class GraphQLNotesFake: NotesProviding, NotesWriting, @unchecked S
   var requestedBodyKinds: [NoteBodyKind] = []
   var requestedAttachmentMetadata: [Bool] = []
   var exportedAttachmentIds: [String] = []
+  var importedDownloadKey: String? = "fixture-key"
+  var omitImportedAttachment = false
+  var readbackTimeouts = 0
+  var failAfterImport = false
 
   init() {
     notes = [
@@ -391,7 +435,11 @@ private final class GraphQLNotesFake: NotesProviding, NotesWriting, @unchecked S
   }
 
   func noteMetadata(noteId: String) throws -> NoteLookupResult {
-    notes[noteId].map(NoteLookupResult.found) ?? .missing
+    if !attachmentRequests.isEmpty && readbackTimeouts > 0 {
+      readbackTimeouts -= 1
+      throw AppleEventBridgeError.timeout(message: "synthetic timeout")
+    }
+    return notes[noteId].map(NoteLookupResult.found) ?? .missing
   }
 
   func noteBody(noteId: String, kind: NoteBodyKind) throws -> NoteBodyLookupResult {
@@ -428,7 +476,10 @@ private final class GraphQLNotesFake: NotesProviding, NotesWriting, @unchecked S
 
   func createNoteAttachment(_ input: CreateNoteAttachmentInput) throws -> String {
     attachmentRequests.append(input)
-    notes[input.noteId]?.attachments.append(NoteAttachment(id: "imported-attachment", name: "fixture.png", downloadKey: "fixture-key"))
+    if !omitImportedAttachment {
+      notes[input.noteId]?.attachments.append(NoteAttachment(id: "imported-attachment", name: "fixture.png", downloadKey: importedDownloadKey))
+    }
+    if failAfterImport { throw AppleEventBridgeError.timeout(message: "synthetic timeout") }
     return "imported-attachment"
   }
 

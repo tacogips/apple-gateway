@@ -63,7 +63,10 @@ public struct NotesWriteService: Sendable {
     return folder
   }
 
-  public func createNoteAttachment(_ input: CreateNoteAttachmentInput) throws -> NoteAttachment {
+  public func createNoteAttachment(
+    _ input: CreateNoteAttachmentInput,
+    prepareAttachmentDownload: Bool = true
+  ) throws -> NoteAttachment {
     _ = try existingNote(noteId: input.noteId)
     guard input.filePath.hasPrefix("/") else {
       throw AppleGatewayError(code: .invalidArgument, message: "Attachment filePath must be absolute")
@@ -77,11 +80,14 @@ public struct NotesWriteService: Sendable {
       throw AppleGatewayError(code: .invalidArgument, message: "Attachment filePath must be a readable regular file of 1 byte through 64 MiB without symlink components")
     }
     let attachmentId = try writer.createNoteAttachment(CreateNoteAttachmentInput(noteId: input.noteId, filePath: file.path))
-    let note = try refetchNote(noteId: input.noteId, bodyKind: .html)
-    guard let attachment = note.attachments.first(where: { $0.id == attachmentId }) else {
-      throw AppleWriteRetry.annotated(AppleGatewayError(code: .unexpectedError, message: "Created attachment was not present on note readback", details: ["resourceId": attachmentId]), outcome: "confirmed", attempts: 1)
+    return try AppleWriteRetry(policy: writeRetryPolicy ?? AppleWriteRetryContext.policy).readback(id: attachmentId) {
+      guard let attachment = try readService.attachment(
+        noteId: input.noteId, attachmentId: attachmentId, prepareDownload: prepareAttachmentDownload
+      ) else {
+        throw AppleGatewayError(code: .unexpectedError, message: "Created attachment was not present on note readback", details: ["resourceId": attachmentId])
+      }
+      return attachment
     }
-    return attachment
   }
 
   public func createNote(_ input: CreateNoteInput) throws -> Note {
