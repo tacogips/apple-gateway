@@ -1,0 +1,4 @@
+interface:
+  display_name: "Riela Implementation Workflow"
+  short_description: "Run the issue-resolution documentation contract"
+  default_prompt: "Use $riela-impl-workflow to align an accepted issue-resolution work package for final handoff."

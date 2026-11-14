@@ -1,0 +1,591 @@
+import Foundation
+
+public enum NotesJXATemplate: String, CaseIterable, Sendable {
+  case listAccounts
+  case listFolders
+  case listNoteMetadataWindow
+  case fetchNoteMetadataBatch
+  case searchNoteIdsByPlaintext
+  case fetchSearchSnippetsBatch
+  case probeNoteVisibility
+  case fetchNoteBody
+  case exportAttachment
+  case createNote
+  case createNoteAttachment
+  case createNoteFolder
+  case replaceNoteBody
+  case deleteNote
+  case deleteNoteFolder
+  case moveNote
+
+  var permitsTimeoutRetry: Bool {
+    switch self {
+    case .createNote, .createNoteAttachment, .createNoteFolder, .replaceNoteBody, .deleteNote, .deleteNoteFolder, .moveNote:
+      false
+    default:
+      true
+    }
+  }
+
+  public var source: String {
+    switch self {
+    case .listAccounts:
+      return Self.listAccountsSource
+    case .listFolders:
+      return Self.listFoldersSource
+    case .listNoteMetadataWindow:
+      return Self.listNoteMetadataWindowSource
+    case .fetchNoteMetadataBatch:
+      return Self.fetchNoteMetadataBatchSource
+    case .searchNoteIdsByPlaintext:
+      return Self.searchNoteIdsByPlaintextSource
+    case .fetchSearchSnippetsBatch:
+      return Self.fetchSearchSnippetsBatchSource
+    case .probeNoteVisibility:
+      return Self.probeNoteVisibilitySource
+    case .fetchNoteBody:
+      return Self.fetchNoteBodySource
+    case .exportAttachment:
+      return Self.exportAttachmentSource
+    case .createNoteFolder:
+      return Self.createNoteFolderSource
+    case .createNoteAttachment:
+      return Self.createNoteAttachmentSource
+    case .createNote:
+      return Self.createNoteSource
+    case .replaceNoteBody:
+      return Self.replaceNoteBodySource
+    case .deleteNoteFolder:
+      return Self.deleteNoteFolderSource
+    case .deleteNote:
+      return Self.deleteNoteSource
+    case .moveNote:
+      return Self.moveNoteSource
+    }
+  }
+
+  private static let listAccountsSource = """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    return JSON.stringify(app.accounts().map((account, index) => ({
+      id: String(account.id()),
+      name: String(account.name()),
+      isDefault: index === 0
+    })));
+  }
+  """
+
+  private static let listFoldersSource = """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    const accounts = app.accounts();
+    const output = [];
+    accounts.forEach(account => {
+      const accountId = String(account.id());
+      if (input.accountId && input.accountId !== accountId) {
+        return;
+      }
+      account.folders().forEach(folder => {
+        const containerId = String(folder.container().id());
+        output.push({
+          id: String(folder.id()),
+          accountId: accountId,
+          name: String(folder.name()),
+          parentFolderId: containerId === accountId ? null : containerId,
+          noteCount: folder.notes().length
+        });
+      });
+    });
+    return JSON.stringify(output);
+  }
+  """
+
+  private static let listNoteMetadataWindowSource = """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    const start = input.offset || 0;
+    const limit = input.limit || 200;
+    const noteIds = [];
+    let seen = 0;
+    for (const account of app.accounts()) {
+      const accountId = String(account.id());
+      if (input.accountId && input.accountId !== accountId) {
+        continue;
+      }
+      for (const folder of account.folders()) {
+        const folderId = String(folder.id());
+        if (input.folderId && input.folderId !== folderId) {
+          continue;
+        }
+        const notes = folder.notes;
+        const folderNoteIds = notes.id();
+        const protectedValues = notes.passwordProtected();
+        for (let index = 0; index < folderNoteIds.length; index += 1) {
+          if (protectedValues[index]) {
+            continue;
+          }
+          if (seen < start) {
+            seen += 1;
+            continue;
+          }
+          if (noteIds.length >= limit) {
+            return JSON.stringify({ noteIds: noteIds, hasMore: true });
+          }
+          noteIds.push(String(folderNoteIds[index]));
+          seen += 1;
+        }
+      }
+    }
+    return JSON.stringify({ noteIds: noteIds, hasMore: false });
+  }
+  """
+
+  private static let noteMetadataHelpersSource = """
+  function isNotesBridgeFailure(error) {
+    return error && (
+      error.errorNumber === -1743 || error.errorNumber === -1712
+      || error.errorNumber === -600 || error.errorNumber === -609
+      || error.number === -1743 || error.number === -1712
+      || error.number === -600 || error.number === -609
+    );
+  }
+
+  function normalizedNotesValue(value) {
+    try {
+      if (value === null || value === undefined) {
+        return null;
+      }
+      const text = String(value).trim();
+      const sentinel = text.toLowerCase();
+      if (!text || sentinel === 'missing value' || sentinel === 'null' || sentinel === 'undefined') {
+        return null;
+      }
+      return text;
+    } catch (error) {
+      if (isNotesBridgeFailure(error)) {
+        throw error;
+      }
+      return null;
+    }
+  }
+
+  function guardedNotesProperty(object, propertyName) {
+    try {
+      const property = object[propertyName];
+      if (property === null || property === undefined) {
+        return null;
+      }
+      // JXA object-specifier functions cannot be invoked through Function.call.
+      return typeof property === 'function' ? object[propertyName]() : property;
+    } catch (error) {
+      if (isNotesBridgeFailure(error)) {
+        throw error;
+      }
+      return null;
+    }
+  }
+
+  // Resolve one ID without materializing every note in the user's library.
+  // Missing-object errors alone mean absence; permission/timeout failures propagate.
+  function notesById(app, noteId) {
+    try {
+      const note = app.notes.byId(noteId);
+      if (String(note.id()) !== noteId) { throw new Error('Notes lookup identity mismatch'); }
+      return note;
+    } catch (error) {
+      const number = error && (error.errorNumber || error.number);
+      if (number === -1728 || number === -1719) { return null; }
+      throw error;
+    }
+  }
+
+  function notesLocation(app, note) {
+    let container = note.container();
+    const folderId = String(container.id());
+    const accountIds = app.accounts.id().map(String);
+    const seen = {};
+    for (let depth = 0; depth < 64; depth++) {
+      const id = String(container.id());
+      if (accountIds.indexOf(id) !== -1) { return {accountId: id, folderId: folderId}; }
+      if (seen[id]) { break; }
+      seen[id] = true;
+      container = container.container();
+    }
+    throw new Error('Notes container does not resolve to an account');
+  }
+
+  function notesAttachmentMetadata(note, preloadedAttachments) {
+    try {
+      let attachments;
+      if (preloadedAttachments !== null && preloadedAttachments !== undefined) {
+        attachments = preloadedAttachments;
+      } else {
+        attachments = note.attachments();
+      }
+      const output = [];
+      attachments.forEach(attachment => {
+        try {
+          const id = normalizedNotesValue(guardedNotesProperty(attachment, 'id'));
+          if (!id) {
+            return;
+          }
+          const name = normalizedNotesValue(guardedNotesProperty(attachment, 'name'))
+            || normalizedNotesValue(guardedNotesProperty(attachment, 'fileName'))
+            || 'Untitled Attachment';
+          const contentIdentifier = normalizedNotesValue(
+            guardedNotesProperty(attachment, 'contentIdentifier')
+          );
+          output.push({ id: id, name: name, contentIdentifier: contentIdentifier, downloadKey: null });
+        } catch (error) {
+          if (isNotesBridgeFailure(error)) {
+            throw error;
+          }
+          // A malformed attachment must not hide other attachment metadata.
+        }
+      });
+      return output;
+    } catch (error) {
+      if (isNotesBridgeFailure(error)) {
+        throw error;
+      }
+      return [];
+    }
+  }
+
+  function notesSharedState(note, preloadedShared) {
+    if (typeof preloadedShared === 'boolean') {
+      return preloadedShared;
+    }
+    const shared = guardedNotesProperty(note, 'shared');
+    if (typeof shared === 'boolean') {
+      return shared;
+    }
+    const isShared = guardedNotesProperty(note, 'isShared');
+    return typeof isShared === 'boolean' ? isShared : false;
+  }
+  """
+
+  private static let fetchNoteMetadataBatchSource = noteMetadataHelpersSource + "\n\n" + """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const wanted = {};
+    input.noteIds.forEach(id => { wanted[id] = true; });
+    const includeDetails = input.includeDetails !== false;
+    const app = Application('Notes');
+    const notes = [];
+    for (const account of app.accounts()) {
+      const accountId = String(account.id());
+      for (const folder of account.folders()) {
+        const folderId = String(folder.id());
+        const folderNotes = folder.notes;
+        const folderNoteIds = folderNotes.id();
+        const protectedValues = folderNotes.passwordProtected();
+        const names = folderNotes.name();
+        const creationDates = folderNotes.creationDate();
+        const modificationDates = folderNotes.modificationDate();
+        for (let index = 0; index < folderNoteIds.length; index += 1) {
+          const noteId = String(folderNoteIds[index]);
+          if (!wanted[noteId]) {
+            continue;
+          }
+          if (protectedValues[index]) {
+            continue;
+          }
+          const note = folderNotes[index];
+          notes.push({
+            id: noteId,
+            accountId: accountId,
+            folderId: folderId,
+            name: String(names[index]),
+            snippet: '',
+            plaintext: null,
+            bodyHtml: null,
+            bodyFile: null,
+            isPasswordProtected: false,
+            isShared: includeDetails ? notesSharedState(note, null) : false,
+            creationDate: creationDates[index].toISOString(),
+            modificationDate: modificationDates[index].toISOString(),
+            attachments: includeDetails ? notesAttachmentMetadata(note, null) : []
+          });
+        }
+      }
+    }
+    return JSON.stringify(notes);
+  }
+  """
+
+  private static let searchNoteIdsByPlaintextSource = """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    const start = input.offset || 0;
+    const limit = input.limit || 200;
+    const ids = [];
+    let seen = 0;
+    let hasMore = false;
+    app.accounts().forEach(account => {
+      const accountId = String(account.id());
+      if (input.accountId && input.accountId !== accountId) {
+        return;
+      }
+      account.folders().forEach(folder => {
+        const folderId = String(folder.id());
+        if (input.folderId && input.folderId !== folderId) {
+          return;
+        }
+        folder.notes.whose({ plaintext: { _contains: input.query } })().forEach(note => {
+          if (note.passwordProtected && note.passwordProtected()) {
+            return;
+          }
+          if (seen < start) {
+            seen += 1;
+            return;
+          }
+          if (ids.length >= limit) {
+            hasMore = true;
+            return;
+          }
+          ids.push(String(note.id()));
+          seen += 1;
+        });
+      });
+    });
+    return JSON.stringify({ noteIds: ids, hasMore: hasMore });
+  }
+  """
+
+  private static let fetchSearchSnippetsBatchSource = """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const wanted = {};
+    input.noteIds.forEach(id => { wanted[id] = true; });
+    const query = (input.query || '').toLowerCase();
+    const app = Application('Notes');
+    const snippets = {};
+    app.accounts().forEach(account => {
+      account.folders().forEach(folder => {
+        folder.notes().forEach(note => {
+          const noteId = String(note.id());
+          if (!wanted[noteId] || (note.passwordProtected && note.passwordProtected())) {
+            return;
+          }
+          const body = String(note.plaintext ? note.plaintext() : '');
+          const lower = body.toLowerCase();
+          const match = query.length > 0 ? lower.indexOf(query) : 0;
+          const center = match >= 0 ? match : 0;
+          const start = Math.max(0, center - 120);
+          snippets[noteId] = body.slice(start, start + 300);
+        });
+      });
+    });
+    return JSON.stringify(snippets);
+  }
+  """
+
+  private static let probeNoteVisibilitySource = noteMetadataHelpersSource + "\n\n" + """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    const note = notesById(app, input.noteId);
+    if (!note) { return JSON.stringify({status: 'missing', note: null}); }
+    if (note.passwordProtected && note.passwordProtected()) {
+      return JSON.stringify({status: 'locked', note: null});
+    }
+    const location = notesLocation(app, note);
+    return JSON.stringify({status: 'found', note: {
+      id: String(note.id()), accountId: location.accountId, folderId: location.folderId,
+      name: String(note.name()), snippet: '', plaintext: null, bodyHtml: null, bodyFile: null,
+      isPasswordProtected: false, isShared: notesSharedState(note),
+      creationDate: note.creationDate().toISOString(), modificationDate: note.modificationDate().toISOString(),
+      attachments: notesAttachmentMetadata(note)
+    }});
+  }
+  """
+
+  private static let fetchNoteBodySource = noteMetadataHelpersSource + "\n\n" + """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    const note = notesById(app, input.noteId);
+    if (!note) { return JSON.stringify({status: 'missing', note: null, kind: input.kind, body: ''}); }
+    if (note.passwordProtected && note.passwordProtected()) {
+      return JSON.stringify({status: 'locked', note: null, kind: input.kind, body: ''});
+    }
+    const location = notesLocation(app, note);
+    const body = input.kind === 'HTML'
+      ? String(note.body ? note.body() : '')
+      : String(note.plaintext ? note.plaintext() : '');
+    return JSON.stringify({status: 'found', kind: input.kind, body: body, note: {
+      id: String(note.id()), accountId: location.accountId, folderId: location.folderId,
+      name: String(note.name()), snippet: '', plaintext: null, bodyHtml: null, bodyFile: null,
+      isPasswordProtected: false, isShared: notesSharedState(note),
+      creationDate: note.creationDate().toISOString(), modificationDate: note.modificationDate().toISOString(),
+      attachments: input.includeAttachments === false ? [] : notesAttachmentMetadata(note)
+    }});
+  }
+  """
+
+  private static let exportAttachmentSource = noteMetadataHelpersSource + "\n\n" + """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    const note = notesById(app, input.noteId);
+    if (!note) { return JSON.stringify({status: 'noteMissing', path: null}); }
+    let attachments;
+    try {
+      attachments = note.attachments();
+    } catch (error) {
+      if (isNotesBridgeFailure(error)) { throw error; }
+      return JSON.stringify({status: 'unavailable', path: null});
+    }
+    for (const attachment of attachments) {
+      if (normalizedNotesValue(guardedNotesProperty(attachment, 'id')) !== input.attachmentId) { continue; }
+      try {
+        app.save(attachment, {in: Path(input.destinationPath)});
+        return JSON.stringify({status: 'exported', path: input.destinationPath});
+      } catch (error) {
+        if (isNotesBridgeFailure(error)) { throw error; }
+        return JSON.stringify({status: 'unavailable', path: null});
+      }
+    }
+    return JSON.stringify({status: 'attachmentMissing', path: null});
+  }
+  """
+
+  private static let createNoteFolderSource = """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    for (const account of app.accounts()) {
+      if (String(account.id()) !== input.accountId) { continue; }
+      let parent = account;
+      if (input.parentFolderId) {
+        parent = account.folders().find(folder => String(folder.id()) === input.parentFolderId);
+        if (!parent) { throw new Error('Notes parent folder not found'); }
+      }
+      if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
+      const folder = app.Folder({name: input.name});
+      parent.folders.push(folder);
+      return JSON.stringify({folderId: String(folder.id())});
+    }
+    throw new Error('Notes account not found');
+  }
+  """
+
+  private static let createNoteAttachmentSource = noteMetadataHelpersSource + "\n\n" + """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    const note = notesById(app, input.noteId);
+    if (!note) { throw new Error('Note not found'); }
+    if (note.passwordProtected && note.passwordProtected()) {
+      throw new Error('Note is password protected');
+    }
+    notesLocation(app, note);
+    if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
+    const attachment = app.make({new: 'attachment', at: note, withData: Path(input.filePath)});
+    return JSON.stringify({attachmentId: String(attachment.id())});
+  }
+  """
+
+  private static let createNoteSource = """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    for (const account of app.accounts()) {
+      if (String(account.id()) !== input.accountId) {
+        continue;
+      }
+      for (const folder of account.folders()) {
+        if (String(folder.id()) !== input.folderId) {
+          continue;
+        }
+        if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
+        const note = app.Note({
+          name: input.title,
+          body: input.bodyHtml
+        });
+        folder.notes.push(note);
+        return JSON.stringify({ noteId: String(note.id()) });
+      }
+    }
+    throw new Error('Notes folder not found');
+  }
+  """
+
+  private static let replaceNoteBodySource = noteMetadataHelpersSource + "\n\n" + """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    const note = notesById(app, input.noteId);
+    if (!note) { throw new Error('Note not found'); }
+    if (note.passwordProtected && note.passwordProtected()) {
+      throw new Error('Note is password protected');
+    }
+    notesLocation(app, note);
+    if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
+    note.body = input.bodyHtml;
+    return JSON.stringify({ noteId: String(note.id()) });
+  }
+  """
+
+  private static let deleteNoteFolderSource = noteMetadataHelpersSource + "\n\n" + """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    if (typeof input.accountId !== 'string' || !input.accountId ||
+        typeof input.folderId !== 'string' || !input.folderId ||
+        typeof input.allowNonEmpty !== 'boolean') { throw new Error('Invalid Notes folder deletion input'); }
+    if (app.accounts.id().map(String).indexOf(input.accountId) === -1) { throw new Error('Notes account not found'); }
+    const folder = app.folders.byId(input.folderId);
+    if (String(folder.id()) !== input.folderId) { throw new Error('Notes folder identity mismatch'); }
+    if (notesLocation(app, folder).accountId !== input.accountId) { throw new Error('Notes folder belongs to another account'); }
+    if (!input.allowNonEmpty && (folder.notes().length !== 0 || folder.folders().length !== 0)) {
+      throw new Error('Deleting a nonempty Notes folder requires allowNonEmpty');
+    }
+    if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
+    folder.delete();
+    return JSON.stringify({success: true});
+  }
+  """
+
+  private static let deleteNoteSource = noteMetadataHelpersSource + "\n\n" + """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    const note = notesById(app, input.noteId);
+    if (!note) { throw new Error('Note not found'); }
+    if (note.passwordProtected && note.passwordProtected()) {
+      throw new Error('Note is password protected');
+    }
+    notesLocation(app, note);
+    if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
+    note.delete();
+    return JSON.stringify({ success: true });
+  }
+  """
+
+  private static let moveNoteSource = noteMetadataHelpersSource + "\n\n" + """
+  function run(argv) {
+    const input = JSON.parse(argv[0]);
+    const app = Application('Notes');
+    const note = notesById(app, input.noteId);
+    if (!note) { throw new Error('Note not found'); }
+    if (note.passwordProtected && note.passwordProtected()) {
+      throw new Error('Note is password protected');
+    }
+    notesLocation(app, note);
+    const targetFolder = app.folders.byId(input.folderId);
+    if (String(targetFolder.id()) !== input.folderId) { throw new Error('Notes folder identity mismatch'); }
+    if (notesLocation(app, targetFolder).accountId !== input.accountId) {
+      throw new Error('Notes folder belongs to another account');
+    }
+    if (typeof appleGatewayWillWrite === 'function') appleGatewayWillWrite();
+    note.move({ to: targetFolder });
+    return JSON.stringify({ noteId: input.noteId });
+  }
+  """
+}

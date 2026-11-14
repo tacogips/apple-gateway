@@ -1,0 +1,45 @@
+import Foundation
+
+public protocol NotesProviding: Sendable {
+  func accounts() throws -> [NoteAccount]
+  func folders(accountId: String?) throws -> [NoteFolder]
+  func noteIds(accountId: String?, folderId: String?, batchSize: Int) throws -> [String]
+  func noteMetadata(noteIds: [String], batchSize: Int) throws -> [Note]
+  func noteMetadataSummaries(noteIds: [String], batchSize: Int) throws -> [Note]
+  func hydrateNoteMetadata(_ notes: [Note], batchSize: Int) throws -> [Note]
+  func bodySearchNoteIds(input: NotesBodySearchInput, batchSize: Int) throws -> [String]
+  func searchSnippets(noteIds: [String], query: String?, batchSize: Int) throws -> [String: String]
+  func noteMetadata(noteId: String) throws -> NoteLookupResult
+  func noteBody(noteId: String, kind: NoteBodyKind) throws -> NoteBodyLookupResult
+  func noteBody(noteId: String, kind: NoteBodyKind, includeAttachments: Bool) throws -> NoteBodyLookupResult
+  func exportAttachment(
+    noteId: String,
+    attachmentId: String,
+    to destination: URL
+  ) throws -> NotesAttachmentExportResult
+}
+
+public extension NotesProviding {
+  /// Compatibility default for custom providers; live providers can avoid attachment AppleEvents.
+  func noteBody(noteId: String, kind: NoteBodyKind, includeAttachments: Bool) throws -> NoteBodyLookupResult {
+    let result = try noteBody(noteId: noteId, kind: kind)
+    guard !includeAttachments, case .found(var fetched) = result else { return result }
+    fetched.note.attachments = []
+    return .found(fetched)
+  }
+
+  func noteMetadataSummaries(noteIds: [String], batchSize: Int) throws -> [Note] {
+    try noteMetadata(noteIds: noteIds, batchSize: batchSize)
+  }
+
+  func hydrateNoteMetadata(_ notes: [Note], batchSize _: Int) throws -> [Note] {
+    notes
+  }
+}
+
+public enum NotesAttachmentExportResult: Equatable, Sendable {
+  case exported(URL)
+  case noteMissing
+  case attachmentMissing
+  case unavailable
+}
