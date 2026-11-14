@@ -1,0 +1,141 @@
+import Foundation
+
+public enum NotesServiceFactory {
+  public static func liveServices(
+    config: AppleGatewayConfig = .defaultValue,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> NotesServices {
+    let adapter = LiveNotesAppleEventAdapter(
+      bridge: AppleEventBridge(
+        timeoutSeconds: TimeInterval(config.limits.appleEventTimeoutSeconds),
+        environment: environment,
+        writeRetryPolicy: config.writeRetry
+      )
+    )
+    let fileStore = FileStore(cacheRoot: config.storage.cacheDir)
+    let attachmentExportStore = NotesAttachmentExportStore(cacheRoot: config.storage.cacheDir)
+    return NotesServices(
+      readService: NotesReadService(
+        provider: adapter,
+        limits: config.limits,
+        fileStore: fileStore,
+        attachmentExportStore: attachmentExportStore
+      ),
+      writeService: NotesWriteService(
+        provider: adapter,
+        writer: adapter,
+        limits: config.limits,
+        fileStore: fileStore,
+        attachmentExportStore: attachmentExportStore,
+        writeRetryPolicy: config.writeRetry
+      ),
+      fileMaterializer: NotesFileMaterializer(
+        provider: adapter,
+        attachmentExportStore: attachmentExportStore
+      )
+    )
+  }
+
+  public static func liveReadService(
+    config: AppleGatewayConfig = .defaultValue,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> NotesReadService {
+    liveServices(config: config, environment: environment).readService
+  }
+
+  public static func liveWriteService(
+    config: AppleGatewayConfig = .defaultValue,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> NotesWriteService {
+    liveServices(config: config, environment: environment).writeService
+  }
+
+  public static func unavailableReadService() -> NotesReadService {
+    NotesReadService(provider: UnavailableNotesProvider())
+  }
+
+  public static func unavailableWriteService() -> NotesWriteService {
+    let provider = UnavailableNotesProvider()
+    return NotesWriteService(provider: provider, writer: provider)
+  }
+}
+
+public struct NotesServices: Sendable {
+  public var readService: NotesReadService
+  public var writeService: NotesWriteService
+  public var fileMaterializer: NotesFileMaterializer
+
+  public init(
+    readService: NotesReadService,
+    writeService: NotesWriteService,
+    fileMaterializer: NotesFileMaterializer
+  ) {
+    self.readService = readService
+    self.writeService = writeService
+    self.fileMaterializer = fileMaterializer
+  }
+}
+
+public struct UnavailableNotesProvider: NotesProviding, NotesWriting {
+  public init() {}
+
+  public func accounts() throws -> [NoteAccount] {
+    throw unavailable("Notes provider is unavailable")
+  }
+
+  public func folders(accountId: String?) throws -> [NoteFolder] {
+    throw unavailable("Notes provider is unavailable")
+  }
+
+  public func noteIds(accountId: String?, folderId: String?, batchSize: Int) throws -> [String] {
+    throw unavailable("Notes provider is unavailable")
+  }
+
+  public func noteMetadata(noteIds: [String], batchSize: Int) throws -> [Note] {
+    throw unavailable("Notes provider is unavailable")
+  }
+
+  public func bodySearchNoteIds(input: NotesBodySearchInput, batchSize: Int) throws -> [String] {
+    throw unavailable("Notes provider is unavailable")
+  }
+
+  public func searchSnippets(noteIds: [String], query: String?, batchSize: Int) throws -> [String: String] {
+    throw unavailable("Notes provider is unavailable")
+  }
+
+  public func noteMetadata(noteId: String) throws -> NoteLookupResult {
+    throw unavailable("Notes provider is unavailable")
+  }
+
+  public func noteBody(noteId: String, kind: NoteBodyKind) throws -> NoteBodyLookupResult {
+    throw unavailable("Notes provider is unavailable")
+  }
+
+  public func exportAttachment(
+    noteId: String,
+    attachmentId: String,
+    to destination: URL
+  ) throws -> NotesAttachmentExportResult {
+    throw unavailable("Notes provider is unavailable")
+  }
+
+  public func createNote(_ request: NotesCreateRequest) throws -> String {
+    throw unavailable("Notes writer is unavailable")
+  }
+
+  public func replaceNoteBody(_ request: NotesBodyWriteRequest) throws -> String {
+    throw unavailable("Notes writer is unavailable")
+  }
+
+  public func deleteNote(noteId: String) throws -> DeleteResult {
+    throw unavailable("Notes writer is unavailable")
+  }
+
+  public func moveNote(_ request: NotesMoveRequest) throws -> String {
+    throw unavailable("Notes writer is unavailable")
+  }
+
+  private func unavailable(_ message: String) -> AppleGatewayError {
+    AppleGatewayError(code: .domainDisabled, message: message)
+  }
+}
