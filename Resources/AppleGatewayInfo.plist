@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>me.tacogips.apple-gateway</string>
+  <key>CFBundleName</key>
+  <string>apple-gateway</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.1.0</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>apple-gateway needs Apple Events access to read and automate supported local Apple applications on your behalf.</string>
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>apple-gateway needs full calendar access to read and manage calendar data requested through the gateway.</string>
+  <key>NSCalendarsUsageDescription</key>
+  <string>apple-gateway needs calendar access to read calendar data requested through the gateway.</string>
+  <key>NSRemindersFullAccessUsageDescription</key>
+  <string>apple-gateway needs full reminders access to read and manage reminders requested through the gateway.</string>
+  <key>NSRemindersUsageDescription</key>
+  <string>apple-gateway needs reminders access to read reminders requested through the gateway.</string>
+</dict>
+</plist>
