@@ -1,0 +1,204 @@
+import Foundation
+
+public enum PermissionState: String, Codable, CaseIterable, Sendable {
+  case granted = "GRANTED"
+  case denied = "DENIED"
+  case notDetermined = "NOT_DETERMINED"
+  case writeOnly = "WRITE_ONLY"
+  case notRequired = "NOT_REQUIRED"
+  case unknown = "UNKNOWN"
+
+  public var isFailure: Bool {
+    switch self {
+    case .denied, .notDetermined, .writeOnly:
+      return true
+    case .granted, .notRequired, .unknown:
+      return false
+    }
+  }
+}
+
+public enum PermissionStatusField: String, CaseIterable, Codable, Sendable {
+  case calendars
+  case reminders
+  case notesAutomation
+  case mailAutomation
+  case mailFullDiskAccess
+  case notificationsHelper
+  case notificationDbFullDiskAccess
+  case clockAutomation
+  case phoneContacts
+  case phoneAutomation
+}
+
+public struct PermissionFieldStatus: Codable, Equatable, Sendable {
+  public var state: PermissionState
+  public var details: [String: String]
+
+  public init(state: PermissionState, details: [String: String] = [:]) {
+    self.state = state
+    self.details = details
+  }
+}
+
+public struct PermissionsStatus: Codable, Equatable, Sendable {
+  public var calendars: PermissionFieldStatus
+  public var reminders: PermissionFieldStatus
+  public var notesAutomation: PermissionFieldStatus
+  public var mailAutomation: PermissionFieldStatus
+  public var mailFullDiskAccess: PermissionFieldStatus
+  public var notificationsHelper: PermissionFieldStatus
+  public var notificationDbFullDiskAccess: PermissionFieldStatus
+  public var clockAutomation: PermissionFieldStatus
+  public var phoneContacts: PermissionFieldStatus
+  public var phoneAutomation: PermissionFieldStatus
+
+  public init(
+    calendars: PermissionFieldStatus,
+    reminders: PermissionFieldStatus,
+    notesAutomation: PermissionFieldStatus,
+    mailAutomation: PermissionFieldStatus = PermissionFieldStatus(state: .unknown),
+    mailFullDiskAccess: PermissionFieldStatus,
+    notificationsHelper: PermissionFieldStatus,
+    notificationDbFullDiskAccess: PermissionFieldStatus,
+    clockAutomation: PermissionFieldStatus,
+    phoneContacts: PermissionFieldStatus = PermissionFieldStatus(state: .unknown),
+    phoneAutomation: PermissionFieldStatus = PermissionFieldStatus(state: .unknown)
+  ) {
+    self.calendars = calendars
+    self.reminders = reminders
+    self.notesAutomation = notesAutomation
+    self.mailAutomation = mailAutomation
+    self.mailFullDiskAccess = mailFullDiskAccess
+    self.notificationsHelper = notificationsHelper
+    self.notificationDbFullDiskAccess = notificationDbFullDiskAccess
+    self.clockAutomation = clockAutomation
+    self.phoneContacts = phoneContacts
+    self.phoneAutomation = phoneAutomation
+  }
+
+  public subscript(field: PermissionStatusField) -> PermissionFieldStatus {
+    switch field {
+    case .calendars:
+      return calendars
+    case .reminders:
+      return reminders
+    case .notesAutomation:
+      return notesAutomation
+    case .mailAutomation:
+      return mailAutomation
+    case .mailFullDiskAccess:
+      return mailFullDiskAccess
+    case .notificationsHelper:
+      return notificationsHelper
+    case .notificationDbFullDiskAccess:
+      return notificationDbFullDiskAccess
+    case .clockAutomation:
+      return clockAutomation
+    case .phoneContacts:
+      return phoneContacts
+    case .phoneAutomation:
+      return phoneAutomation
+    }
+  }
+
+  var graphQLValue: GraphQLValue {
+    .object(
+      Dictionary(
+        uniqueKeysWithValues: PermissionStatusField.allCases.map { field in
+          (field.rawValue, GraphQLValue.enumCase(self[field].state.rawValue))
+        }
+      )
+    )
+  }
+
+  public var jsonReport: PermissionsStatusJSON {
+    PermissionsStatusJSON(status: self)
+  }
+}
+
+public struct PermissionsStatusJSON: Encodable, Sendable {
+  public var calendars: PermissionState
+  public var reminders: PermissionState
+  public var notesAutomation: PermissionState
+  public var mailAutomation: PermissionState
+  public var mailFullDiskAccess: PermissionState
+  public var notificationsHelper: PermissionState
+  public var notificationDbFullDiskAccess: PermissionState
+  public var clockAutomation: PermissionState
+  public var phoneContacts: PermissionState
+  public var phoneAutomation: PermissionState
+  public var details: [String: [String: String]]
+
+  init(status: PermissionsStatus) {
+    calendars = status.calendars.state
+    reminders = status.reminders.state
+    notesAutomation = status.notesAutomation.state
+    mailAutomation = status.mailAutomation.state
+    mailFullDiskAccess = status.mailFullDiskAccess.state
+    notificationsHelper = status.notificationsHelper.state
+    notificationDbFullDiskAccess = status.notificationDbFullDiskAccess.state
+    clockAutomation = status.clockAutomation.state
+    phoneContacts = status.phoneContacts.state
+    phoneAutomation = status.phoneAutomation.state
+    details = Dictionary(
+      uniqueKeysWithValues: PermissionStatusField.allCases.compactMap { field in
+        let fieldDetails = status[field].details
+        guard !fieldDetails.isEmpty else {
+          return nil
+        }
+        return (field.rawValue, fieldDetails)
+      }
+    )
+  }
+}
+
+public enum PermissionRequestDomain: String, CaseIterable, Sendable {
+  case calendar
+  case reminders
+  case notes
+  case mail
+  case notifications
+  case clockAlarms = "clock-alarms"
+  case phoneCalls = "phone-calls"
+
+  public init(commandValue: String) throws {
+    guard let domain = PermissionRequestDomain(rawValue: commandValue) else {
+      throw AppleGatewayCommand.Error.invalidUsage(
+        "Domain must be calendar, reminders, notes, mail, notifications, clock-alarms, or phone-calls"
+      )
+    }
+    self = domain
+  }
+}
+
+public struct PermissionRequestResult: Equatable, Sendable {
+  public var domain: PermissionRequestDomain
+  public var status: PermissionFieldStatus
+
+  public init(domain: PermissionRequestDomain, status: PermissionFieldStatus) {
+    self.domain = domain
+    self.status = status
+  }
+
+  var exitCode: Int32 {
+    switch status.state {
+    case .granted, .notRequired:
+      return 0
+    case .denied, .notDetermined, .writeOnly:
+      return 4
+    case .unknown:
+      return 6
+    }
+  }
+}
+
+public protocol PermissionsStatusProviding: Sendable {
+  func status(config: AppleGatewayConfig) -> PermissionsStatus
+}
+
+public protocol PermissionsRequestProviding: Sendable {
+  func request(domain: PermissionRequestDomain, config: AppleGatewayConfig) -> PermissionRequestResult
+}
+
+public typealias PermissionsProviding = PermissionsStatusProviding & PermissionsRequestProviding
